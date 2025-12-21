@@ -1,6 +1,12 @@
 import { Activity, Shield, Wifi } from "lucide-react";
+import { MonitorNav } from "./MonitorNav";
 
-const SystemHeader = () => {
+interface SystemHeaderProps {
+  monitorNumber: number;
+  title: string;
+}
+
+export const SystemHeader = ({ monitorNumber, title }: SystemHeaderProps) => {
   const currentTime = new Date().toLocaleTimeString('en-US', { 
     hour12: false, 
     hour: '2-digit', 
@@ -9,19 +15,21 @@ const SystemHeader = () => {
   });
 
   return (
-    <header className="border-b border-panel-border bg-muted/30 px-6 py-3">
-      <div className="flex items-center justify-between">
+    <header className="border-b border-primary/30 bg-panel-bg/50 px-4 py-3 rounded-t">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
-            <h1 className="font-display text-lg font-bold tracking-wider text-primary glow-text">
-              MONITOR 3
+            <h1 className="font-display text-lg font-bold tracking-wider text-primary">
+              MONITOR {monitorNumber}
             </h1>
           </div>
           <span className="text-xs text-muted-foreground tracking-widest">
-            SYSTEM ENGINEER
+            {title}
           </span>
         </div>
+
+        <MonitorNav />
 
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
