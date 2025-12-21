@@ -5,6 +5,7 @@ import { MarketSentimentPanel } from "@/components/MarketSentimentPanel";
 import { KOLUpdatesPanel } from "@/components/KOLUpdatesPanel";
 import { AIAnalysisPanel } from "@/components/AIAnalysisPanel";
 import { MajorNewsPanel } from "@/components/MajorNewsPanel";
+import CapitalCompanionPanel from "@/components/CapitalCompanionPanel";
 
 const Monitor1 = () => {
   return (
@@ -18,6 +19,9 @@ const Monitor1 = () => {
       {/* Main content */}
       <div className="relative z-10 max-w-7xl mx-auto space-y-4">
         <SystemHeader monitorNumber={1} title="MARKET COMMANDER" />
+        
+        {/* Top: Capital Companion Logic */}
+        <CapitalCompanionPanel />
         
         {/* Row 1: Market Overview & Sentiment */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

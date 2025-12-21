@@ -1,6 +1,5 @@
 import { SystemHeader } from "@/components/SystemHeader";
 import RiskManagementPanel from "@/components/RiskManagementPanel";
-import CapitalCompanionPanel from "@/components/CapitalCompanionPanel";
 import MissionLogPanel from "@/components/MissionLogPanel";
 
 const Index = () => {
@@ -18,9 +17,6 @@ const Index = () => {
         
         {/* Top Panel: Risk Management Core */}
         <RiskManagementPanel />
-        
-        {/* Middle Panel: Capital Companion Logic */}
-        <CapitalCompanionPanel />
         
         {/* Bottom Panel: Mission Log */}
         <MissionLogPanel />
