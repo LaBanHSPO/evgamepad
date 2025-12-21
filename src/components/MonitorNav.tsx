@@ -1,25 +1,24 @@
 import { NavLink } from "react-router-dom";
-import { Monitor, BarChart3, Settings, Radio } from "lucide-react";
+import { Monitor, BarChart3, Diamond, BriefcaseBusiness } from "lucide-react";
 
 const monitors = [
-  { path: "/", label: "MON 1", title: "MARKET", icon: BarChart3 },
-  { path: "/monitor-2", label: "MON 2", title: "TRADE OPS", icon: Settings },
-  { path: "/monitor-3", label: "MON 3", title: "SYSTEM", icon: Radio },
+  { path: "/", label: "1", title: "UPDATES", icon: BarChart3 },
+  { path: "/m2", label: "2", title: "ACTIONS", icon: Diamond },
+  { path: "/m3", label: "3", title: "PORTFOLIO", icon: BriefcaseBusiness },
 ];
 
 export const MonitorNav = () => {
   return (
     <div className="flex items-center gap-1 bg-panel-bg/50 p-1 rounded border border-primary/20">
-      <Monitor className="w-4 h-4 text-muted-foreground mx-2" />
+      {/* <Monitor className="w-4 h-4 text-muted-foreground mx-2" /> */}
       {monitors.map((mon) => (
         <NavLink
           key={mon.path}
           to={mon.path}
           className={({ isActive }) =>
-            `flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded transition-all ${
-              isActive
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-primary/20 hover:text-primary"
+            `flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded transition-all ${isActive
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:bg-primary/20 hover:text-primary"
             }`
           }
         >

@@ -25,21 +25,20 @@ const Monitor2 = () => {
     <div className="min-h-screen bg-background text-foreground p-4 relative overflow-hidden">
       {/* Scanlines overlay */}
       <div className="scanlines" />
-      
+
       {/* CRT flicker effect */}
       <div className="crt-flicker" />
-      
+
       {/* Main content */}
       <div className="relative z-10 max-w-7xl mx-auto space-y-4">
-        <SystemHeader monitorNumber={2} title="TRADE OPERATIONS" />
-        
+        <SystemHeader monitorNumber={2} title="ACTIONS" />
+
         {/* Section Tabs - Big gamepad-friendly buttons */}
         <div className="grid grid-cols-2 gap-4">
           <button
             onClick={() => setActiveSection("trade")}
-            className={`gamepad-tile group ${
-              activeSection === "trade" ? "gamepad-tile-active" : ""
-            }`}
+            className={`gamepad-tile group ${activeSection === "trade" ? "gamepad-tile-active" : ""
+              }`}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -51,12 +50,11 @@ const Monitor2 = () => {
               )}
             </div>
           </button>
-          
+
           <button
             onClick={() => setActiveSection("positions")}
-            className={`gamepad-tile group ${
-              activeSection === "positions" ? "gamepad-tile-active" : ""
-            }`}
+            className={`gamepad-tile group ${activeSection === "positions" ? "gamepad-tile-active" : ""
+              }`}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">

@@ -19,7 +19,7 @@ const Monitor1 = () => {
       {/* Main content */}
       <div className="relative z-10 max-w-7xl mx-auto">
         <div className="p-4 pb-0">
-          <SystemHeader monitorNumber={1} title="MARKET COMMANDER" />
+          <SystemHeader monitorNumber={1} title="UPDATES" />
         </div>
 
         {/* Top: Capital Companion Logic - Sticky */}

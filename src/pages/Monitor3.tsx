@@ -7,17 +7,17 @@ const Index = () => {
     <div className="min-h-screen bg-background text-foreground p-4 relative overflow-hidden">
       {/* Scanlines overlay */}
       <div className="scanlines" />
-      
+
       {/* CRT flicker effect */}
       <div className="crt-flicker" />
-      
+
       {/* Main content */}
       <div className="relative z-10 max-w-7xl mx-auto space-y-4">
-        <SystemHeader monitorNumber={3} title="SYSTEM ENGINEER" />
-        
+        <SystemHeader monitorNumber={3} title="PORTFOLIO" />
+
         {/* Top Panel: Risk Management Core */}
         <RiskManagementPanel />
-        
+
         {/* Bottom Panel: Mission Log */}
         <MissionLogPanel />
       </div>
