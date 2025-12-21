@@ -2,8 +2,9 @@ import MetaTrader5 as mt5
 import threading
 import time
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
 from ..config import config
+from .circuit_breaker import CircuitBreaker
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,12 @@ class MT5ConnectionManager:
         self._lock = threading.RLock()
         self._stop_event = threading.Event()
         self._health_thread: Optional[threading.Thread] = None
+        
+        # Circuit breaker
+        self.circuit_breaker = CircuitBreaker(
+            failure_threshold=5,
+            timeout=30.0
+        )
         
     def connect(self) -> bool:
         """Initialize MT5 connection and login."""
@@ -78,10 +85,35 @@ class MT5ConnectionManager:
             if authorized:
                 self._connected = True
                 logger.info(f"Successfully logged in to {account}")
+                self.circuit_breaker.reset() # Reset circuit breaker on successful login
                 return self.get_account_info()
             else:
                 logger.error(f"Login failed for {account}: {mt5.last_error()}")
                 return None
+
+    def execute_with_circuit_breaker(self, func: Callable, *args, **kwargs) -> Any:
+        """
+        Execute MT5 operation with circuit breaker protection
+
+        Args:
+            func: MT5 function to execute
+            *args, **kwargs: Function arguments
+
+        Returns:
+            Function result
+
+        Raises:
+            RuntimeError: If circuit is open or operation fails
+        """
+        if not self.is_connected():
+            raise RuntimeError("MT5 not connected")
+
+        try:
+            return self.circuit_breaker.execute(func, *args, **kwargs)
+        except RuntimeError as e:
+            if "Circuit breaker is open" in str(e):
+                logger.error("Circuit breaker OPEN - refusing MT5 operations")
+            raise
 
     def disconnect(self):
         """Disconnect from MT5 and stop health check."""
@@ -138,7 +170,8 @@ class MT5ConnectionManager:
                 if self._connected:
                     if not self.is_connected():
                         logger.warning("Connection lost, attempting reconnect...")
-                        self._attempt_reconnect()
+                        if self._attempt_reconnect():
+                             self.circuit_breaker.reset()
                 
             except Exception as e:
                 logger.error(f"Error in health check: {e}")

@@ -7,7 +7,9 @@ from app.config import config
 from app.logging_config import setup_logging
 from app.mt5.connection_manager import MT5ConnectionManager
 from app.session_manager import SessionManager
+from app.reconnection_manager import ReconnectionManager
 from app.processors.command_processor import CommandProcessor
+from app.tasks.cleanup_task import CleanupTask
 from app.events import trading_events
 
 # Initialize logging
@@ -16,7 +18,9 @@ logger = setup_logging(config.DEBUG)
 # Global instances
 mt5_manager = None
 session_manager = None
+reconnection_manager = None
 command_processor = None
+cleanup_task = None
 
 # Socket.IO Server Configuration
 sio = AsyncServer(
@@ -36,7 +40,7 @@ async def lifespan(app: FastAPI):
     Application lifespan management
     Initialize and cleanup resources
     """
-    global mt5_manager, session_manager, command_processor
+    global mt5_manager, session_manager, reconnection_manager, command_processor, cleanup_task
 
     logger.info("Starting MT5 Socket.IO Trading Server...")
 
@@ -56,12 +60,22 @@ async def lifespan(app: FastAPI):
 
     # Initialize session manager
     session_manager = SessionManager()
+    
+    # Initialize reconnection manager
+    reconnection_manager = ReconnectionManager(session_ttl=300)  # 5 minutes
+    logger.info("Reconnection manager initialized")
 
     # Initialize command processor
     command_processor = CommandProcessor(mt5_manager)
 
+    # Start cleanup task
+    cleanup_task = CleanupTask(reconnection_manager, interval=60)
+    cleanup_task.start()
+
     # Inject dependencies into events module
+    trading_events.mt5_manager = mt5_manager
     trading_events.session_manager = session_manager
+    trading_events.reconnection_manager = reconnection_manager
     trading_events.command_processor = command_processor
 
     # Store in app state (only mt5_manager is directly used by health check)
@@ -72,6 +86,10 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down server...")
+    
+    if cleanup_task:
+        await cleanup_task.stop()
+
     if mt5_manager:
         mt5_manager.disconnect()
     logger.info("Server shutdown complete")

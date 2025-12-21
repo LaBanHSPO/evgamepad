@@ -26,15 +26,23 @@ class CommandProcessor:
         Helper to execute MT5 operations with common error handling and logging.
         """
         try:
-            # Execute on MT5 (blocking call, wrapped in async)
-            result = await asyncio.to_thread(func, **kwargs)
+            # Execute with circuit breaker protection (blocking call, wrapped in async)
+            # We pass the function and kwargs to execute_with_circuit_breaker
+            def wrapped_func():
+                return func(**kwargs)
+
+            result = await asyncio.to_thread(
+                self.mt5_manager.execute_with_circuit_breaker,
+                wrapped_func
+            )
             return result
+
         except ValueError as e:
             # Validation error (invalid symbol, etc.)
             logger.warning(f"[{command_id}] {operation_name} validation failed: {e}")
             raise
         except RuntimeError as e:
-            # MT5 connection error
+            # MT5 connection error or Circuit Breaker Open
             logger.error(f"[{command_id}] {operation_name} failed (MT5 error): {e}")
             raise
         except Exception as e:
