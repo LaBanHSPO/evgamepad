@@ -1,14 +1,21 @@
-import SystemHeader from "@/components/SystemHeader";
+import { SystemHeader } from "@/components/SystemHeader";
 import RiskManagementPanel from "@/components/RiskManagementPanel";
 import CapitalCompanionPanel from "@/components/CapitalCompanionPanel";
 import MissionLogPanel from "@/components/MissionLogPanel";
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-background scanlines crt-flicker">
-      <SystemHeader />
+    <div className="min-h-screen bg-background text-foreground p-4 relative overflow-hidden">
+      {/* Scanlines overlay */}
+      <div className="scanlines" />
       
-      <main className="p-4 lg:p-6 space-y-4">
+      {/* CRT flicker effect */}
+      <div className="crt-flicker" />
+      
+      {/* Main content */}
+      <div className="relative z-10 max-w-7xl mx-auto space-y-4">
+        <SystemHeader monitorNumber={3} title="SYSTEM ENGINEER" />
+        
         {/* Top Panel: Risk Management Core */}
         <RiskManagementPanel />
         
@@ -17,7 +24,7 @@ const Index = () => {
         
         {/* Bottom Panel: Mission Log */}
         <MissionLogPanel />
-      </main>
+      </div>
 
       {/* Corner Decorations */}
       <div className="fixed top-0 left-0 w-16 h-16 border-l-2 border-t-2 border-primary/30 pointer-events-none" />
