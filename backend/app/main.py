@@ -7,6 +7,8 @@ from app.config import config
 from app.logging_config import setup_logging
 from app.mt5.connection_manager import MT5ConnectionManager
 from app.session_manager import SessionManager
+from app.processors.command_processor import CommandProcessor
+from app.events import trading_events
 
 # Initialize logging
 logger = setup_logging(config.DEBUG)
@@ -14,6 +16,7 @@ logger = setup_logging(config.DEBUG)
 # Global instances
 mt5_manager = None
 session_manager = None
+command_processor = None
 
 # Socket.IO Server Configuration
 sio = AsyncServer(
@@ -29,35 +32,41 @@ sio = AsyncServer(
 # FastAPI Application
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan management"""
-    global mt5_manager, session_manager
+    """
+    Application lifespan management
+    Initialize and cleanup resources
+    """
+    global mt5_manager, session_manager, command_processor
 
     logger.info("Starting MT5 Socket.IO Trading Server...")
 
     # Initialize MT5 connection
     mt5_manager = MT5ConnectionManager(
-        check_interval=config.HEALTH_CHECK_INTERVAL,
-        timeout=config.CONNECTION_TIMEOUT
+        check_interval=config.HEALTH_CHECK_INTERVAL, # Kept original config variable
+        timeout=config.CONNECTION_TIMEOUT # Kept original config variable
     )
 
     if not mt5_manager.connect():
         logger.error("Failed to connect to MT5 terminal")
-        # Ensure we don't crash the server loop if MT5 isn't there, 
-        # but in production we might want to.
-        # Allowing it to start so we can see health status.
-        # raise RuntimeError("MT5 connection failed") 
+        # In a real scenario, we might want to exit or retry,
+        # but for now we'll continue to allow the server to start (for health check access)
+        # raise RuntimeError("MT5 connection failed")
 
     logger.info("MT5 connection attempt finished")
 
     # Initialize session manager
     session_manager = SessionManager()
 
-    # Store in app state
+    # Initialize command processor
+    command_processor = CommandProcessor(mt5_manager)
+
+    # Inject dependencies into events module
+    trading_events.session_manager = session_manager
+    trading_events.command_processor = command_processor
+
+    # Store in app state (only mt5_manager is directly used by health check)
     app.state.mt5_manager = mt5_manager
-    app.state.session_manager = session_manager
-    
-    # Import events to register handlers
-    import app.events.trading_events
+    app.state.session_manager = session_manager # Kept for consistency, though events module now has it
 
     yield
 
