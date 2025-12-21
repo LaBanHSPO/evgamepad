@@ -69,8 +69,29 @@ export const GamepadPositions = () => {
             setSelectedAction(1);
             break;
           case "Escape":
+          case "b": // B Button acts as back in submenu
             setActionMode("select");
             break;
+        }
+      }
+
+      // GLOBAL actions for this component (always active when mounted)
+      if (e.key === "y") {
+        // Y Button -> Close All
+        console.log("Closing ALL positions");
+      }
+
+      if (actionMode === "select") {
+        if (e.key === "x") {
+          // X -> Modify currently selected
+          setActionMode("action");
+          setSelectedAction(0); // Select Modify
+        }
+      } else if (actionMode === "action") {
+        if (e.key === "Enter") {
+          // Execute selected action
+          if (selectedAction === 0) console.log("Modifying position");
+          if (selectedAction === 1) console.log("Closing position");
         }
       }
     };
@@ -114,17 +135,15 @@ export const GamepadPositions = () => {
                 setSelectedPosition(index);
                 setActionMode("action");
               }}
-              className={`w-full text-left gamepad-position-card ${
-                isSelected ? "gamepad-position-card-active" : ""
-              } ${isProfitable ? "border-terminal-green/30" : "border-danger-red/30"}`}
+              className={`w-full text-left gamepad-position-card ${isSelected ? "gamepad-position-card-active" : ""
+                } ${isProfitable ? "border-terminal-green/30" : "border-danger-red/30"}`}
             >
               <div className="flex items-center justify-between">
                 {/* Left: Position Info */}
                 <div className="flex items-center gap-4">
                   <div
-                    className={`flex items-center justify-center w-16 h-16 rounded-xl ${
-                      isLong ? "bg-terminal-green/20" : "bg-danger-red/20"
-                    }`}
+                    className={`flex items-center justify-center w-16 h-16 rounded-xl ${isLong ? "bg-terminal-green/20" : "bg-danger-red/20"
+                      }`}
                   >
                     {isLong ? (
                       <TrendingUp className={`w-8 h-8 text-terminal-green`} />
@@ -137,11 +156,10 @@ export const GamepadPositions = () => {
                     <div className="flex items-center gap-2">
                       <span className="text-2xl font-display text-primary">{pos.pair}</span>
                       <span
-                        className={`px-2 py-0.5 rounded text-sm font-mono ${
-                          isLong
-                            ? "bg-terminal-green/20 text-terminal-green"
-                            : "bg-danger-red/20 text-danger-red"
-                        }`}
+                        className={`px-2 py-0.5 rounded text-sm font-mono ${isLong
+                          ? "bg-terminal-green/20 text-terminal-green"
+                          : "bg-danger-red/20 text-danger-red"
+                          }`}
                       >
                         {pos.type}
                       </span>
@@ -155,16 +173,14 @@ export const GamepadPositions = () => {
                 {/* Right: P&L */}
                 <div className="text-right">
                   <div
-                    className={`text-3xl font-mono font-bold ${
-                      isProfitable ? "text-terminal-green" : "text-danger-red"
-                    }`}
+                    className={`text-3xl font-mono font-bold ${isProfitable ? "text-terminal-green" : "text-danger-red"
+                      }`}
                   >
                     ${pos.pnl}
                   </div>
                   <div
-                    className={`text-lg font-mono ${
-                      isProfitable ? "text-terminal-green/70" : "text-danger-red/70"
-                    }`}
+                    className={`text-lg font-mono ${isProfitable ? "text-terminal-green/70" : "text-danger-red/70"
+                      }`}
                   >
                     {pos.pnlPercent}
                   </div>
@@ -182,22 +198,20 @@ export const GamepadPositions = () => {
               {isSelected && actionMode === "action" && (
                 <div className="flex gap-4 mt-4 pt-4 border-t border-primary/20">
                   <button
-                    className={`flex-1 py-4 rounded-lg border-2 font-display text-lg transition-all flex items-center justify-center gap-3 ${
-                      selectedAction === 0
-                        ? "bg-primary/20 border-primary text-primary"
-                        : "bg-panel-bg/50 border-muted/30 text-muted-foreground"
-                    }`}
+                    className={`flex-1 py-4 rounded-lg border-2 font-display text-lg transition-all flex items-center justify-center gap-3 ${selectedAction === 0
+                      ? "bg-primary/20 border-primary text-primary"
+                      : "bg-panel-bg/50 border-muted/30 text-muted-foreground"
+                      }`}
                   >
                     <div className="gamepad-button-hint">X</div>
                     <Edit3 className="w-5 h-5" />
                     <span>MODIFY</span>
                   </button>
                   <button
-                    className={`flex-1 py-4 rounded-lg border-2 font-display text-lg transition-all flex items-center justify-center gap-3 ${
-                      selectedAction === 1
-                        ? "bg-danger-red/20 border-danger-red text-danger-red"
-                        : "bg-panel-bg/50 border-muted/30 text-muted-foreground"
-                    }`}
+                    className={`flex-1 py-4 rounded-lg border-2 font-display text-lg transition-all flex items-center justify-center gap-3 ${selectedAction === 1
+                      ? "bg-danger-red/20 border-danger-red text-danger-red"
+                      : "bg-panel-bg/50 border-muted/30 text-muted-foreground"
+                      }`}
                   >
                     <div className="gamepad-button-hint bg-danger-red/20 text-danger-red">B</div>
                     <X className="w-5 h-5" />

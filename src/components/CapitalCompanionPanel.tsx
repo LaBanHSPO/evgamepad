@@ -54,7 +54,7 @@ const CapitalCompanionPanel = () => {
       if (randomChance > 0.7) {
         setAiMood("thinking");
         setIsThinking(true);
-        
+
         setTimeout(() => {
           const randomResponse = aiResponses[Math.floor(Math.random() * aiResponses.length)];
           const newMessage: Message = {
@@ -68,7 +68,7 @@ const CapitalCompanionPanel = () => {
           setHasNewMessage(true);
           setIsThinking(false);
           setAiMood("happy");
-          
+
           // Remove "new" indicator after a few seconds
           setTimeout(() => {
             setMessages(prev => prev.map(m => m.id === newMessage.id ? { ...m, isNew: false } : m));
@@ -89,7 +89,7 @@ const CapitalCompanionPanel = () => {
         setIsTalking(false);
         setAiMood("thinking");
         setIsThinking(true);
-        
+
         // AI responds
         setTimeout(() => {
           const responses = [
@@ -116,6 +116,25 @@ const CapitalCompanionPanel = () => {
     setHasNewMessage(false);
     // Simulate playing audio
   };
+
+  // Gamepad/Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // p = Play Message (Start)
+      // m = Toggle Mute (Back)
+      // v = Toggle Talk (L3)
+      if (e.key === "p" && hasNewMessage) {
+        playLatestMessage();
+      } else if (e.key === "m") {
+        setIsMuted(prev => !prev);
+      } else if (e.key === "v") {
+        handleTalkToggle();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [hasNewMessage, isTalking]); // Added isTalking to dependencies as handleTalkToggle uses it via closure/state
 
   return (
     <div className="panel">
@@ -154,12 +173,12 @@ const CapitalCompanionPanel = () => {
                 ${aiMood === "happy" ? "bg-terminal-green" : aiMood === "thinking" ? "bg-secondary w-4 h-4" : "bg-danger-red"}`}
               />
             </div>
-            
+
             {/* Glow effect when talking */}
             {isTalking && (
               <div className="absolute inset-0 bg-terminal-green/20 animate-pulse rounded-full" />
             )}
-            
+
             {/* Thinking indicator */}
             {isThinking && (
               <div className="absolute -bottom-1 left-1/2 -translate-x-1/2">
@@ -184,8 +203,8 @@ const CapitalCompanionPanel = () => {
             <button
               onClick={handleTalkToggle}
               className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border transition-all duration-300
-                ${isTalking 
-                  ? "bg-terminal-green/20 border-terminal-green text-terminal-green animate-pulse" 
+                ${isTalking
+                  ? "bg-terminal-green/20 border-terminal-green text-terminal-green animate-pulse"
                   : "bg-panel-bg border-primary/30 text-primary hover:border-primary hover:bg-primary/10"
                 }`}
             >
@@ -198,8 +217,8 @@ const CapitalCompanionPanel = () => {
               onClick={playLatestMessage}
               disabled={!hasNewMessage}
               className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg border transition-all duration-300
-                ${hasNewMessage 
-                  ? "bg-secondary/20 border-secondary text-secondary animate-pulse" 
+                ${hasNewMessage
+                  ? "bg-secondary/20 border-secondary text-secondary animate-pulse"
                   : "bg-panel-bg/30 border-border/30 text-muted-foreground opacity-50 cursor-not-allowed"
                 }`}
             >
@@ -211,8 +230,8 @@ const CapitalCompanionPanel = () => {
             <button
               onClick={() => setIsMuted(!isMuted)}
               className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg border transition-all
-                ${isMuted 
-                  ? "bg-danger-red/20 border-danger-red/50 text-danger-red" 
+                ${isMuted
+                  ? "bg-danger-red/20 border-danger-red/50 text-danger-red"
                   : "bg-panel-bg/30 border-border/30 text-muted-foreground hover:text-foreground"
                 }`}
             >
@@ -228,7 +247,7 @@ const CapitalCompanionPanel = () => {
             <MessageCircle className="w-4 h-4 text-primary" />
             <span className="text-xs text-muted-foreground">CONVERSATION</span>
           </div>
-          
+
           <div className="flex-1 bg-background/30 border border-border/30 rounded-lg p-3 overflow-y-auto max-h-[200px] space-y-3">
             {messages.map((message) => (
               <div
@@ -237,14 +256,14 @@ const CapitalCompanionPanel = () => {
               >
                 {/* Avatar */}
                 <div className={`w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs
-                  ${message.isAI 
-                    ? "bg-gradient-to-br from-secondary/50 to-primary/50 border border-primary/30" 
+                  ${message.isAI
+                    ? "bg-gradient-to-br from-secondary/50 to-primary/50 border border-primary/30"
                     : "bg-terminal-green/20 border border-terminal-green/30"
                   }`}
                 >
                   {message.isAI ? "A" : <User className="w-3 h-3" />}
                 </div>
-                
+
                 {/* Message */}
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-0.5">
@@ -262,7 +281,7 @@ const CapitalCompanionPanel = () => {
                 </div>
               </div>
             ))}
-            
+
             {/* Thinking indicator in chat */}
             {isThinking && (
               <div className="flex gap-2">
@@ -279,7 +298,7 @@ const CapitalCompanionPanel = () => {
                 </div>
               </div>
             )}
-            
+
             <div ref={messagesEndRef} />
           </div>
 

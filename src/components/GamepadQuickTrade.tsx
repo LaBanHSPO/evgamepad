@@ -38,6 +38,20 @@ export const GamepadQuickTrade = () => {
           if (focusArea === "size" && selectedSize < sizes.length - 1) setSelectedSize(selectedSize + 1);
           if (focusArea === "action") setSide("SHORT");
           break;
+        // Gamepad specifics
+        case "Enter": // A Button
+          // Execute trade logic (mock)
+          console.log(`Executing ${side} on ${currentPair.symbol} size ${sizes[selectedSize]}`);
+          // Visual feedback could be added here
+          break;
+        case "x": // X Button -> Set Long
+          setSide("LONG");
+          setFocusArea("action");
+          break;
+        case "b": // B Button -> Set Short (if not used for back)
+          setSide("SHORT");
+          setFocusArea("action");
+          break;
       }
     };
 
@@ -70,15 +84,13 @@ export const GamepadQuickTrade = () => {
                 setSelectedPair(index);
                 setFocusArea("pair");
               }}
-              className={`gamepad-tile-sm ${
-                selectedPair === index ? "gamepad-tile-active" : ""
-              }`}
+              className={`gamepad-tile-sm ${selectedPair === index ? "gamepad-tile-active" : ""
+                }`}
             >
               <div className="text-lg font-display text-primary">{pair.symbol}</div>
               <div className="text-2xl font-mono font-bold mt-1">${pair.price}</div>
-              <div className={`text-sm font-mono mt-1 ${
-                pair.change.startsWith("+") ? "text-terminal-green" : "text-danger-red"
-              }`}>
+              <div className={`text-sm font-mono mt-1 ${pair.change.startsWith("+") ? "text-terminal-green" : "text-danger-red"
+                }`}>
                 {pair.change}
               </div>
             </button>
@@ -106,11 +118,10 @@ export const GamepadQuickTrade = () => {
                 setSelectedSize(index);
                 setFocusArea("size");
               }}
-              className={`flex-1 py-4 text-lg font-mono rounded-lg border-2 transition-all ${
-                selectedSize === index
+              className={`flex-1 py-4 text-lg font-mono rounded-lg border-2 transition-all ${selectedSize === index
                   ? "bg-primary/30 border-primary text-primary scale-105"
                   : "bg-panel-bg/50 border-primary/20 text-muted-foreground hover:border-primary/50"
-              }`}
+                }`}
             >
               {size}
             </button>
@@ -125,11 +136,10 @@ export const GamepadQuickTrade = () => {
             setSide("LONG");
             setFocusArea("action");
           }}
-          className={`relative py-8 rounded-xl border-4 transition-all font-display text-2xl tracking-wider ${
-            side === "LONG"
+          className={`relative py-8 rounded-xl border-4 transition-all font-display text-2xl tracking-wider ${side === "LONG"
               ? "bg-terminal-green/20 border-terminal-green text-terminal-green scale-[1.02] shadow-[0_0_30px_rgba(34,197,94,0.3)]"
               : "bg-panel-bg/50 border-muted/30 text-muted-foreground hover:border-terminal-green/50"
-          }`}
+            }`}
         >
           <div className="absolute top-2 left-3">
             <div className="gamepad-button-hint bg-terminal-green/20 text-terminal-green">X</div>
@@ -144,11 +154,10 @@ export const GamepadQuickTrade = () => {
             setSide("SHORT");
             setFocusArea("action");
           }}
-          className={`relative py-8 rounded-xl border-4 transition-all font-display text-2xl tracking-wider ${
-            side === "SHORT"
+          className={`relative py-8 rounded-xl border-4 transition-all font-display text-2xl tracking-wider ${side === "SHORT"
               ? "bg-danger-red/20 border-danger-red text-danger-red scale-[1.02] shadow-[0_0_30px_rgba(239,68,68,0.3)]"
               : "bg-panel-bg/50 border-muted/30 text-muted-foreground hover:border-danger-red/50"
-          }`}
+            }`}
         >
           <div className="absolute top-2 left-3">
             <div className="gamepad-button-hint bg-danger-red/20 text-danger-red">B</div>
@@ -161,11 +170,10 @@ export const GamepadQuickTrade = () => {
 
       {/* Execute Button - The big one */}
       <button
-        className={`w-full py-6 rounded-xl border-4 font-display text-3xl tracking-widest transition-all ${
-          side === "LONG"
+        className={`w-full py-6 rounded-xl border-4 font-display text-3xl tracking-widest transition-all ${side === "LONG"
             ? "bg-terminal-green text-background border-terminal-green hover:scale-[1.01] shadow-[0_0_40px_rgba(34,197,94,0.4)]"
             : "bg-danger-red text-background border-danger-red hover:scale-[1.01] shadow-[0_0_40px_rgba(239,68,68,0.4)]"
-        }`}
+          }`}
       >
         <div className="flex items-center justify-center gap-4">
           <div className="gamepad-button-hint bg-background/20 text-background border-background/30">A</div>

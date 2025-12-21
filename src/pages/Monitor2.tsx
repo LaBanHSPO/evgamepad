@@ -7,12 +7,13 @@ import { GamepadControllerHints } from "@/components/GamepadControllerHints";
 const Monitor2 = () => {
   const [activeSection, setActiveSection] = useState<"trade" | "positions">("trade");
 
-  // Gamepad navigation
+  // Gamepad navigation (LB/RB mapped to q/e)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft" || e.key === "q") {
+      // Use q/e for tab switching (mapped from LB/RB)
+      if (e.key === "q") {
         setActiveSection("trade");
-      } else if (e.key === "ArrowRight" || e.key === "e") {
+      } else if (e.key === "e") {
         setActiveSection("positions");
       }
     };

@@ -8,6 +8,8 @@ import Monitor2 from "./pages/Monitor2";
 import Monitor3 from "./pages/Monitor3";
 import NotFound from "./pages/NotFound";
 
+import { GlobalGamepadHandler } from "@/components/GlobalGamepadHandler";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -16,6 +18,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <GlobalGamepadHandler />
         <Routes>
           <Route path="/" element={<Monitor1 />} />
           <Route path="/m2" element={<Monitor2 />} />
