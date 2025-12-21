@@ -59,6 +59,30 @@ class MT5ConnectionManager:
             self._start_health_check()
             return True
 
+    def login_account(self, account: int, password: str, server: str) -> Optional[Dict[str, Any]]:
+        """Login to specific MT5 account."""
+        with self._lock:
+            # Ensure initialized
+            if not self._connected:
+                if not mt5.initialize(timeout=int(self.timeout * 1000)):
+                     logger.error("MT5 initialization failed during login request")
+                     return None
+
+            logger.info(f"Logging in to account {account}...")
+            authorized = mt5.login(
+                account, 
+                password=password, 
+                server=server
+            )
+            
+            if authorized:
+                self._connected = True
+                logger.info(f"Successfully logged in to {account}")
+                return self.get_account_info()
+            else:
+                logger.error(f"Login failed for {account}: {mt5.last_error()}")
+                return None
+
     def disconnect(self):
         """Disconnect from MT5 and stop health check."""
         with self._lock:
