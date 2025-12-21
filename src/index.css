@@ -238,4 +238,50 @@
   .bg-safe-blue {
     background-color: hsl(var(--safe-blue));
   }
+
+  /* Gamepad-friendly UI Components */
+  .gamepad-tile {
+    @apply relative p-5 rounded-lg border-2 border-primary/30 bg-panel-bg/80 
+           transition-all duration-200 ease-out
+           hover:border-primary hover:bg-primary/10
+           focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background;
+  }
+
+  .gamepad-tile-active {
+    @apply border-primary bg-primary/20 scale-[1.02];
+    box-shadow: 0 0 30px hsl(var(--primary) / 0.3), inset 0 0 20px hsl(var(--primary) / 0.1);
+  }
+
+  .gamepad-tile-sm {
+    @apply p-4 rounded-lg border-2 border-primary/20 bg-panel-bg/60 
+           transition-all duration-150 text-center
+           hover:border-primary/60 hover:bg-primary/10
+           focus:outline-none focus:ring-2 focus:ring-primary;
+  }
+
+  .gamepad-tile-sm.gamepad-tile-active {
+    @apply border-primary bg-primary/20 scale-105;
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.4);
+  }
+
+  .gamepad-button-hint {
+    @apply inline-flex items-center justify-center w-7 h-7 rounded-md 
+           border-2 border-primary/50 bg-primary/10 
+           text-xs font-bold text-primary font-mono;
+  }
+
+  .gamepad-position-card {
+    @apply p-4 rounded-xl border-2 bg-panel-bg/50 transition-all duration-200
+           hover:bg-primary/5 focus:outline-none;
+  }
+
+  .gamepad-position-card-active {
+    @apply border-primary bg-primary/10 scale-[1.01];
+    box-shadow: 0 0 25px hsl(var(--primary) / 0.2);
+  }
+
+  /* Focus ring for gamepad navigation */
+  .gamepad-focus-ring {
+    @apply ring-2 ring-primary ring-offset-2 ring-offset-background;
+  }
 }
