@@ -9,34 +9,40 @@ import CapitalCompanionPanel from "@/components/CapitalCompanionPanel";
 
 const Monitor1 = () => {
   return (
-    <div className="min-h-screen bg-background text-foreground p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-background text-foreground relative">
       {/* Scanlines overlay */}
       <div className="scanlines" />
-      
+
       {/* CRT flicker effect */}
       <div className="crt-flicker" />
-      
+
       {/* Main content */}
-      <div className="relative z-10 max-w-7xl mx-auto space-y-4">
-        <SystemHeader monitorNumber={1} title="MARKET COMMANDER" />
-        
-        {/* Top: Capital Companion Logic */}
-        <CapitalCompanionPanel />
-        
-        {/* Row 1: Market Overview & Sentiment */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <MarketOverviewPanel />
-          <MarketSentimentPanel />
+      <div className="relative z-10 max-w-7xl mx-auto">
+        <div className="p-4 pb-0">
+          <SystemHeader monitorNumber={1} title="MARKET COMMANDER" />
         </div>
-        
-        {/* Row 2: Price Action */}
-        <PriceActionPanel />
-        
-        {/* Row 3: KOL Updates, AI Analysis, Major News */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <KOLUpdatesPanel />
-          <AIAnalysisPanel />
-          <MajorNewsPanel />
+
+        {/* Top: Capital Companion Logic - Sticky */}
+        <div className="sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4 border-b border-border/50 shadow-md">
+          <CapitalCompanionPanel />
+        </div>
+
+        <div className="p-4 space-y-4">
+          {/* Row 1: Market Overview & Sentiment */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <MarketOverviewPanel />
+            <MarketSentimentPanel />
+          </div>
+
+          {/* Row 2: Price Action */}
+          <PriceActionPanel />
+
+          {/* Row 3: KOL Updates, AI Analysis, Major News */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <KOLUpdatesPanel />
+            <AIAnalysisPanel />
+            <MajorNewsPanel />
+          </div>
         </div>
       </div>
     </div>
