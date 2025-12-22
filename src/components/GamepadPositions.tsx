@@ -1,6 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { TrendingUp, TrendingDown, DollarSign, X, Edit3 } from "lucide-react";
+import { useSocket } from "@/context/SocketContext";
+import { toast } from "sonner";
 
+// Hardcoded for now, but in future should come from context/socket
 const positions = [
   {
     id: "POS-001",
@@ -38,6 +41,87 @@ export const GamepadPositions = () => {
   const [selectedPosition, setSelectedPosition] = useState(0);
   const [actionMode, setActionMode] = useState<"select" | "action">("select");
   const [selectedAction, setSelectedAction] = useState(0);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const { socket, isConnected } = useSocket();
+
+  const handleResponse = useCallback((data: any) => {
+    setIsProcessing(false);
+    console.log("Position action response:", data);
+    if (data.success) {
+      toast.success("Action Executed Successfully", {
+        description: data.message || "Operation complete",
+      });
+      // Here we should reload positions or remove the closed one from state if we were using dynamic state
+      setActionMode("select"); // Reset UI
+    } else {
+      toast.error("Action Failed", {
+        description: data.error || "Unknown error",
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    socket.on("close_result", handleResponse);
+    socket.on("modify_result", handleResponse);
+    socket.on("error", handleResponse); // Reuse handler for error
+
+    return () => {
+      socket.off("close_result", handleResponse);
+      socket.off("modify_result", handleResponse);
+      socket.off("error", handleResponse);
+    };
+  }, [socket, handleResponse]);
+
+  const executeAction = () => {
+    if (!socket || !isConnected) {
+      toast.error("Not Connected");
+      return;
+    }
+
+    const pos = positions[selectedPosition];
+
+    if (selectedAction === 0) {
+      // Modify
+      console.log("Modifying", pos.id);
+      setIsProcessing(true);
+      // Emitting mock modify with hardcoded SL/TP for demo
+      socket.emit("modify", {
+        ticket: pos.id,
+        sl: 0.0, // Should be actual value
+        tp: 0.0
+      });
+    } else if (selectedAction === 1) {
+      // Close
+      console.log("Closing", pos.id);
+      setIsProcessing(true);
+      socket.emit("close", {
+        ticket: pos.id,
+        volume: parseFloat(pos.size) // Assuming full close
+      });
+    }
+  };
+
+  const closeAll = () => {
+    if (!socket || !isConnected) {
+      toast.error("Not Connected");
+      return;
+    }
+    console.log("Closing ALL");
+    setIsProcessing(true);
+    // Loop through positions and emit close for each
+    // Note: In real app, might want a single 'close_all' event or batched.
+    // For now, iterate.
+    positions.forEach(pos => {
+      socket.emit("close", {
+        ticket: pos.id,
+        volume: parseFloat(pos.size)
+      });
+    });
+    // This simple iteration doesn't track individual success well but works for "fire and forget".
+    toast.info("Close All initiated");
+  };
 
   const totalPnL = positions.reduce(
     (acc, pos) => acc + parseFloat(pos.pnl.replace(/[+,]/g, "")),
@@ -78,7 +162,7 @@ export const GamepadPositions = () => {
       // GLOBAL actions for this component (always active when mounted)
       if (e.key === "y") {
         // Y Button -> Close All
-        console.log("Closing ALL positions");
+        closeAll();
       }
 
       if (actionMode === "select") {
@@ -90,15 +174,14 @@ export const GamepadPositions = () => {
       } else if (actionMode === "action") {
         if (e.key === "Enter") {
           // Execute selected action
-          if (selectedAction === 0) console.log("Modifying position");
-          if (selectedAction === 1) console.log("Closing position");
+          executeAction();
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [actionMode, selectedPosition, selectedAction]);
+  }, [actionMode, selectedPosition, selectedAction, isConnected, socket]);
 
   return (
     <div className="space-y-4">
@@ -198,6 +281,7 @@ export const GamepadPositions = () => {
               {isSelected && actionMode === "action" && (
                 <div className="flex gap-4 mt-4 pt-4 border-t border-primary/20">
                   <button
+                    onClick={() => { setSelectedAction(0); executeAction(); }}
                     className={`flex-1 py-4 rounded-lg border-2 font-display text-lg transition-all flex items-center justify-center gap-3 ${selectedAction === 0
                       ? "bg-primary/20 border-primary text-primary"
                       : "bg-panel-bg/50 border-muted/30 text-muted-foreground"
@@ -208,6 +292,7 @@ export const GamepadPositions = () => {
                     <span>MODIFY</span>
                   </button>
                   <button
+                    onClick={() => { setSelectedAction(1); executeAction(); }}
                     className={`flex-1 py-4 rounded-lg border-2 font-display text-lg transition-all flex items-center justify-center gap-3 ${selectedAction === 1
                       ? "bg-danger-red/20 border-danger-red text-danger-red"
                       : "bg-panel-bg/50 border-muted/30 text-muted-foreground"
@@ -225,10 +310,19 @@ export const GamepadPositions = () => {
       </div>
 
       {/* Close All Button */}
-      <button className="w-full py-5 rounded-xl border-2 border-danger-red/50 bg-danger-red/10 text-danger-red font-display text-xl tracking-wider hover:bg-danger-red/20 transition-all flex items-center justify-center gap-3">
+      <button
+        onClick={closeAll}
+        className="w-full py-5 rounded-xl border-2 border-danger-red/50 bg-danger-red/10 text-danger-red font-display text-xl tracking-wider hover:bg-danger-red/20 transition-all flex items-center justify-center gap-3"
+      >
         <div className="gamepad-button-hint bg-danger-red/20 text-danger-red">Y</div>
         <span>CLOSE ALL POSITIONS</span>
       </button>
+
+      {!isConnected && (
+        <div className="text-center text-xs text-danger-red animate-pulse mt-4">
+          DISCONNECTED FROM TRADING SERVER
+        </div>
+      )}
     </div>
   );
 };

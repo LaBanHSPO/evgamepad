@@ -1,5 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { TrendingUp, TrendingDown, Zap, Shield, Target } from "lucide-react";
+import { useSocket } from "@/context/SocketContext";
+import { toast } from "sonner";
 
 const pairs = [
   { symbol: "BTC/USD", price: "97,842.50", change: "+2.34%" },
@@ -15,6 +17,68 @@ export const GamepadQuickTrade = () => {
   const [selectedSize, setSelectedSize] = useState(2);
   const [side, setSide] = useState<"LONG" | "SHORT">("LONG");
   const [focusArea, setFocusArea] = useState<"pair" | "size" | "action">("pair");
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const { socket, isConnected } = useSocket();
+
+  const handleTradeResponse = useCallback((data: any) => {
+    setIsProcessing(false);
+    console.log("Order response:", data);
+    if (data.success) {
+      toast.success(`Order Executed: ${data.order?.ticket || "Success"}`, {
+        description: `${data.order?.symbol} @ ${data.order?.price}`,
+        duration: 3000,
+      });
+    } else {
+      toast.error("Order Failed", {
+        description: data.error || "Unknown error",
+        duration: 5000,
+      });
+    }
+  }, []);
+
+  const handleError = useCallback((err: any) => {
+    setIsProcessing(false);
+    const msg = err?.message || err?.error || "Unknown error";
+    toast.error("Trade Error", { description: msg });
+  }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    socket.on("order_result", handleTradeResponse);
+    socket.on("error", handleError);
+
+    return () => {
+      socket.off("order_result", handleTradeResponse);
+      socket.off("error", handleError);
+    };
+  }, [socket, handleTradeResponse, handleError]);
+
+  const executeTrade = () => {
+    if (!socket || !isConnected) {
+      toast.error("Not Connected", { description: "Socket.IO server unreachable" });
+      return;
+    }
+
+    if (isProcessing) return;
+
+    const currentPair = pairs[selectedPair];
+    const volume = parseFloat(sizes[selectedSize]);
+    const symbol = currentPair.symbol.replace("/", "");
+
+    setIsProcessing(true);
+    const event = side === "LONG" ? "buy" : "sell";
+
+    console.log(`Emitting ${event}: ${symbol} ${volume}`);
+
+    socket.emit(event, {
+      symbol: symbol,
+      volume: volume,
+      sl: 0.0,
+      tp: 0.0,
+    });
+  };
 
   // Keyboard/gamepad navigation
   useEffect(() => {
@@ -38,11 +102,10 @@ export const GamepadQuickTrade = () => {
           if (focusArea === "size" && selectedSize < sizes.length - 1) setSelectedSize(selectedSize + 1);
           if (focusArea === "action") setSide("SHORT");
           break;
-        // Gamepad specifics
         case "Enter": // A Button
-          // Execute trade logic (mock)
-          console.log(`Executing ${side} on ${currentPair.symbol} size ${sizes[selectedSize]}`);
-          // Visual feedback could be added here
+          if (focusArea === "action") {
+            executeTrade();
+          }
           break;
         case "x": // X Button -> Set Long
           setSide("LONG");
@@ -57,7 +120,7 @@ export const GamepadQuickTrade = () => {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [focusArea, selectedPair, selectedSize]);
+  }, [focusArea, selectedPair, selectedSize, side, socket, isConnected, isProcessing]);
 
   const currentPair = pairs[selectedPair];
 
@@ -119,8 +182,8 @@ export const GamepadQuickTrade = () => {
                 setFocusArea("size");
               }}
               className={`flex-1 py-4 text-lg font-mono rounded-lg border-2 transition-all ${selectedSize === index
-                  ? "bg-primary/30 border-primary text-primary scale-105"
-                  : "bg-panel-bg/50 border-primary/20 text-muted-foreground hover:border-primary/50"
+                ? "bg-primary/30 border-primary text-primary scale-105"
+                : "bg-panel-bg/50 border-primary/20 text-muted-foreground hover:border-primary/50"
                 }`}
             >
               {size}
@@ -137,8 +200,8 @@ export const GamepadQuickTrade = () => {
             setFocusArea("action");
           }}
           className={`relative py-8 rounded-xl border-4 transition-all font-display text-2xl tracking-wider ${side === "LONG"
-              ? "bg-terminal-green/20 border-terminal-green text-terminal-green scale-[1.02] shadow-[0_0_30px_rgba(34,197,94,0.3)]"
-              : "bg-panel-bg/50 border-muted/30 text-muted-foreground hover:border-terminal-green/50"
+            ? "bg-terminal-green/20 border-terminal-green text-terminal-green scale-[1.02] shadow-[0_0_30px_rgba(34,197,94,0.3)]"
+            : "bg-panel-bg/50 border-muted/30 text-muted-foreground hover:border-terminal-green/50"
             }`}
         >
           <div className="absolute top-2 left-3">
@@ -155,8 +218,8 @@ export const GamepadQuickTrade = () => {
             setFocusArea("action");
           }}
           className={`relative py-8 rounded-xl border-4 transition-all font-display text-2xl tracking-wider ${side === "SHORT"
-              ? "bg-danger-red/20 border-danger-red text-danger-red scale-[1.02] shadow-[0_0_30px_rgba(239,68,68,0.3)]"
-              : "bg-panel-bg/50 border-muted/30 text-muted-foreground hover:border-danger-red/50"
+            ? "bg-danger-red/20 border-danger-red text-danger-red scale-[1.02] shadow-[0_0_30px_rgba(239,68,68,0.3)]"
+            : "bg-panel-bg/50 border-muted/30 text-muted-foreground hover:border-danger-red/50"
             }`}
         >
           <div className="absolute top-2 left-3">
@@ -170,14 +233,16 @@ export const GamepadQuickTrade = () => {
 
       {/* Execute Button - The big one */}
       <button
-        className={`w-full py-6 rounded-xl border-4 font-display text-3xl tracking-widest transition-all ${side === "LONG"
-            ? "bg-terminal-green text-background border-terminal-green hover:scale-[1.01] shadow-[0_0_40px_rgba(34,197,94,0.4)]"
-            : "bg-danger-red text-background border-danger-red hover:scale-[1.01] shadow-[0_0_40px_rgba(239,68,68,0.4)]"
+        onClick={executeTrade}
+        disabled={isProcessing}
+        className={`w-full py-6 rounded-xl border-4 font-display text-3xl tracking-widest transition-all ${isProcessing ? "opacity-50 cursor-not-allowed" : ""} ${side === "LONG"
+          ? "bg-terminal-green text-background border-terminal-green hover:scale-[1.01] shadow-[0_0_40px_rgba(34,197,94,0.4)]"
+          : "bg-danger-red text-background border-danger-red hover:scale-[1.01] shadow-[0_0_40px_rgba(239,68,68,0.4)]"
           }`}
       >
         <div className="flex items-center justify-center gap-4">
           <div className="gamepad-button-hint bg-background/20 text-background border-background/30">A</div>
-          <span>EXECUTE {side}</span>
+          <span>{isProcessing ? "EXECUTING..." : `EXECUTE ${side}`}</span>
         </div>
       </button>
 
@@ -194,6 +259,12 @@ export const GamepadQuickTrade = () => {
           <span className="text-secondary">10x</span>
         </div>
       </div>
+
+      {!isConnected && (
+        <div className="text-center text-xs text-danger-red animate-pulse">
+          DISCONNECTED FROM TRADING SERVER
+        </div>
+      )}
     </div>
   );
 };
