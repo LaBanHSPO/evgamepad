@@ -15,7 +15,8 @@ from app.models.responses import (
 )
 
 # Global instances (will be injected from main.py)
-sio = None
+from app.sio import sio
+
 mt5_manager = None
 session_manager = None
 reconnection_manager = None
