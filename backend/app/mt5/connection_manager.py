@@ -139,6 +139,17 @@ class MT5ConnectionManager:
             
         return term_info.connected
 
+    def is_autotrading_enabled(self) -> bool:
+        """Check if AutoTrading (Algo Trading) is enabled in the terminal."""
+        if not self.is_connected():
+            return False
+            
+        term_info = mt5.terminal_info()
+        if term_info is None:
+            return False
+            
+        return term_info.trade_allowed
+
     def get_account_info(self) -> Optional[Dict[str, Any]]:
         """Get current account information."""
         if not self.is_connected():

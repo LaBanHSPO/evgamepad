@@ -14,7 +14,7 @@ class TradingOperations:
     def __init__(self, connection_manager: MT5ConnectionManager):
         self.conn = connection_manager
 
-    async def place_market_order(
+    def place_market_order(
         self, 
         symbol: str, 
         volume: float, 
@@ -25,6 +25,9 @@ class TradingOperations:
         """Place a market order (Buy or Sell)."""
         if not self.conn.is_connected():
             return {"retcode": mt5.TRADE_RETCODE_CONNECTION, "comment": "Not connected to MT5"}
+
+        if not self.conn.is_autotrading_enabled():
+            return {"retcode": mt5.TRADE_RETCODE_ERROR, "comment": "AutoTrading disabled in MT5 Terminal"}
 
         if not self._validate_symbol(symbol):
             return {"retcode": mt5.TRADE_RETCODE_INVALID, "comment": f"Symbol {symbol} not found or not visible"}
@@ -52,17 +55,17 @@ class TradingOperations:
             request["tp"] = tp
 
         logger.info(f"Placing order: {symbol} {volume} lots @ {price}")
-        return await MT5ErrorHandler.order_with_retry(request)
+        return MT5ErrorHandler.order_with_retry(request)
 
-    async def place_buy_market(self, symbol: str, volume: float, sl: float = None, tp: float = None) -> Dict[str, Any]:
+    def place_buy_market(self, symbol: str, volume: float, sl: float = None, tp: float = None) -> Dict[str, Any]:
         """Convenience method for Buy Market order."""
-        return await self.place_market_order(symbol, volume, mt5.ORDER_TYPE_BUY, sl, tp)
+        return self.place_market_order(symbol, volume, mt5.ORDER_TYPE_BUY, sl, tp)
 
-    async def place_sell_market(self, symbol: str, volume: float, sl: float = None, tp: float = None) -> Dict[str, Any]:
+    def place_sell_market(self, symbol: str, volume: float, sl: float = None, tp: float = None) -> Dict[str, Any]:
         """Convenience method for Sell Market order."""
-        return await self.place_market_order(symbol, volume, mt5.ORDER_TYPE_SELL, sl, tp)
+        return self.place_market_order(symbol, volume, mt5.ORDER_TYPE_SELL, sl, tp)
 
-    async def modify_position(
+    def modify_position(
         self, 
         ticket: int, 
         new_sl: Optional[float] = None, 
@@ -71,6 +74,9 @@ class TradingOperations:
         """Modify SL/TP of an existing position."""
         if not self.conn.is_connected():
             return {"retcode": mt5.TRADE_RETCODE_CONNECTION, "comment": "Not connected"}
+
+        if not self.conn.is_autotrading_enabled():
+            return {"retcode": mt5.TRADE_RETCODE_ERROR, "comment": "AutoTrading disabled in MT5 Terminal"}
 
         position = self.get_position(ticket)
         if not position:
@@ -85,12 +91,15 @@ class TradingOperations:
         }
 
         logger.info(f"Modifying position {ticket}: SL={request['sl']}, TP={request['tp']}")
-        return await MT5ErrorHandler.order_with_retry(request)
+        return MT5ErrorHandler.order_with_retry(request)
 
-    async def close_position(self, ticket: int, volume: Optional[float] = None) -> Dict[str, Any]:
+    def close_position(self, ticket: int, volume: Optional[float] = None) -> Dict[str, Any]:
         """Close an existing position (full or partial)."""
         if not self.conn.is_connected():
             return {"retcode": mt5.TRADE_RETCODE_CONNECTION, "comment": "Not connected"}
+
+        if not self.conn.is_autotrading_enabled():
+            return {"retcode": mt5.TRADE_RETCODE_ERROR, "comment": "AutoTrading disabled in MT5 Terminal"}
 
         position = self.get_position(ticket)
         if not position:
@@ -116,7 +125,7 @@ class TradingOperations:
         }
 
         logger.info(f"Closing position {ticket}: {lot} lots")
-        return await MT5ErrorHandler.order_with_retry(request)
+        return MT5ErrorHandler.order_with_retry(request)
 
     def get_position(self, ticket: int) -> Optional[Dict[str, Any]]:
         """Get position details by ticket."""

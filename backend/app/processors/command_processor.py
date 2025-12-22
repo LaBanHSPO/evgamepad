@@ -7,6 +7,7 @@ from datetime import datetime
 from app.mt5.trading_operations import TradingOperations
 from app.mt5.connection_manager import MT5ConnectionManager
 from app.models.responses import ErrorCode, error_response, success_response
+import MetaTrader5 as mt5
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,19 @@ class CommandProcessor:
                 tp=tp
             )
 
+            if result.get('retcode') != mt5.TRADE_RETCODE_DONE:
+                retcode = result.get('retcode')
+                comment = result.get('comment', 'Unknown MT5 error')
+                logger.error(
+                    f"[{command_id}] BUY order failed - retcode: {retcode}, comment: {comment}, "
+                    f"symbol: {symbol}, volume: {volume}"
+                )
+                return error_response(
+                    ErrorCode.MT5_ERROR,
+                    f"MT5 Error {retcode}: {comment}",
+                    details={'retcode': retcode, 'symbol': symbol, 'volume': volume}
+                )
+
             logger.info(
                 f"[{command_id}] BUY order executed: "
                 f"Ticket={result['ticket']}, Price={result['price']}"
@@ -137,6 +151,19 @@ class CommandProcessor:
                 tp=tp
             )
 
+            if result.get('retcode') != mt5.TRADE_RETCODE_DONE:
+                retcode = result.get('retcode')
+                comment = result.get('comment', 'Unknown MT5 error')
+                logger.error(
+                    f"[{command_id}] SELL order failed - retcode: {retcode}, comment: {comment}, "
+                    f"symbol: {symbol}, volume: {volume}"
+                )
+                return error_response(
+                    ErrorCode.MT5_ERROR,
+                    f"MT5 Error {retcode}: {comment}",
+                    details={'retcode': retcode, 'symbol': symbol, 'volume': volume}
+                )
+
             logger.info(
                 f"[{command_id}] SELL order executed: "
                 f"Ticket={result['ticket']}, Price={result['price']}"
@@ -189,6 +216,19 @@ class CommandProcessor:
                 new_tp=tp
             )
 
+            if result.get('retcode') != mt5.TRADE_RETCODE_DONE:
+                retcode = result.get('retcode')
+                comment = result.get('comment', 'Unknown MT5 error')
+                logger.error(
+                    f"[{command_id}] MODIFY failed - retcode: {retcode}, comment: {comment}, "
+                    f"ticket: {ticket}"
+                )
+                return error_response(
+                    ErrorCode.MT5_ERROR,
+                    f"MT5 Error {retcode}: {comment}",
+                    details={'retcode': retcode, 'ticket': ticket}
+                )
+
             logger.info(
                 f"[{command_id}] Position modified: "
                 f"Ticket={ticket}, SL={result['new_sl']}, TP={result['new_tp']}"
@@ -235,6 +275,19 @@ class CommandProcessor:
                 ticket=ticket,
                 volume=volume
             )
+
+            if result.get('retcode') != mt5.TRADE_RETCODE_DONE:
+                retcode = result.get('retcode')
+                comment = result.get('comment', 'Unknown MT5 error')
+                logger.error(
+                    f"[{command_id}] CLOSE failed - retcode: {retcode}, comment: {comment}, "
+                    f"ticket: {ticket}"
+                )
+                return error_response(
+                    ErrorCode.MT5_ERROR,
+                    f"MT5 Error {retcode}: {comment}",
+                    details={'retcode': retcode, 'ticket': ticket}
+                )
 
             logger.info(
                 f"[{command_id}] Position closed: "

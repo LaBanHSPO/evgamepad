@@ -1,5 +1,5 @@
 import MetaTrader5 as mt5
-import asyncio
+import time
 import logging
 from typing import Dict, Any, Optional
 
@@ -40,14 +40,14 @@ class MT5ErrorHandler:
         return MT5ErrorHandler.ERROR_MESSAGES.get(retcode, f"Unknown error code: {retcode}")
 
     @staticmethod
-    async def order_with_retry(
+    def order_with_retry(
         request: Dict[str, Any], 
         max_retries: int = 3, 
         retry_delay: float = 1.0
     ) -> Dict[str, Any]:
         """
         Execute an order request with retry logic for retriable errors.
-        This is an async method to allow non-blocking sleeps.
+        This is a synchronous method (run in thread).
         """
         for attempt in range(max_retries):
             # Send order
@@ -66,7 +66,7 @@ class MT5ErrorHandler:
                         f"Retriable error {result.retcode} ({result.comment}), "
                         f"retrying in {retry_delay}s (Attempt {attempt + 1}/{max_retries})"
                     )
-                    await asyncio.sleep(retry_delay)
+                    time.sleep(retry_delay)
                     continue
             
             # If we get here, it's either success (handled above), 
