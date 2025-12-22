@@ -25,7 +25,7 @@ class Config:
 
     # Socket.IO Server
     SOCKETIO_HOST: str = os.getenv('SOCKETIO_HOST', '0.0.0.0')
-    SOCKETIO_PORT: int = int(os.getenv('SOCKETIO_PORT', '5000'))
+    SOCKETIO_PORT: int = int(os.getenv('SOCKETIO_PORT', '8686'))
     DEBUG: bool = os.getenv('DEBUG', 'false').lower() == 'true'
 
 config = Config()
