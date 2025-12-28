@@ -1,0 +1,403 @@
+metadata:
+  title: Commands Catalog
+  description: Auto-generated catalog of all available commands in ClaudeKit Engineer
+  last_updated: '2025-11-27'
+  total_commands: 55
+categories:
+  core: Core Commands
+  bootstrap: Bootstrap Commands
+  content: Content Creation
+  cook: Cook Commands
+  design: Design Commands
+  docs: Documentation
+  fix: Fix & Debug
+  git: Git Commands
+  integrate: Integrations
+  plan: Planning
+  review: Code Review
+  scout: Scout Commands
+  skill: Skill Management
+commands:
+  core:
+  - name: ck-help
+    path: ck-help.md
+    description: ClaudeKit usage guide - just type naturally
+    argument_hint:
+    - category|command|task
+    power_level: 1
+    category: core
+  - name: ask
+    path: ask.md
+    description: Answer technical and architectural questions.
+    argument_hint:
+    - technical-question
+    power_level: 1
+    category: core
+  - name: bootstrap
+    path: bootstrap.md
+    description: Bootstrap a new project step by step
+    argument_hint:
+    - user-requirements
+    power_level: 5
+    category: core
+  - name: brainstorm
+    path: brainstorm.md
+    description: Brainstorm a feature
+    argument_hint:
+    - question
+    power_level: 2
+    category: core
+  - name: code
+    path: code.md
+    description: Start coding & testing an existing plan
+    argument_hint:
+    - plan
+    power_level: 1
+    category: core
+  - name: cook
+    path: cook.md
+    description: Implement a feature [step by step]
+    argument_hint:
+    - tasks
+    power_level: 3
+    category: core
+  - name: debug
+    path: debug.md
+    description: Debugging technical issues and providing solutions.
+    argument_hint:
+    - issues
+    power_level: 2
+    category: core
+  - name: fix
+    path: fix.md
+    description: Analyze and fix small issues [AUTO DETECT COMPLEXITY]
+    argument_hint:
+    - issues
+    power_level: 2
+    category: core
+  - name: journal
+    path: journal.md
+    description: Write some journal entries.
+    argument_hint: ''
+    power_level: 1
+    category: core
+  - name: plan
+    path: plan.md
+    description: Intelligent plan creation with prompt enhancement
+    argument_hint:
+    - task
+    power_level: 3
+    category: core
+  - name: scout
+    path: scout.md
+    description: ''
+    argument_hint: ''
+    power_level: 0
+    category: core
+  - name: test
+    path: test.md
+    description: Run tests locally and analyze the summary report.
+    argument_hint: ''
+    power_level: 1
+    category: core
+  - name: use-mcp
+    path: use-mcp.md
+    description: Utilize tools of Model Context Protocol (MCP) servers
+    argument_hint:
+    - task
+    power_level: 0
+    category: core
+  - name: watzup
+    path: watzup.md
+    description: Review recent changes and wrap up the work
+    argument_hint: ''
+    power_level: 1
+    category: core
+  bootstrap:
+  - name: bootstrap:auto
+    path: bootstrap/auto.md
+    description: Bootstrap a new project automatically
+    argument_hint:
+    - user-requirements
+    power_level: 4
+    category: bootstrap
+  - name: bootstrap:auto:fast
+    path: bootstrap/auto/fast.md
+    description: Quickly bootstrap a new project automatically
+    argument_hint:
+    - user-requirements
+    power_level: 3
+    category: bootstrap
+  content:
+  - name: content:cro
+    path: content/cro.md
+    description: Analyze the current content and optimize for conversion
+    argument_hint:
+    - issues
+    power_level: 0
+    category: content
+  - name: content:enhance
+    path: content/enhance.md
+    description: Analyze the current copy issues and enhance it
+    argument_hint:
+    - issues
+    power_level: 0
+    category: content
+  - name: content:fast
+    path: content/fast.md
+    description: Write creative & smart copy [FAST]
+    argument_hint:
+    - user-request
+    power_level: 0
+    category: content
+  - name: content:good
+    path: content/good.md
+    description: Write good creative & smart copy [GOOD]
+    argument_hint:
+    - user-request
+    power_level: 0
+    category: content
+  cook:
+  - name: cook:auto
+    path: cook/auto.md
+    description: Implement a feature automatically ("trust me bro")
+    argument_hint:
+    - tasks
+    power_level: 2
+    category: cook
+  - name: cook:auto:fast
+    path: cook/auto/fast.md
+    description: No research. Only scout, plan & implement ["trust me bro"]
+    argument_hint:
+    - tasks-or-prompt
+    power_level: 1
+    category: cook
+  design:
+  - name: design:3d
+    path: design/3d.md
+    description: Create immersive interactive 3D designs with Three.js
+    argument_hint:
+    - tasks
+    power_level: 0
+    category: design
+  - name: design:describe
+    path: design/describe.md
+    description: Describe a design based on screenshot/video
+    argument_hint:
+    - screenshot
+    power_level: 0
+    category: design
+  - name: design:fast
+    path: design/fast.md
+    description: Create a quick design
+    argument_hint:
+    - tasks
+    power_level: 0
+    category: design
+  - name: design:good
+    path: design/good.md
+    description: Create an immersive design
+    argument_hint:
+    - tasks
+    power_level: 0
+    category: design
+  - name: design:screenshot
+    path: design/screenshot.md
+    description: Create a design based on screenshot
+    argument_hint:
+    - screenshot
+    power_level: 0
+    category: design
+  - name: design:video
+    path: design/video.md
+    description: Create a design based on video
+    argument_hint:
+    - video
+    power_level: 0
+    category: design
+  docs:
+  - name: docs:init
+    path: docs/init.md
+    description: Analyze the codebase and create initial documentation
+    argument_hint: ''
+    power_level: 4
+    category: docs
+  - name: docs:summarize
+    path: docs/summarize.md
+    description: ''
+    argument_hint: ''
+    power_level: 0
+    category: docs
+  - name: docs:update
+    path: docs/update.md
+    description: Analyze the codebase and update documentation
+    argument_hint: ''
+    power_level: 3
+    category: docs
+  fix:
+  - name: fix:ci
+    path: fix/ci.md
+    description: Analyze Github Actions logs and fix issues
+    argument_hint:
+    - github-actions-url
+    power_level: 1
+    category: fix
+  - name: fix:fast
+    path: fix/fast.md
+    description: Analyze and fix small issues [FAST]
+    argument_hint:
+    - issues
+    power_level: 1
+    category: fix
+  - name: fix:hard
+    path: fix/hard.md
+    description: Use subagents to plan and fix hard issues
+    argument_hint:
+    - issues
+    power_level: 3
+    category: fix
+  - name: fix:logs
+    path: fix/logs.md
+    description: Analyze logs and fix issues
+    argument_hint:
+    - issue
+    power_level: 1
+    category: fix
+  - name: fix:test
+    path: fix/test.md
+    description: Run test suite and fix issues
+    argument_hint:
+    - issues
+    power_level: 2
+    category: fix
+  - name: fix:types
+    path: fix/types.md
+    description: Fix type errors
+    argument_hint: ''
+    power_level: 1
+    category: fix
+  - name: fix:ui
+    path: fix/ui.md
+    description: Analyze and fix UI issues
+    argument_hint:
+    - issue
+    power_level: 2
+    category: fix
+  git:
+  - name: git:cm
+    path: git/cm.md
+    description: Stage all files and create a commit.
+    argument_hint: ''
+    power_level: 0
+    category: git
+  - name: git:cp
+    path: git/cp.md
+    description: Stage, commit and push all code in the current branch
+    argument_hint: ''
+    power_level: 0
+    category: git
+  - name: git:pr
+    path: git/pr.md
+    description: ''
+    argument_hint: ''
+    power_level: 0
+    category: git
+  integrate:
+  - name: integrate:polar
+    path: integrate/polar.md
+    description: Implement payment integration with Polar.sh
+    argument_hint:
+    - tasks
+    power_level: 2
+    category: integrate
+  - name: integrate:sepay
+    path: integrate/sepay.md
+    description: Implement payment integration with SePay.vn
+    argument_hint:
+    - tasks
+    power_level: 2
+    category: integrate
+  plan:
+  - name: plan:ci
+    path: plan/ci.md
+    description: Analyze Github Actions logs and provide a plan to fix the issues
+    argument_hint:
+    - github-actions-url
+    power_level: 0
+    category: plan
+  - name: plan:cro
+    path: plan/cro.md
+    description: Create a CRO plan for the given content
+    argument_hint:
+    - issues
+    power_level: 0
+    category: plan
+  - name: plan:fast
+    path: plan/fast.md
+    description: No research. Only analyze and create an implementation plan
+    argument_hint:
+    - task
+    power_level: 2
+    category: plan
+  - name: plan:hard
+    path: plan/hard.md
+    description: Research, analyze, and create an implementation plan
+    argument_hint:
+    - task
+    power_level: 3
+    category: plan
+  - name: plan:two
+    path: plan/two.md
+    description: Research & create an implementation plan with 2 approaches
+    argument_hint:
+    - task
+    power_level: 4
+    category: plan
+  review:
+  - name: review:codebase
+    path: review/codebase.md
+    description: Scan & analyze the codebase.
+    argument_hint:
+    - tasks-or-prompt
+    power_level: 3
+    category: review
+  scout:
+  - name: scout:ext
+    path: scout/ext.md
+    description: ''
+    argument_hint: ''
+    power_level: 0
+    category: scout
+  skill:
+  - name: skill:add
+    path: skill/add.md
+    description: ''
+    argument_hint: ''
+    power_level: 0
+    category: skill
+  - name: skill:create
+    path: skill/create.md
+    description: Create a new agent skill
+    argument_hint:
+    - prompt-or-llms-or-github-url
+    power_level: 0
+    category: skill
+  - name: skill:fix-logs
+    path: skill/fix-logs.md
+    description: Fix the agent skill based on `logs.txt` file.
+    argument_hint:
+    - prompt-or-path-to-skill
+    power_level: 0
+    category: skill
+  - name: skill:optimize
+    path: skill/optimize.md
+    description: ''
+    argument_hint: ''
+    power_level: 0
+    category: skill
+  - name: skill:optimize:auto
+    path: skill/optimize/auto.md
+    description: ''
+    argument_hint: ''
+    power_level: 0
+    category: skill
