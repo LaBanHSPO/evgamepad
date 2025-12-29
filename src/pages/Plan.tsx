@@ -7,7 +7,7 @@ import { AIAnalysisPanel } from "@/components/AIAnalysisPanel";
 import { MajorNewsPanel } from "@/components/MajorNewsPanel";
 import CapitalCompanionPanel from "@/components/CapitalCompanionPanel";
 
-const Monitor1 = () => {
+const Plan = () => {
   return (
     <div className="min-h-screen bg-background text-foreground relative">
       {/* Scanlines overlay */}
@@ -19,7 +19,7 @@ const Monitor1 = () => {
       {/* Main content */}
       <div className="relative z-10 max-w-7xl mx-auto">
         <div className="p-4 pb-0">
-          <SystemHeader monitorNumber={1} title="UPDATES" />
+          <SystemHeader monitorNumber={1} title="PLAN" />
         </div>
 
         {/* Top: Capital Companion Logic - Sticky */}
@@ -49,4 +49,4 @@ const Monitor1 = () => {
   );
 };
 
-export default Monitor1;
+export default Plan;

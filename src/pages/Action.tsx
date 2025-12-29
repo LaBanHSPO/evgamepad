@@ -6,7 +6,7 @@ import { GamepadControllerHints } from "@/components/GamepadControllerHints";
 
 import { SocketProvider } from "@/context/SocketContext";
 
-const Monitor2 = () => {
+const Action = () => {
   const [activeSection, setActiveSection] = useState<"portfolio" | "plan" | "action">("portfolio");
 
   // Gamepad navigation (mapped to q/w/e)
@@ -109,4 +109,4 @@ const Monitor2 = () => {
   );
 };
 
-export default Monitor2;
+export default Action;

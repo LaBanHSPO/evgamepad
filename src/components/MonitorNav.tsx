@@ -2,9 +2,9 @@ import { NavLink } from "react-router-dom";
 import { Monitor, BarChart3, Diamond, BriefcaseBusiness } from "lucide-react";
 
 const monitors = [
-  { path: "/", label: "1", title: "UPDATES", icon: BarChart3 },
-  { path: "/m2", label: "2", title: "ACTIONS", icon: Diamond },
-  { path: "/m3", label: "3", title: "PORTFOLIO", icon: BriefcaseBusiness },
+  { path: "/", label: "1", title: "PORTFOLIO", icon: BriefcaseBusiness },
+  { path: "/plan", label: "2", title: "PLAN", icon: BarChart3 },
+  { path: "/action", label: "3", title: "ACTION", icon: Diamond },
 ];
 
 export const MonitorNav = () => {

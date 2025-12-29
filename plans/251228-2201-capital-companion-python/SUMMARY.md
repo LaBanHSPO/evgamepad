@@ -1,8 +1,8 @@
 # Capital Companion Implementation Summary
 
 **Status**: Planning Complete
-**Total Phases**: 8
-**Estimated Timeline**: 8 weeks
+**Total Phases**: 8 (Phase 3 expanded to AI Trading Advisor)
+**Estimated Timeline**: 9-10 weeks
 **Architecture**: Python Backend Extension
 
 ---
@@ -13,12 +13,40 @@
 |-------|------|--------|---------------|
 | 1 | Infrastructure & Database | ⬜ Not Started | `phase-01-infrastructure-database.md` |
 | 2 | Market Data Service | ⬜ Not Started | `phase-02-market-data-service.md` |
-| 3 | Voice Interaction | ⬜ Not Started | `phase-03-voice-interaction.md` |
-| 4 | AI Pattern Recognition | ⬜ Not Started | See below (Phase 4-8) |
-| 5 | Sentiment Analysis | ⬜ Not Started | See below (Phase 4-8) |
-| 6 | Personalized Learning | ⬜ Not Started | See below (Phase 4-8) |
-| 7 | Proactive Alerts | ⬜ Not Started | See below (Phase 4-8) |
-| 8 | Production Hardening | ⬜ Not Started | See below (Phase 4-8) |
+| **3** | **AI Trading Advisor** | ⬜ Not Started | **`phase-03-ai-trading-advisor.md`** |
+| 3-old | Voice Interaction (LLM) | Superseded | `phase-03-voice-interaction-llm.md` |
+| 4 | AI Pattern Recognition | ⬜ Merged into Phase 3 | Integrated into AI Advisor |
+| 5 | Sentiment Analysis | ⬜ Merged into Phase 3 | Integrated into AI Advisor |
+| 6 | Personalized Learning | ⬜ Not Started | See below (Phase 6-8) |
+| 7 | Proactive Alerts | ⬜ Not Started | See below (Phase 6-8) |
+| 8 | Production Hardening | ⬜ Not Started | See below (Phase 6-8) |
+
+---
+
+## PHASE 3 CHANGES (AI Trading Advisor)
+
+**NEW**: Phase 3 expanded from simple voice intent extraction to comprehensive AI Trading Advisor:
+
+| Feature | Old Phase 3 | New Phase 3 |
+|---------|-------------|-------------|
+| LLM Role | Function-calling classifier | Analytical reasoner with RAG |
+| Data Sources | Market data only | Sentiment + News + KOL + Patterns + Multi-TF |
+| Memory | Single-turn | Multi-turn conversation |
+| Response | Static templates | Streaming + Chain-of-Thought |
+| Legal | None | Mandatory disclaimers + audit |
+| Cost | $8-35/mo | $50-150/mo |
+| Duration | 2 weeks | 3 weeks |
+
+**Key Files**:
+- `ai_advisor_service.py` - Core reasoning chain
+- `data_aggregator.py` - Multi-source data aggregation
+- `sentiment_service.py` - Aggregated sentiment
+- `kol_service.py` - KOL signals from Twitter
+- `multiframe_service.py` - M5 to D1 trend analysis
+- `memory_manager.py` - Conversation context
+- `legal_compliance.py` - Disclaimers + audit trail
+
+**Phases 4-5 Merged**: Pattern recognition and sentiment analysis now integrated into Phase 3's Data Aggregation Layer.
 
 ---
 

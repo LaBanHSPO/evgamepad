@@ -3,9 +3,9 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Monitor1 from "./pages/Monitor1";
-import Monitor2 from "./pages/Monitor2";
-import Monitor3 from "./pages/Monitor3";
+import Plan from "./pages/Plan";
+import Action from "./pages/Action";
+import Portfolio from "./pages/Portfolio";
 import NotFound from "./pages/NotFound";
 
 import { GlobalGamepadHandler } from "@/components/GlobalGamepadHandler";
@@ -20,9 +20,9 @@ const App = () => (
       <BrowserRouter>
         <GlobalGamepadHandler />
         <Routes>
-          <Route path="/" element={<Monitor1 />} />
-          <Route path="/m2" element={<Monitor2 />} />
-          <Route path="/m3" element={<Monitor3 />} />
+          <Route path="/plan" element={<Plan />} />
+          <Route path="/action" element={<Action />} />
+          <Route path="/" element={<Portfolio />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
