@@ -42,4 +42,8 @@ class Config:
     TWELVEDATA_API_KEY: str = os.getenv('TWELVEDATA_API_KEY', '')
     VOLUME_DIVERGENCE_THRESHOLD: float = float(os.getenv('VOLUME_DIVERGENCE_THRESHOLD', '0.30'))  # 30% divergence threshold
 
+    # Phase 5: Explainability Layer Feature Flags
+    ENABLE_EXPLAINABILITY: bool = os.getenv('ENABLE_EXPLAINABILITY', 'false').lower() == 'true'
+    ENABLE_PROVENANCE_TRACKING: bool = os.getenv('ENABLE_PROVENANCE_TRACKING', 'false').lower() == 'true'
+
 config = Config()

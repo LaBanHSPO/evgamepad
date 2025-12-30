@@ -396,3 +396,94 @@ async def advisor_portfolio_analysis(sid: str, data: Dict[str, Any]):
             ErrorCode.INTERNAL_ERROR,
             f"Portfolio analysis failed: {str(e)}"
         ), to=sid)
+
+@sio.event
+async def advisor_explain_recommendation(sid: str, data: Dict[str, Any]):
+    """
+    Generate chain-of-thought explanation for recommendation.
+
+    Request: {
+        "symbol": "XAUUSD",
+        "timeframe": "H1",
+        "recommendation_id": "uuid" (optional)
+    }
+
+    Response: {
+        "success": true,
+        "data": {
+            "symbol": "XAUUSD",
+            "timeframe": "H1",
+            "explainability": {
+                "steps": [...],
+                "total_score": 10,
+                "max_score": 12,
+                "confidence": 0.83,
+                "recommendation": "BUY",
+                "reasoning_summary": "...",
+                "risks_identified": [...],
+                "data_gaps": [...]
+            },
+            "provenance": {...}
+        }
+    }
+    """
+    logger.info(f"Explain recommendation request from {sid}: {data.get('symbol')}")
+
+    try:
+        symbol = data.get('symbol', '').upper()
+        timeframe = data.get('timeframe', 'H1').upper()
+
+        # Validate inputs
+        if not symbol or not validate_symbol(symbol):
+            await sio.emit('advisor:error', error_response(
+                ErrorCode.VALIDATION_ERROR,
+                "Invalid symbol format (alphanumeric, max 20 chars)"
+            ), to=sid)
+            return
+
+        if not validate_timeframe(timeframe):
+            await sio.emit('advisor:error', error_response(
+                ErrorCode.VALIDATION_ERROR,
+                f"Invalid timeframe '{timeframe}'. Allowed: {', '.join(MT5_TIMEFRAMES.keys())}"
+            ), to=sid)
+            return
+
+        # Generate fresh recommendation with explainability
+        if advisor_processor:
+            result = await advisor_processor.process_recommendation(
+                sid=sid,
+                symbol=symbol,
+                timeframe=timeframe,
+                language='en',
+                risk_profile='moderate',
+                enable_explainability=True
+            )
+
+            # Extract explainability data
+            if result.get('success') and 'explainability' in result:
+                await sio.emit('advisor:explanation_result', {
+                    "success": True,
+                    "data": {
+                        "symbol": symbol,
+                        "timeframe": timeframe,
+                        "explainability": result.get('explainability'),
+                        "provenance": result.get('provenance')
+                    }
+                }, to=sid)
+            else:
+                await sio.emit('advisor:error', error_response(
+                    ErrorCode.INTERNAL_ERROR,
+                    "Explainability data not available (feature may be disabled)"
+                ), to=sid)
+        else:
+            await sio.emit('advisor:error', error_response(
+                ErrorCode.INTERNAL_ERROR,
+                "Advisor processor not initialized"
+            ), to=sid)
+
+    except Exception as e:
+        logger.exception(f"Explain recommendation failed for {sid}: {e}")
+        await sio.emit('advisor:error', error_response(
+            ErrorCode.INTERNAL_ERROR,
+            f"Explanation generation failed: {str(e)}"
+        ), to=sid)
