@@ -50,12 +50,88 @@ TECHNICAL_SUMMARY_PROMPT_EN = """You are a technical analysis expert. Analyze th
 
 ## Requirements:
 1. Summarize technical situation in 2-3 sentences
-2. Provide recommendation: BUY / SELL / HOLD
+2. Give recommendation: BUY / SELL / HOLD
 3. Confidence level (0-100%)
 4. Brief reasoning
 
 ## Response format (JSON):
 {{"summary": "...", "signal": "BUY/SELL/HOLD", "confidence": 75, "reasoning": "..."}}
+"""
+
+PORTFOLIO_ADVICE_PROMPT_VI = """Bạn là cố vấn rủi ro bảo thủ, tập trung vào BẢO VỆ VỐN.
+
+## Trạng thái danh mục đầu tư:
+- Số dư tài khoản: ${account_balance}
+- Tổng rủi ro hiện tại: {risk_exposure}% (Mục tiêu: <2%)
+- Mức sụt giảm hiện tại: {drawdown}%
+- Điểm sức khỏe danh mục: {health_score}/100 ({health_status})
+
+## Các vị thế đang mở:
+{positions_summary}
+
+## Hồ sơ rủi ro người dùng: {risk_profile}
+
+## Nhiệm vụ của bạn:
+1. Đánh giá rủi ro tổng thể của danh mục
+2. Xác định vị thế nào cần hành động ngay
+3. Đưa ra khuyến nghị cụ thể để BẢO VỆ VỐN
+4. Giải thích lý do tập trung vào việc giữ vốn gốc
+
+## Nguyên tắc:
+- BẢO VỆ VỐN TRƯỚC, LỢI NHUẬN SAU
+- Mất 50% cần tăng 100% để hòa vốn
+- Khuyến nghị giảm/đóng vị thế khi rủi ro cao
+- Đưa ra hành động ưu tiên cụ thể
+
+## Định dạng phản hồi (JSON):
+{{
+  "summary": "Tóm tắt tình trạng danh mục trong 2-3 câu",
+  "overall_risk": "LOW/MODERATE/HIGH",
+  "priority_actions": [
+    "Hành động 1: Đóng vị thế XAUUSD để bảo vệ vốn",
+    "Hành động 2: Giảm exposure xuống 2%"
+  ],
+  "reasoning": "Giải thích tại sao cần bảo vệ vốn",
+  "confidence": 85
+}}
+"""
+
+PORTFOLIO_ADVICE_PROMPT_EN = """You are a conservative risk advisor focused on CAPITAL PRESERVATION.
+
+## Portfolio Status:
+- Account Balance: ${account_balance}
+- Total Risk Exposure: {risk_exposure}% (Target: <2%)
+- Current Drawdown: {drawdown}%
+- Portfolio Health Score: {health_score}/100 ({health_status})
+
+## Open Positions:
+{positions_summary}
+
+## User Risk Profile: {risk_profile}
+
+## Your Task:
+1. Assess overall portfolio risk
+2. Identify positions requiring immediate action
+3. Provide specific recommendations to PROTECT CAPITAL
+4. Explain reasoning focused on preserving principle
+
+## Principles:
+- PROTECT CAPITAL FIRST, PROFITS SECOND
+- 50% loss requires 100% gain just to break even
+- Recommend reducing/closing positions when risk high
+- Provide specific priority actions
+
+## Response Format (JSON):
+{{
+  "summary": "Portfolio status summary in 2-3 sentences",
+  "overall_risk": "LOW/MODERATE/HIGH",
+  "priority_actions": [
+    "Action 1: Close XAUUSD position to preserve capital",
+    "Action 2: Reduce exposure to 2%"
+  ],
+  "reasoning": "Explanation of why capital preservation needed",
+  "confidence": 85
+}}
 """
 
 class AISummarizer:
@@ -342,3 +418,152 @@ class AISummarizer:
                 "confidence": 50,
                 "reasoning": "Unable to parse structured response",
             }
+
+    async def generate_portfolio_advice(
+        self,
+        positions: List[Dict[str, Any]],
+        portfolio_health: Dict[str, Any],
+        account_balance: float,
+        risk_profile: str = "conservative",
+        language: str = "vi",
+        use_cache: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Generate LLM-powered portfolio analysis with capital preservation focus.
+
+        Args:
+            positions: List of analyzed positions
+            portfolio_health: Portfolio health metrics
+            account_balance: Total account balance
+            risk_profile: User risk tolerance
+            language: Output language
+            use_cache: Whether to use semantic caching
+
+        Returns:
+            AI advice with summary, actions, reasoning
+        """
+        # Build positions summary text with sanitization
+        def sanitize_text(text: str) -> str:
+            """Sanitize text to prevent prompt injection."""
+            return str(text).replace('\n', ' ').replace('\r', '')[:100]
+
+        positions_summary = "\n".join([
+            f"- {sanitize_text(p['symbol'])}: Entry {p['entry_price']}, Current {p['current_price']}, "
+            f"P&L {p['pnl_pct']}%, R-Multiple {p['r_multiple']}, "
+            f"Status: {sanitize_text(p['risk_status'])}, Tech Signal: {sanitize_text(p['technical_signal'])}"
+            for p in positions
+        ])
+
+        # Prepare prompt data
+        prompt_data = {
+            "account_balance": account_balance,
+            "risk_exposure": portfolio_health["total_risk_exposure"],
+            "drawdown": portfolio_health["current_drawdown"],
+            "health_score": portfolio_health["score"],
+            "health_status": portfolio_health["status"],
+            "positions_summary": positions_summary,
+            "risk_profile": risk_profile
+        }
+
+        # Generate cache key
+        cache_key = None
+        if use_cache and self.redis:
+            cache_key = self._generate_portfolio_advice_cache_key(prompt_data)
+            cached = await self._check_cache(cache_key)
+            if cached:
+                logger.debug("Portfolio advice cache hit")
+                cached["cached"] = True
+                return cached
+
+        # Select prompt template
+        prompt_template = (
+            PORTFOLIO_ADVICE_PROMPT_VI if language == "vi"
+            else PORTFOLIO_ADVICE_PROMPT_EN
+        )
+        prompt = prompt_template.format(**prompt_data)
+
+        # Call LLM
+        try:
+            # Try Claude first
+            client = self._get_anthropic_client()
+            if client:
+                response_text = await self._call_anthropic(prompt, temperature=0.3)
+            # Fallback to DeepSeek
+            else:
+                client = self._get_openai_client()
+                if not client:
+                    raise ValueError("No LLM client available")
+                response_text = await self._call_deepseek(prompt, temperature=0.3)
+
+            # Parse JSON response
+            try:
+                advice = json.loads(response_text)
+            except json.JSONDecodeError:
+                # Fallback parsing with truncation
+                logger.warning("Failed to parse LLM JSON, attempting fallback")
+                advice = {
+                    "summary": response_text[:500],  # Limit to 500 chars
+                    "overall_risk": "MODERATE",
+                    "priority_actions": [],
+                    "reasoning": "Unable to parse structured response",
+                    "confidence": 50,
+                    "raw_response_truncated": response_text[:2000]  # Store more for debugging
+                }
+
+            # Add metadata
+            advice["model"] = "claude" if self._anthropic_client else "deepseek"
+            advice["language"] = language
+            advice["cached"] = False
+            advice["generated_at"] = datetime.utcnow().isoformat()
+
+            # Cache result
+            if use_cache and cache_key:
+                await self._save_to_cache(cache_key, advice, ttl=300)
+
+            return advice
+
+        except Exception as e:
+            logger.exception(f"Portfolio advice generation failed: {e}")
+            # Return fallback advice
+            return {
+                "error": str(e),
+                "summary": "Unable to generate AI advice due to API error",
+                "overall_risk": "MODERATE",
+                "priority_actions": [
+                    "Review portfolio manually",
+                    "Consider reducing high-risk positions"
+                ],
+                "reasoning": "AI service temporarily unavailable",
+                "confidence": 0,
+                "model": "fallback",
+                "language": language,
+                "cached": False
+            }
+
+    def _generate_portfolio_advice_cache_key(self, prompt_data: Dict[str, Any]) -> str:
+        """Generate cache key for portfolio advice."""
+        key_data = {
+            "risk_exposure_bucket": round(prompt_data["risk_exposure"], 0),
+            "drawdown_bucket": round(prompt_data["drawdown"], 0),
+            "health_score_bucket": round(prompt_data["health_score"] / 10) * 10,
+            "risk_profile": prompt_data["risk_profile"],
+            # Hash positions summary for deterministic key
+            "positions_hash": hashlib.md5(
+                prompt_data["positions_summary"].encode()
+            ).hexdigest()[:8]
+        }
+        key_str = json.dumps(key_data, sort_keys=True)
+        return f"portfolio_advice:{hashlib.md5(key_str.encode()).hexdigest()}"
+
+    async def _call_anthropic(self, prompt: str, temperature: float = 0.7) -> str:
+        """Call Claude API with async wrapper."""
+        def _sync_call():
+            response = self._get_anthropic_client().messages.create(
+                model="claude-3-5-sonnet-20241022",
+                max_tokens=1024,
+                temperature=temperature,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.content[0].text
+
+        return await asyncio.to_thread(_sync_call)

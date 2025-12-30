@@ -470,7 +470,243 @@ Aggressive:
 
 ---
 
-### 4. Pattern Scan
+### 4. Portfolio Analysis & AI Risk Advisory (Phase 04)
+
+**Event Name:** `advisor:portfolio_analysis`
+
+**Status:** Phase 04 (NEW - implemented)
+
+**Purpose:** Comprehensive portfolio analysis with per-position risk metrics, portfolio health scoring, and AI-powered capital preservation advice
+
+**Request Schema:**
+```typescript
+interface PositionInput {
+  symbol: string;                     // Required. Trading symbol (uppercase)
+  entry_price: number;                // Required. Position entry price
+  current_price?: number;             // Optional. Current price (fetched if missing)
+  position_size: number;              // Required. Position size in lots/contracts
+  stop_loss?: number;                 // Optional. Stop-loss price (default: 2% below entry)
+  timeframe?: string;                 // Default: "H1" (for technical analysis)
+}
+
+interface PortfolioAnalysisRequest {
+  positions: PositionInput[];                         // Required. 1-10 positions
+  account_balance: number;                            // Required. Total account balance
+  risk_profile?: "conservative" | "moderate" | "aggressive"; // Default: "conservative"
+  language?: "vi" | "en";                             // Default: "vi" (Vietnamese)
+}
+```
+
+**Response Schema (Success):**
+```typescript
+interface PortfolioHealth {
+  score: number;                      // 0-100, health score
+  status: "HEALTHY" | "CAUTION" | "DANGER";
+  total_risk_exposure: number;        // % of account balance at risk
+  current_drawdown: number;           // % max loss in portfolio
+  positions_at_risk: number;          // Count of positions in caution/danger
+}
+
+interface PositionAnalysis {
+  symbol: string;
+  entry_price: number;
+  current_price: number;
+  position_size: number;
+  stop_loss: number;
+  pnl_pct: number;                    // Profit/loss percentage
+  pnl_amount: number;                 // Profit/loss amount
+  r_multiple: number;                 // Risk-reward ratio (current reward / risk)
+  distance_to_stop_pct: number;       // Distance to stop-loss in %
+  risk_status: "safe" | "caution" | "approaching_stop" | "danger";
+  recommendation: "HOLD" | "REDUCE" | "CLOSE";
+  technical_signal: "bullish" | "bearish" | "neutral";
+  technical_confidence: number;       // 0-1
+}
+
+interface AIAdvice {
+  summary: string;                    // 2-3 sentence portfolio assessment
+  overall_risk: "LOW" | "MODERATE" | "HIGH";
+  priority_actions: string[];         // Specific actions to protect capital
+  reasoning: string;                  // Why actions are needed
+  confidence: number;                 // 0-100%
+  model: "claude" | "deepseek";
+  cached: boolean;
+  generated_at: string;               // ISO 8601
+}
+
+interface PortfolioAnalysisResponse {
+  success: true;
+  data: {
+    portfolio_health: PortfolioHealth;
+    position_analysis: PositionAnalysis[];
+    ai_advice: AIAdvice;
+    cached: boolean;                  // Whether entire response was cached
+    computed_at: string;              // ISO 8601
+  };
+}
+```
+
+**Example Request:**
+```javascript
+socket.emit('advisor:portfolio_analysis', {
+  positions: [
+    {
+      symbol: 'XAUUSD',
+      entry_price: 2100.50,
+      current_price: 2095.00,
+      position_size: 0.5,
+      stop_loss: 2090.00,
+      timeframe: 'H1'
+    },
+    {
+      symbol: 'EURUSD',
+      entry_price: 1.0850,
+      current_price: 1.0920,
+      position_size: 1.0,
+      stop_loss: 1.0800,
+      timeframe: 'H1'
+    }
+  ],
+  account_balance: 10000,
+  risk_profile: 'conservative',
+  language: 'vi'
+});
+```
+
+**Example Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "portfolio_health": {
+      "score": 72,
+      "status": "CAUTION",
+      "total_risk_exposure": 2.15,
+      "current_drawdown": 3.50,
+      "positions_at_risk": 1
+    },
+    "position_analysis": [
+      {
+        "symbol": "XAUUSD",
+        "entry_price": 2100.50,
+        "current_price": 2095.00,
+        "position_size": 0.5,
+        "stop_loss": 2090.00,
+        "pnl_pct": -0.26,
+        "pnl_amount": -2.75,
+        "r_multiple": 0.5,
+        "distance_to_stop_pct": 0.24,
+        "risk_status": "danger",
+        "recommendation": "CLOSE",
+        "technical_signal": "bearish",
+        "technical_confidence": 0.65
+      },
+      {
+        "symbol": "EURUSD",
+        "entry_price": 1.0850,
+        "current_price": 1.0920,
+        "position_size": 1.0,
+        "stop_loss": 1.0800,
+        "pnl_pct": 0.64,
+        "pnl_amount": 7.00,
+        "r_multiple": 1.33,
+        "distance_to_stop_pct": 1.11,
+        "risk_status": "safe",
+        "recommendation": "HOLD",
+        "technical_signal": "bullish",
+        "technical_confidence": 0.78
+      }
+    ],
+    "ai_advice": {
+      "summary": "Danh muc hien dang o trang thai canh bao. Tong exposure o 2.15%, nam trong muc tieu <2%. XAUUSD dang gan dung stop-loss va gap tren day tren, can co hanh dong tu chi.",
+      "overall_risk": "MODERATE",
+      "priority_actions": [
+        "Dong vi tri XAUUSD ngay de bao ve von goc (cach stop 0.24% chi)",
+        "Giu vi tri EURUSD, dang loi nhuon va co tin hieu bullish"
+      ],
+      "reasoning": "Chi tieu bao ve von la uu tien hang dau. Tuy EURUSD dang dep, XAUUSD dang trong tinh trang danger va can dong ngay de tranh mat them mat tien.",
+      "confidence": 85,
+      "model": "claude",
+      "cached": false,
+      "generated_at": "2025-12-30T15:35:12.123456"
+    },
+    "cached": false,
+    "computed_at": "2025-12-30T15:35:12.123456"
+  }
+}
+```
+
+**Portfolio Health Score Calculation:**
+```
+score = 100
+score -= min(total_risk_exposure * 10, 50)      // Penalty for high risk (target: <2%)
+score -= min(current_drawdown * 5, 30)           // Penalty for losses
+score -= min(positions_at_risk * 10, 20)         // Penalty for risky positions
+score = clamp(0, score, 100)
+
+If score >= 70: HEALTHY
+If score >= 40: CAUTION
+If score < 40:  DANGER
+```
+
+**Position Risk Status Logic:**
+```
+If distance_to_stop_pct <= 1%:          danger
+Elif distance_to_stop_pct <= 3%:        approaching_stop
+Elif technical_signal == "bearish" AND pnl_pct < 0: caution
+Else:                                   safe
+```
+
+**Recommendation Logic:**
+```
+danger:                     CLOSE
+approaching_stop:          REDUCE
+caution:                    REDUCE
+safe:                       HOLD
+```
+
+**Latency:**
+- First request (cache miss): 2-5 seconds (includes LLM call + parallel position analysis)
+- Cached request: 100-200 milliseconds
+
+**Caching Strategy:**
+- Cache Key: `portfolio_analysis:{md5(positions_hash + balance_bucket + risk_profile)}`
+- TTL: 300 seconds (5 minutes)
+- Deterministic hashing ensures same portfolio input returns cached result
+- Price rounding (entry prices rounded to nearest 10) reduces cache misses
+
+**Cache Hit Conditions:**
+1. Same positions (symbol, entry, size)
+2. Account balance within 1000 (rounded to nearest 1000)
+3. Same risk_profile
+4. Cache entry still valid (< 300s old)
+
+**AI Model Selection:**
+- Primary: Claude 3.5 Sonnet (best capital preservation understanding)
+- Fallback: DeepSeek (OpenAI-compatible API)
+- If both unavailable: structured fallback response with generic advice
+
+**Risk Profile Impact on AI Advice:**
+```
+Conservative:
+  - Emphasizes capital preservation strongly
+  - Recommends closing positions at earlier thresholds
+  - Focuses on risk reduction over profit taking
+
+Moderate:
+  - Balances capital preservation with profit opportunity
+  - Evaluates risk/reward ratio
+  - Considers both offense and defense
+
+Aggressive:
+  - Prioritizes opportunity capture
+  - Only closes positions in extreme risk
+  - Focuses on growth over preservation
+```
+
+---
+
+### 5. Pattern Scan
 
 **Event Name:** `advisor:pattern_scan`
 

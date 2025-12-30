@@ -24,7 +24,7 @@ The AI Trading Advisor is an integrated module within EV GamePad backend providi
 │  │  Advisor Events Layer                                │                 │
 │  │  (app/events/advisor_events.py)                      │                 │
 │  │  - technical_summary, multi_timeframe, pattern_scan  │                 │
-│  │  - recommendation ⬅ Phase 04 NEW                     │                 │
+│  │  - recommendation, portfolio_analysis ⬅ Phase 04 NEW│                 │
 │  │  - risk_analysis                                     │                 │
 │  └────────┬─────────────────────────────────────────────┘                 │
 │           │                                                              │
@@ -672,6 +672,152 @@ Client: receive complete recommendation
 - AI summary cache hit: ~200-300ms (local Redis + parse)
 - AI summary cache miss: ~1.5-3s (LLM API call + cache)
 - Full recommendation with all components: ~2-4s first request
+
+---
+
+### 10. Portfolio Analysis Processor (Phase 04 NEW)
+
+**Location:** `app/processors/advisor_processor.py::process_portfolio_analysis()`
+
+**Responsibilities:**
+- Coordinate per-position analysis
+- Calculate portfolio-wide health metrics
+- Generate LLM capital preservation advice
+- Cache entire portfolio analysis result
+
+**Algorithm Flow:**
+```
+1. Generate cache key from positions + balance + risk_profile
+   └─ Use deterministic MD5 hash for consistent keys
+
+2. Check portfolio analysis cache
+   └─ If hit: return cached response with cached=true
+
+3. Parallel Position Analysis (asyncio.gather)
+   └─ For each position:
+      ├─ Fetch current price (if not provided)
+      ├─ Get technical analysis (RSI, trend, confidence)
+      ├─ Calculate P&L metrics (pnl_pct, pnl_amount)
+      ├─ Calculate R-Multiple (reward/risk ratio)
+      ├─ Determine risk status:
+      │  ├─ distance_to_stop <= 1%: danger
+      │  ├─ distance_to_stop <= 3%: approaching_stop
+      │  └─ bearish technical + negative P&L: caution
+      │  └─ else: safe
+      └─ Return PositionAnalysis object
+
+4. Portfolio Health Calculation
+   ├─ total_risk_exposure = sum(position risks) / account_balance * 100
+   ├─ max_drawdown = worst performing position P&L
+   ├─ positions_at_risk = count(caution + danger)
+   ├─ score = 100 - penalties
+   │  ├─ penalty_risk = min(total_risk_exposure * 10, 50)
+   │  ├─ penalty_drawdown = min(drawdown * 5, 30)
+   │  └─ penalty_risky = min(positions_at_risk * 10, 20)
+   ├─ score = clamp(0, 100, score)
+   └─ status = HEALTHY (>=70) | CAUTION (>=40) | DANGER (<40)
+
+5. LLM Portfolio Advice
+   ├─ Build positions summary (sanitized text)
+   ├─ Generate cache key from health metrics + risk profile
+   ├─ Check semantic cache
+   ├─ If miss: call AISummarizer.generate_portfolio_advice()
+   │  ├─ Language-specific prompt (VI or EN)
+   │  ├─ Emphasis on capital preservation
+   │  ├─ Temperature: 0.3 (low variance)
+   │  └─ Fallback: DeepSeek if Claude unavailable
+   └─ Returns: summary, overall_risk, priority_actions, reasoning, confidence
+
+6. Build Response
+   ├─ Combine all results
+   ├─ Add cache flags and timestamps
+   ├─ Cache entire response (300s TTL)
+   └─ Return PortfolioAnalysisResponse
+
+Return: success_response(PortfolioAnalysisResponse)
+```
+
+**Cache Key Generation:**
+```python
+key_data = {
+    "positions": [
+        {
+            "symbol": p.symbol,
+            "entry": round(p.entry_price, -1),   # Round to nearest 10
+            "size": p.position_size
+        }
+        for p in sorted(positions, key=lambda x: x.symbol)
+    ],
+    "balance_bucket": round(account_balance, -3),  # Round to nearest 1000
+    "risk_profile": risk_profile
+}
+key_str = json.dumps(key_data, sort_keys=True)
+cache_key = f"portfolio_analysis:{md5(key_str)}"
+```
+
+**Capital Preservation Prompting:**
+The LLM receives special instructions:
+```
+PRINCIPLES:
+- PROTECT CAPITAL FIRST, PROFITS SECOND
+- 50% loss requires 100% gain to break even
+- Recommend closing positions when risk high
+- Focus on specific priority actions
+```
+
+**Risk Status Thresholds:**
+```
+distance_to_stop_pct (%)   | Risk Status       | Recommendation
+<= 1                       | danger            | CLOSE
+<= 3 AND > 1               | approaching_stop  | REDUCE
+ANY AND bearish + neg P&L  | caution           | REDUCE
+else                       | safe              | HOLD
+```
+
+**Health Score Formula:**
+```
+Base: 100
+Penalty 1: min(total_risk_exposure * 10, 50)
+  - Target: < 2% risk exposure
+  - At 2%: penalty = 20
+  - At 5%: penalty = 50 (max)
+
+Penalty 2: min(current_drawdown * 5, 30)
+  - At 5% drawdown: penalty = 25
+  - At 6%+: penalty = 30 (max)
+
+Penalty 3: min(positions_at_risk * 10, 20)
+  - Each risky position: 10 points
+  - 3+ risky positions: penalty = 20 (max)
+
+Final: clamp(0, 100, score)
+
+Status Mapping:
+  score >= 70: HEALTHY (green)
+  40 <= score < 70: CAUTION (yellow)
+  score < 40: DANGER (red)
+```
+
+**Frontend Integration:**
+```typescript
+// Frontend sends PortfolioAnalysisRequest
+socket.emit('advisor:portfolio_analysis', {
+  positions: [...],
+  account_balance: 10000,
+  risk_profile: 'conservative',
+  language: 'vi'
+});
+
+// Backend processes in ~2-5 seconds (first request)
+// Frontend receives advisor:portfolio_result
+
+// AIRiskAdvisoryPanel displays:
+// - Portfolio Health Score + Status
+// - Risk Metrics (exposure, drawdown, at_risk count)
+// - AI Summary + Priority Actions
+// - Per-position warnings
+// - Cache indicator + model used
+```
 
 ---
 

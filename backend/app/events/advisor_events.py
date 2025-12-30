@@ -6,10 +6,12 @@ import logging
 import re
 from typing import Dict, Any
 from datetime import datetime
+from pydantic import ValidationError
 
 from app.sio import sio
 from app.models.responses import error_response, ErrorCode
 from app.advisor.data_fetcher import MT5_TIMEFRAMES
+from app.models.advisor_models import PortfolioAnalysisRequest
 
 logger = logging.getLogger(__name__)
 
@@ -325,4 +327,72 @@ async def advisor_recommendation(sid: str, data: Dict[str, Any]):
         await sio.emit('advisor:error', error_response(
             ErrorCode.INTERNAL_ERROR,
             str(e)
+        ), to=sid)
+
+@sio.event
+async def advisor_portfolio_analysis(sid: str, data: Dict[str, Any]):
+    """
+    Handle portfolio analysis request.
+
+    Request: {
+        "positions": [
+            {
+                "symbol": "XAUUSD",
+                "entry_price": 2100.50,
+                "current_price": 2095.00,  # Optional
+                "position_size": 0.5,
+                "stop_loss": 2090.00,  # Optional
+                "timeframe": "H1"
+            }
+        ],
+        "account_balance": 10000,
+        "risk_profile": "conservative",
+        "language": "vi"
+    }
+
+    Response: advisor:portfolio_result event
+    """
+    logger.info(f"Portfolio analysis request from {sid}: {len(data.get('positions', []))} positions")
+
+    try:
+        # Validate request using Pydantic
+        try:
+            request = PortfolioAnalysisRequest(**data)
+        except ValidationError as e:
+            await sio.emit('advisor:error', error_response(
+                ErrorCode.VALIDATION_ERROR,
+                f"Invalid portfolio analysis request: {str(e)}"
+            ), to=sid)
+            return
+
+        # Validate symbols
+        for pos in request.positions:
+            if not validate_symbol(pos.symbol):
+                await sio.emit('advisor:error', error_response(
+                    ErrorCode.VALIDATION_ERROR,
+                    f"Invalid symbol format: {pos.symbol}"
+                ), to=sid)
+                return
+
+        # Process request
+        if advisor_processor:
+            result = await advisor_processor.process_portfolio_analysis(
+                sid,
+                request.positions,
+                request.account_balance,
+                request.risk_profile,
+                request.language
+            )
+            await sio.emit('advisor:portfolio_result', result, to=sid)
+        else:
+            await sio.emit('advisor:error', error_response(
+                ErrorCode.INTERNAL_ERROR,
+                "Advisor processor not initialized"
+            ), to=sid)
+
+    except Exception as e:
+        logger.exception(f"Portfolio analysis failed for {sid}: {e}")
+        await sio.emit('advisor:error', error_response(
+            ErrorCode.INTERNAL_ERROR,
+            f"Portfolio analysis failed: {str(e)}"
         ), to=sid)

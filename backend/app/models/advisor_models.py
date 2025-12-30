@@ -134,3 +134,58 @@ class RiskAnalysisResponse(BaseModel):
     position_sizing: Dict[str, Any]
     recommendation: Dict[str, Any]
     computed_at: datetime = Field(default_factory=datetime.utcnow)
+
+class PositionInput(BaseModel):
+    """User-provided position data for portfolio analysis."""
+    symbol: str = Field(..., min_length=1, max_length=20)
+    entry_price: float = Field(..., gt=0)
+    current_price: Optional[float] = None  # Optional, fetch if missing
+    position_size: float = Field(..., gt=0)
+    stop_loss: Optional[float] = None
+    timeframe: str = Field(default="H1")
+
+class PortfolioAnalysisRequest(BaseModel):
+    """Request for portfolio analysis."""
+    positions: List[PositionInput] = Field(..., min_length=1, max_length=10)
+    account_balance: float = Field(..., gt=0)
+    risk_profile: str = Field(default="conservative", pattern="^(conservative|moderate|aggressive)$")
+    language: str = Field(default="vi", pattern="^(vi|en)$")
+
+class HealthStatus(str):
+    """Health status enum values."""
+    HEALTHY = "HEALTHY"
+    CAUTION = "CAUTION"
+    DANGER = "DANGER"
+
+class PortfolioHealth(BaseModel):
+    """Portfolio health metrics."""
+    score: int = Field(..., ge=0, le=100)
+    status: str = Field(..., pattern="^(HEALTHY|CAUTION|DANGER)$")
+    total_risk_exposure: float
+    current_drawdown: float
+    positions_at_risk: int
+
+class PositionAnalysis(BaseModel):
+    """Per-position analysis result."""
+    symbol: str
+    entry_price: float
+    current_price: float
+    position_size: float
+    stop_loss: float
+    pnl_pct: float
+    pnl_amount: float
+    r_multiple: float
+    distance_to_stop_pct: float
+    risk_status: str  # safe/approaching_stop/danger/caution
+    recommendation: str  # HOLD/REDUCE/CLOSE
+    technical_signal: str
+    technical_confidence: float
+
+class PortfolioAnalysisResponse(BaseModel):
+    """Response for portfolio analysis."""
+    success: bool = True
+    portfolio_health: PortfolioHealth
+    position_analysis: List[PositionAnalysis]
+    ai_advice: Dict[str, Any]
+    cached: bool = False
+    computed_at: datetime = Field(default_factory=datetime.utcnow)
