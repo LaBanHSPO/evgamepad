@@ -8,3 +8,10 @@ fastapi==0.104.0
 python-socketio==5.10.0
 uvicorn[standard]==0.24.0
 numpy<2
+
+# Technical Analysis
+pandas-ta==0.3.14b
+pandas==2.0.3
+
+# Redis Cache
+redis==5.2.1

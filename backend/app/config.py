@@ -28,4 +28,9 @@ class Config:
     SOCKETIO_PORT: int = int(os.getenv('SOCKETIO_PORT', '8686'))
     DEBUG: bool = os.getenv('DEBUG', 'false').lower() == 'true'
 
+    # Redis
+    REDIS_HOST: str = os.getenv('REDIS_HOST', 'localhost')
+    REDIS_PORT: int = int(os.getenv('REDIS_PORT', '6379'))
+    REDIS_DB: int = int(os.getenv('REDIS_DB', '0'))
+
 config = Config()

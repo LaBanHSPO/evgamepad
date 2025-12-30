@@ -1,0 +1,1 @@
+"""AI Trading Advisor package."""
