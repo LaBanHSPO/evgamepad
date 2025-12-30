@@ -10,8 +10,12 @@ from app.advisor.technical_analyzer import TechnicalAnalyzer
 from app.advisor.data_fetcher import DataFetcher
 from app.advisor.pattern_detector import PatternDetector
 from app.advisor.support_resistance import SupportResistanceCalculator
+from app.advisor.risk_analyzer import RiskAnalyzer
+from app.advisor.ai_summarizer import AISummarizer
+from app.advisor.recommendation_engine import RecommendationEngine
 from app.database.redis_client import RedisClient
 from app.models.responses import success_response, error_response, ErrorCode
+from app.config import config
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +34,17 @@ class AdvisorProcessor:
         self.analyzer = TechnicalAnalyzer()
         self.pattern_detector = PatternDetector()
         self.sr_calculator = SupportResistanceCalculator()
+        self.risk_analyzer = RiskAnalyzer()
         self.redis_client = redis_client
+
+        # AI components for Phase 04
+        self.ai_summarizer = AISummarizer(
+            anthropic_api_key=config.ANTHROPIC_API_KEY,
+            deepseek_api_key=config.DEEPSEEK_API_KEY,
+            default_model=config.DEFAULT_LLM_MODEL,
+            redis_client=redis_client
+        )
+        self.recommendation_engine = RecommendationEngine(self.ai_summarizer)
 
     async def process_technical_summary(
         self,
@@ -198,3 +212,98 @@ class AdvisorProcessor:
             )
 
         return success_response(result)
+
+    async def process_risk_analysis(
+        self,
+        sid: str,
+        symbol: str,
+        account_balance: float,
+        entry_price: float,
+        stop_loss: float,
+        take_profit: float,
+        risk_profile: str = "moderate",
+        timeframe: str = "H1"
+    ) -> Dict[str, Any]:
+        """
+        Process complete risk analysis request.
+        Fetches ATR if symbol provided.
+        """
+        logger.info(f"[{sid}] Processing risk analysis for {symbol}")
+
+        # Get ATR if symbol provided
+        atr = None
+        if symbol:
+            # Try to get from cache first
+            cached = await self.redis_client.get_indicators(symbol, timeframe) if self.redis_client else None
+            if cached and "atr" in cached.get("indicators", {}):
+                atr = cached["indicators"]["atr"]
+            else:
+                # Calculate fresh
+                df = await self.data_fetcher.fetch_ohlcv(symbol, timeframe, count=50)
+                if df is not None:
+                    indicators = self.analyzer.calculate_indicators(df, ["atr"])
+                    atr = indicators.get("indicators", {}).get("atr")
+
+        # Run full risk analysis
+        result = self.risk_analyzer.analyze_full_risk(
+            account_balance=account_balance,
+            entry_price=entry_price,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+            risk_profile=risk_profile,
+            atr=atr,
+        )
+
+        result["symbol"] = symbol
+        result["computed_at"] = datetime.utcnow().isoformat()
+
+        return success_response(result)
+
+    async def process_recommendation(
+        self,
+        sid: str,
+        symbol: str,
+        timeframe: str,
+        language: str = "vi",
+        risk_profile: str = "moderate"
+    ) -> Dict[str, Any]:
+        """
+        Process complete recommendation request.
+        Combines technical analysis, patterns, S/R, and AI summary.
+        """
+        logger.info(f"[{sid}] Processing recommendation for {symbol} {timeframe}")
+
+        # 1. Get technical analysis
+        tech_result = await self.process_technical_summary(sid, symbol, timeframe)
+        if not tech_result.get("success"):
+            return tech_result
+
+        technical_data = tech_result.get("data", {})
+
+        # 2. Get pattern analysis
+        pattern_result = await self.process_pattern_scan(sid, symbol, timeframe, include_sr=True)
+        pattern_data = pattern_result.get("data", {}) if pattern_result.get("success") else {}
+
+        # 3. Extract S/R data
+        sr_data = pattern_data.get("support_resistance", {})
+
+        # 4. Build user profile
+        user_profile = {
+            "risk_tolerance": risk_profile,
+            "preferred_timeframe": timeframe,
+        }
+
+        # 5. Generate recommendation
+        recommendation = await self.recommendation_engine.generate_recommendation(
+            symbol=symbol,
+            technical_data=technical_data,
+            pattern_data=pattern_data,
+            sr_data=sr_data,
+            user_profile=user_profile,
+            language=language
+        )
+
+        recommendation["timeframe"] = timeframe
+        recommendation["language"] = language
+
+        return success_response(recommendation)

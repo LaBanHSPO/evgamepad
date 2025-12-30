@@ -7,34 +7,14 @@ import { toast } from "sonner";
 const positions = [
   {
     id: "POS-001",
-    pair: "BTC/USD",
-    type: "LONG",
-    entry: "96,850.00",
-    current: "97,842.50",
+    pair: "XAU/USD",
+    type: "BUY",
+    entry: "4,350.00",
+    current: "4,542.50",
     size: "0.25",
-    pnl: "+992.50",
-    pnlPercent: "+10.25%",
-  },
-  {
-    id: "POS-002",
-    pair: "ETH/USD",
-    type: "LONG",
-    entry: "3,420.00",
-    current: "3,456.78",
-    size: "5.0",
-    pnl: "+183.90",
-    pnlPercent: "+1.08%",
-  },
-  {
-    id: "POS-003",
-    pair: "SOL/USD",
-    type: "SHORT",
-    entry: "192.50",
-    current: "187.45",
-    size: "50",
-    pnl: "+252.50",
-    pnlPercent: "+2.63%",
-  },
+    pnl: "+192.50",
+    pnlPercent: "+4.42%",
+  }
 ];
 
 export const GamepadPositions = () => {

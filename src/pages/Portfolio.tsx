@@ -13,7 +13,7 @@ const Index = () => {
 
       {/* Main content */}
       <div className="relative z-10 max-w-7xl mx-auto space-y-4">
-        <SystemHeader monitorNumber={3} title="PORTFOLIO" />
+        <SystemHeader monitorNumber={1} title="PORTFOLIO" />
 
         {/* Top Panel: Risk Management Core */}
         <RiskManagementPanel />
@@ -30,7 +30,7 @@ const Index = () => {
 
       {/* Version Watermark */}
       <div className="fixed bottom-4 right-4 text-xs text-muted-foreground/50 font-mono pointer-events-none">
-        TRADING COMMAND CENTER v3.1.4
+        EVGAMEPAD v1.0.0
       </div>
     </div>
   );

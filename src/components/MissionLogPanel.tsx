@@ -4,21 +4,15 @@ interface Trade {
   id: string;
   time: string;
   pair: string;
-  type: 'LONG' | 'SHORT';
+  type: 'BUY' | 'SELL';
   size: string;
   result: 'WIN' | 'LOSS';
   pnl: string;
 }
 
 const trades: Trade[] = [
-  { id: 'T-0847', time: '14:32:18', pair: 'BTC/USD', type: 'LONG', size: '0.15', result: 'WIN', pnl: '+$234.50' },
-  { id: 'T-0846', time: '13:15:42', pair: 'ETH/USD', type: 'SHORT', size: '2.40', result: 'WIN', pnl: '+$156.20' },
-  { id: 'T-0845', time: '11:48:09', pair: 'BTC/USD', type: 'LONG', size: '0.10', result: 'LOSS', pnl: '-$89.00' },
-  { id: 'T-0844', time: '10:22:31', pair: 'SOL/USD', type: 'LONG', size: '45.00', result: 'WIN', pnl: '+$312.80' },
-  { id: 'T-0843', time: '09:05:55', pair: 'ETH/USD', type: 'LONG', size: '1.80', result: 'WIN', pnl: '+$178.40' },
-  { id: 'T-0842', time: '08:41:12', pair: 'BTC/USD', type: 'SHORT', size: '0.08', result: 'LOSS', pnl: '-$45.20' },
-  { id: 'T-0841', time: '07:18:33', pair: 'XRP/USD', type: 'LONG', size: '1500', result: 'WIN', pnl: '+$89.60' },
-  { id: 'T-0840', time: '06:52:47', pair: 'BTC/USD', type: 'LONG', size: '0.12', result: 'WIN', pnl: '+$267.30' },
+  { id: 'T-0847', time: '14:32:18', pair: 'XAU/USD', type: 'BUY', size: '0.15', result: 'WIN', pnl: '+$234.50' },
+  { id: 'T-0846', time: '13:15:42', pair: 'XAU/USD', type: 'BUY', size: '2.40', result: 'WIN', pnl: '+$156.20' },
 ];
 
 const MissionLogPanel = () => {
@@ -57,7 +51,7 @@ const MissionLogPanel = () => {
           </thead>
           <tbody className="font-mono text-sm">
             {trades.map((trade, index) => (
-              <tr 
+              <tr
                 key={trade.id}
                 className={`
                   border-b border-panel-border/50 transition-colors
@@ -70,9 +64,8 @@ const MissionLogPanel = () => {
                 <td className="px-4 py-2 text-primary tabular-nums">{trade.time}</td>
                 <td className="px-4 py-2 text-foreground font-bold">{trade.pair}</td>
                 <td className="px-4 py-2">
-                  <span className={`inline-flex items-center gap-1 ${
-                    trade.type === 'LONG' ? 'text-terminal-green' : 'text-danger-red'
-                  }`}>
+                  <span className={`inline-flex items-center gap-1 ${trade.type === 'LONG' ? 'text-terminal-green' : 'text-danger-red'
+                    }`}>
                     {trade.type === 'LONG' ? (
                       <ArrowUpRight className="h-3 w-3" />
                     ) : (
@@ -85,17 +78,16 @@ const MissionLogPanel = () => {
                 <td className="px-4 py-2 text-center">
                   <span className={`
                     inline-block px-2 py-0.5 rounded text-xs font-bold
-                    ${trade.result === 'WIN' 
-                      ? 'bg-terminal-green/20 text-terminal-green' 
+                    ${trade.result === 'WIN'
+                      ? 'bg-terminal-green/20 text-terminal-green'
                       : 'bg-danger-red/20 text-danger-red'
                     }
                   `}>
                     {trade.result}
                   </span>
                 </td>
-                <td className={`px-4 py-2 text-right font-bold tabular-nums ${
-                  trade.result === 'WIN' ? 'text-terminal-green' : 'text-danger-red'
-                }`}>
+                <td className={`px-4 py-2 text-right font-bold tabular-nums ${trade.result === 'WIN' ? 'text-terminal-green' : 'text-danger-red'
+                  }`}>
                   {trade.pnl}
                 </td>
               </tr>

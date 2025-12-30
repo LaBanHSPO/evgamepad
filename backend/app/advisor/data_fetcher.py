@@ -1,12 +1,15 @@
 """
-OHLCV data fetcher from MT5 terminal.
+OHLCV data fetcher from MT5 terminal with TwelveData volume validation.
 Supports multiple timeframes and lookback periods.
+Hybrid approach: MT5 for primary price data, TwelveData for volume validation.
 """
 import logging
 import asyncio
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 import pandas as pd
+
+from .volume_validator import VolumeValidator, VolumeValidationResult
 
 logger = logging.getLogger(__name__)
 
@@ -24,31 +27,43 @@ MT5_TIMEFRAMES = {
 }
 
 class DataFetcher:
-    """Fetches OHLCV data from MT5 terminal."""
+    """
+    Fetches OHLCV data from MT5 terminal with optional TwelveData volume validation.
 
-    def __init__(self, mt5_manager):
+    Hybrid approach:
+    - MT5 Terminal: Primary OHLCV data (tick-level price accuracy)
+    - TwelveData API: Volume comparison/confirmation (market-wide volume validation)
+    """
+
+    def __init__(self, mt5_manager, enable_volume_validation: bool = True):
         """
         Args:
             mt5_manager: MT5ConnectionManager instance
+            enable_volume_validation: Whether to validate volume with TwelveData (default: True)
         """
         self.mt5_manager = mt5_manager
+        self.enable_volume_validation = enable_volume_validation
+        self.volume_validator = VolumeValidator() if enable_volume_validation else None
 
     async def fetch_ohlcv(
         self,
         symbol: str,
         timeframe: str,
-        count: int = 100
+        count: int = 100,
+        validate_volume: bool = True
     ) -> Optional[pd.DataFrame]:
         """
-        Fetch OHLCV data from MT5.
+        Fetch OHLCV data from MT5 with optional volume validation.
 
         Args:
             symbol: Trading symbol (e.g., "XAUUSD")
             timeframe: Timeframe string (e.g., "H1", "H4", "D1")
             count: Number of candles to fetch (default 100)
+            validate_volume: Whether to validate volume with TwelveData (default: True)
 
         Returns:
             DataFrame with columns: time, open, high, low, close, volume
+            Additional metadata: volume_validation (if validation enabled)
             None if fetch fails
         """
         try:
@@ -101,6 +116,23 @@ class DataFetcher:
             df = df[['time', 'open', 'high', 'low', 'close', 'volume']]
 
             logger.debug(f"Fetched {len(df)} candles for {symbol} {timeframe}")
+
+            # Validate volume with TwelveData if enabled
+            if validate_volume and self.enable_volume_validation and self.volume_validator:
+                try:
+                    validation_result = await self.volume_validator.validate_volume(
+                        mt5_df=df,
+                        symbol=symbol,
+                        timeframe=timeframe
+                    )
+                    # Store validation metadata in DataFrame attrs (doesn't affect data)
+                    df.attrs['volume_validation'] = validation_result.to_dict()
+                    logger.info(f"Volume validation: {validation_result.message}")
+                except Exception as e:
+                    logger.warning(f"Volume validation failed for {symbol}: {e}")
+                    # Continue without validation if it fails
+                    df.attrs['volume_validation'] = None
+
             return df
 
         except Exception as e:

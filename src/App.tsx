@@ -9,25 +9,28 @@ import Portfolio from "./pages/Portfolio";
 import NotFound from "./pages/NotFound";
 
 import { GlobalGamepadHandler } from "@/components/GlobalGamepadHandler";
+import { SocketProvider } from "@/context/SocketContext";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <GlobalGamepadHandler />
-        <Routes>
-          <Route path="/plan" element={<Plan />} />
-          <Route path="/action" element={<Action />} />
-          <Route path="/" element={<Portfolio />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+    <SocketProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <GlobalGamepadHandler />
+          <Routes>
+            <Route path="/plan" element={<Plan />} />
+            <Route path="/action" element={<Action />} />
+            <Route path="/" element={<Portfolio />} />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </SocketProvider>
   </QueryClientProvider>
 );
 

@@ -93,3 +93,44 @@ class PatternScanResponse(BaseModel):
     support_resistance: Optional[Dict[str, Any]] = None
     cached: bool = False
     computed_at: datetime = Field(default_factory=datetime.utcnow)
+
+class RiskAnalysisRequest(BaseModel):
+    """Request for advisor:risk_analysis event."""
+    symbol: Optional[str] = None
+    account_balance: float = Field(..., gt=0)
+    entry_price: float = Field(..., gt=0)
+    stop_loss: float = Field(..., gt=0)
+    take_profit: float = Field(..., gt=0)
+    risk_profile: str = Field(default="moderate", pattern="^(conservative|moderate|aggressive)$")
+    timeframe: str = Field(default="H1")
+
+class PositionSizing(BaseModel):
+    """Position sizing result."""
+    method: str
+    position_size: float
+    risk_amount: float
+    risk_percentage: float
+    stop_distance: float
+    stop_distance_pct: float
+
+class RiskReward(BaseModel):
+    """Risk/reward calculation result."""
+    direction: str
+    risk: float
+    risk_pct: float
+    reward: float
+    reward_pct: float
+    rr_ratio: float
+    recommendation: str
+    advice: str
+    breakeven_win_rate: float
+
+class RiskAnalysisResponse(BaseModel):
+    """Response for advisor:risk_analysis event."""
+    success: bool = True
+    symbol: Optional[str] = None
+    risk_profile: str
+    risk_reward: Dict[str, Any]
+    position_sizing: Dict[str, Any]
+    recommendation: Dict[str, Any]
+    computed_at: datetime = Field(default_factory=datetime.utcnow)

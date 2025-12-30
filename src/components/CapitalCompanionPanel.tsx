@@ -1,160 +1,219 @@
 import { useState, useEffect, useRef } from "react";
-import { Mic, MicOff, Volume2, VolumeX, MessageCircle, Sparkles, Play, User } from "lucide-react";
+import { Mic, MicOff, Volume2, VolumeX, MessageCircle, Sparkles, Play, User, Send, Pin, LayoutTemplate, Target, ShieldCheck } from "lucide-react";
+import { useSocket } from "@/context/SocketContext";
+import { TechnicalAnalysisCard, TechnicalAnalysisData } from "./chat/TechnicalAnalysisCard";
+import { PatternAnalysisCard, PatternAnalysisData } from "./chat/PatternAnalysisCard";
+import { RiskAnalysisCard, RiskAnalysisData } from "./chat/RiskAnalysisCard";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "sonner";
 
 interface Message {
   id: number;
-  text: string;
+  type: "text" | "technical" | "pattern" | "risk" | "error";
+  text?: string;
+  data?: any;
   isAI: boolean;
   timestamp: string;
   isNew?: boolean;
 }
 
-const initialMessages: Message[] = [
-  {
-    id: 1,
-    text: "Good morning, Trader! I've been analyzing the markets while you were away. BTC is showing strong bullish momentum on the H4 timeframe.",
-    isAI: true,
-    timestamp: "08:30",
-  },
-  {
-    id: 2,
-    text: "I found a solid support level at $96,500. The risk/reward ratio looks favorable at 1:2.8. Want me to break it down for you?",
-    isAI: true,
-    timestamp: "08:31",
-  },
-];
-
-const aiResponses = [
-  "I'm seeing increased whale activity on-chain. This often precedes significant moves. Stay alert!",
-  "The Fear & Greed index just shifted to 'Greed'. Historically, this suggests we might see some volatility ahead.",
-  "Your current position is looking good! The trend is still intact. I'd recommend holding for now.",
-  "I've spotted a potential divergence forming on the RSI. Let me keep monitoring this for you.",
-  "Great news! The support level I mentioned earlier is holding strong. Confidence in this trade remains high.",
-  "Remember to take breaks, Trader. A clear mind makes better decisions. I'll watch the charts for you.",
-];
-
 const CapitalCompanionPanel = () => {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const { socket, isConnected } = useSocket();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [pinnedMessages, setPinnedMessages] = useState<Message[]>([]);
+  const [inputValue, setInputValue] = useState("");
   const [isTalking, setIsTalking] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
-  const [hasNewMessage, setHasNewMessage] = useState(false);
   const [aiMood, setAiMood] = useState<"happy" | "thinking" | "alert">("happy");
+  const [view, setView] = useState<'chat' | 'pinned'>('chat');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (view === 'chat') {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, view]);
 
-  // Simulate incoming AI messages periodically
   useEffect(() => {
-    const interval = setInterval(() => {
-      const randomChance = Math.random();
-      if (randomChance > 0.7) {
-        setAiMood("thinking");
-        setIsThinking(true);
+    if (!socket) return;
 
-        setTimeout(() => {
-          const randomResponse = aiResponses[Math.floor(Math.random() * aiResponses.length)];
-          const newMessage: Message = {
-            id: Date.now(),
-            text: randomResponse,
-            isAI: true,
-            timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
-            isNew: true,
-          };
-          setMessages(prev => [...prev, newMessage]);
-          setHasNewMessage(true);
-          setIsThinking(false);
-          setAiMood("happy");
+    const handleTechnicalResult = (data: TechnicalAnalysisData) => {
+      addMessage({ type: 'technical', data, isAI: true, text: `Technical analysis for ${data.symbol}` });
+      setIsThinking(false);
+    };
 
-          // Remove "new" indicator after a few seconds
-          setTimeout(() => {
-            setMessages(prev => prev.map(m => m.id === newMessage.id ? { ...m, isNew: false } : m));
-            setHasNewMessage(false);
-          }, 3000);
-        }, 2000);
+    const handlePatternResult = (data: PatternAnalysisData) => {
+      addMessage({ type: 'pattern', data, isAI: true, text: `Pattern scan results for ${data.symbol}` });
+      setIsThinking(false);
+    };
+
+    const handleRiskResult = (data: RiskAnalysisData) => {
+      addMessage({ type: 'risk', data, isAI: true, text: `Risk analysis for ${data.symbol}` });
+      setIsThinking(false);
+    };
+
+    const handleError = (error: { message: string, code?: string }) => {
+      addMessage({ type: 'error', text: error.message || "An error occurred", isAI: true });
+      setIsThinking(false);
+      toast.error(`Advisor Error: ${error.message}`);
+    };
+
+    socket.on('advisor:technical_result', handleTechnicalResult);
+    socket.on('advisor:pattern_result', handlePatternResult);
+    socket.on('advisor:risk_result', handleRiskResult);
+    socket.on('advisor:error', handleError);
+
+    return () => {
+      socket.off('advisor:technical_result', handleTechnicalResult);
+      socket.off('advisor:pattern_result', handlePatternResult);
+      socket.off('advisor:risk_result', handleRiskResult);
+      socket.off('advisor:error', handleError);
+    };
+  }, [socket]);
+
+  const addMessage = (msg: Omit<Message, "id" | "timestamp">) => {
+    const newMessage: Message = {
+      id: Date.now(),
+      timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
+      isNew: true,
+      ...msg
+    };
+    setMessages(prev => [...prev, newMessage]);
+
+    // Clear "new" status after 3s
+    setTimeout(() => {
+      setMessages(prev => prev.map(m => m.id === newMessage.id ? { ...m, isNew: false } : m));
+    }, 3000);
+  };
+
+  const handleSendMessage = () => {
+    if (!inputValue.trim() || !socket) return;
+
+    // Check for commands
+    const text = inputValue.trim();
+    addMessage({ type: 'text', text, isAI: false });
+
+    // Simple parsing for manual commands (fallback if not using templates)
+    // E.g., "analyze XAUUSD"
+    const parts = text.split(' ');
+    const command = parts[0].toLowerCase();
+    const symbol = parts[1]?.toUpperCase();
+
+    if (symbol) {
+      setIsThinking(true);
+      if (command === 'analyze' || command === 'tech') {
+        socket.emit('advisor:technical_summary', { symbol, timeframe: 'H1' });
+      } else if (command === 'pattern' || command === 'scan') {
+        socket.emit('advisor:pattern_scan', { symbol, timeframe: 'H1' });
+      } else if (command === 'risk') {
+        // Mock risk params for demo
+        socket.emit('advisor:risk_analysis', {
+          symbol,
+          account_balance: 10000,
+          entry_price: 2000, // Placeholder, would need real price
+          stop_loss: 1990,
+          take_profit: 2020
+        });
       }
-    }, 15000);
+    }
 
-    return () => clearInterval(interval);
-  }, []);
+    setInputValue("");
+  };
+
+  const handleTemplateClick = (type: string) => {
+    if (!socket || !isConnected) {
+      toast.error("Socket not connected");
+      return;
+    }
+    // For demo, we might need a dialog to get Symbol. 
+    // For now, let's just use a hardcoded symbol or prompt via simple alerts/fallback
+    // A better UX would be selecting a symbol from the Market Overview first.
+    // Let's assume user types symbol in input then clicks template, or we default to XAUUSD for demo.
+    const symbol = inputValue.trim().toUpperCase() || "XAUUSD";
+
+    setIsThinking(true);
+    if (type === 'technical') {
+      addMessage({ type: 'text', text: `Requesting Technical Analysis for ${symbol}...`, isAI: false });
+      socket.emit('advisor:technical_summary', { symbol, timeframe: 'H1' });
+    } else if (type === 'pattern') {
+      addMessage({ type: 'text', text: `Scanning Patterns for ${symbol}...`, isAI: false });
+      socket.emit('advisor:pattern_scan', { symbol, timeframe: 'H1' });
+    } else if (type === 'risk') {
+      addMessage({ type: 'text', text: `Calculating Risk for ${symbol}...`, isAI: false });
+      // Using dummy values for quick action - in real app would open a form
+      socket.emit('advisor:risk_analysis', {
+        symbol,
+        account_balance: 10000,
+        entry_price: 2150,
+        stop_loss: 2140,
+        take_profit: 2170
+      });
+    }
+  };
+
+  const handlePinMessage = (message: Message) => {
+    if (pinnedMessages.find(m => m.id === message.id)) return;
+    setPinnedMessages(prev => [...prev, message]);
+    toast.success("Insight pinned to dashboard");
+  };
+
+  const handleUnpinMessage = (id: number) => {
+    setPinnedMessages(prev => prev.filter(m => m.id !== id));
+  };
 
   const handleTalkToggle = () => {
     setIsTalking(!isTalking);
     if (!isTalking) {
-      // Simulate user talking
-      setTimeout(() => {
-        setIsTalking(false);
-        setAiMood("thinking");
-        setIsThinking(true);
-
-        // AI responds
-        setTimeout(() => {
-          const responses = [
-            "I understand your concern. Let me analyze that for you...",
-            "That's a great question! Based on my analysis...",
-            "I'm on it, Trader! Give me a moment to crunch the numbers.",
-          ];
-          const newMessage: Message = {
-            id: Date.now(),
-            text: responses[Math.floor(Math.random() * responses.length)],
-            isAI: true,
-            timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
-            isNew: true,
-          };
-          setMessages(prev => [...prev, newMessage]);
-          setIsThinking(false);
-          setAiMood("happy");
-        }, 1500);
-      }, 3000);
+      toast.info("Voice input not yet implemented");
+      setTimeout(() => setIsTalking(false), 1000);
     }
   };
 
-  const playLatestMessage = () => {
-    setHasNewMessage(false);
-    // Simulate playing audio
+  const renderMessageContent = (message: Message, pinned = false) => {
+    switch (message.type) {
+      case 'technical':
+        return <TechnicalAnalysisCard data={message.data} onPin={() => !pinned && handlePinMessage(message)} />;
+      case 'pattern':
+        return <PatternAnalysisCard data={message.data} onPin={() => !pinned && handlePinMessage(message)} />;
+      case 'risk':
+        return <RiskAnalysisCard data={message.data} onPin={() => !pinned && handlePinMessage(message)} />;
+      case 'error':
+        return <div className="text-danger-red p-2 bg-danger-red/10 rounded border border-danger-red/20">{message.text}</div>;
+      default:
+        return <p className={`text-sm leading-relaxed ${message.isAI ? "text-foreground/90" : "text-foreground/70"}`}>{message.text}</p>;
+    }
   };
 
-  // Gamepad/Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // p = Play Message (Start)
-      // m = Toggle Mute (Back)
-      // v = Toggle Talk (L3)
-      if (e.key === "p" && hasNewMessage) {
-        playLatestMessage();
-      } else if (e.key === "m") {
-        setIsMuted(prev => !prev);
-      } else if (e.key === "v") {
-        handleTalkToggle();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [hasNewMessage, isTalking]); // Added isTalking to dependencies as handleTalkToggle uses it via closure/state
-
   return (
-    <div className="panel">
-      <div className="panel-header">
+    <div className="panel h-[600px] flex flex-col">
+      <div className="panel-header flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-secondary" />
           <h2 className="panel-title">CAPITAL COMPANION</h2>
         </div>
-        <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${isThinking ? "bg-secondary animate-pulse" : "bg-terminal-green"}`} />
-          <span className="text-xs text-terminal-green">AI FRIEND</span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <div className={`w-2 h-2 rounded-full ${isConnected ? "bg-terminal-green" : "bg-danger-red"}`} />
+            <span className="text-[10px] text-muted-foreground">{isConnected ? "ONLINE" : "OFFLINE"}</span>
+          </div>
+          <button onClick={() => setView('chat')} className={`text-xs ${view === 'chat' ? 'text-primary font-bold' : 'text-muted-foreground'}`}>CHAT</button>
+          <button onClick={() => setView('pinned')} className={`text-xs flex items-center gap-1 ${view === 'pinned' ? 'text-primary font-bold' : 'text-muted-foreground'}`}>
+            <Pin className="w-3 h-3" /> PINNED ({pinnedMessages.length})
+          </button>
         </div>
       </div>
 
-      <div className="p-4 flex gap-4">
-        {/* AI Avatar Section */}
-        <div className="flex flex-col items-center gap-3">
+      <div className="p-4 flex gap-4 flex-1 min-h-0">
+        {/* Left Sidebar: Avatar & Quick Actions */}
+        <div className="flex flex-col items-center gap-3 w-28 shrink-0">
           {/* Avatar Container */}
           <div className={`relative w-24 h-24 rounded-full bg-gradient-to-br from-secondary/30 to-primary/30 border-2 
-            ${isTalking ? "border-terminal-green animate-pulse" : isThinking ? "border-secondary" : "border-primary/50"}
+            ${isTalking ? "border-terminal-green animate-pulse" : isThinking ? "border-secondary animate-pulse" : "border-primary/50"}
             flex items-center justify-center overflow-hidden transition-all duration-300`}
           >
             {/* AI Face */}
@@ -191,127 +250,118 @@ const CapitalCompanionPanel = () => {
             )}
           </div>
 
-          {/* AI Name */}
           <div className="text-center">
             <span className="text-sm font-bold text-primary">ATLAS</span>
-            <span className="block text-xs text-muted-foreground">Your Trading AI</span>
+            <span className="block text-[10px] text-muted-foreground">AI Advisor</span>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-col gap-2 w-full">
-            {/* Talk Button */}
-            <button
-              onClick={handleTalkToggle}
-              className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border transition-all duration-300
-                ${isTalking
-                  ? "bg-terminal-green/20 border-terminal-green text-terminal-green animate-pulse"
-                  : "bg-panel-bg border-primary/30 text-primary hover:border-primary hover:bg-primary/10"
-                }`}
-            >
-              {isTalking ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-              <span className="text-sm font-semibold">{isTalking ? "STOP" : "TALK"}</span>
-            </button>
+          <div className="w-full space-y-1.5">
+            <Button variant="outline" size="sm" className="w-full text-[10px] h-7 justify-start px-2 bg-background/50" onClick={() => handleTemplateClick('technical')}>
+              <LayoutTemplate className="w-3 h-3 mr-1.5" /> Tech Summary
+            </Button>
+            <Button variant="outline" size="sm" className="w-full text-[10px] h-7 justify-start px-2 bg-background/50" onClick={() => handleTemplateClick('pattern')}>
+              <Target className="w-3 h-3 mr-1.5" /> Pattern Scan
+            </Button>
+            <Button variant="outline" size="sm" className="w-full text-[10px] h-7 justify-start px-2 bg-background/50" onClick={() => handleTemplateClick('risk')}>
+              <ShieldCheck className="w-3 h-3 mr-1.5" /> Risk Calc
+            </Button>
+          </div>
 
-            {/* Play New Message Button */}
-            <button
-              onClick={playLatestMessage}
-              disabled={!hasNewMessage}
-              className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg border transition-all duration-300
-                ${hasNewMessage
-                  ? "bg-secondary/20 border-secondary text-secondary animate-pulse"
-                  : "bg-panel-bg/30 border-border/30 text-muted-foreground opacity-50 cursor-not-allowed"
-                }`}
-            >
-              <Play className="w-4 h-4" />
-              <span className="text-xs">{hasNewMessage ? "NEW MSG" : "NO MSG"}</span>
-            </button>
-
-            {/* Mute Toggle */}
-            <button
+          <div className="mt-auto w-full flex justify-center">
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => setIsMuted(!isMuted)}
-              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg border transition-all
-                ${isMuted
-                  ? "bg-danger-red/20 border-danger-red/50 text-danger-red"
-                  : "bg-panel-bg/30 border-border/30 text-muted-foreground hover:text-foreground"
-                }`}
+              className={isMuted ? "text-danger-red" : "text-muted-foreground"}
             >
               {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-              <span className="text-xs">{isMuted ? "MUTED" : "SOUND"}</span>
-            </button>
+            </Button>
           </div>
         </div>
 
-        {/* Chat Messages Section */}
-        <div className="flex-1 flex flex-col">
-          <div className="flex items-center gap-2 mb-2">
-            <MessageCircle className="w-4 h-4 text-primary" />
-            <span className="text-xs text-muted-foreground">CONVERSATION</span>
-          </div>
+        {/* Chat Area */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {view === 'chat' ? (
+            <>
+              <ScrollArea className="flex-1 pr-3 -mr-3">
+                <div className="space-y-4 pb-2">
+                  {messages.length === 0 && (
+                    <div className="text-center text-muted-foreground text-xs py-10 opacity-50">
+                      Start a conversation or select a template...
+                    </div>
+                  )}
+                  {messages.map((message) => (
+                    <div key={message.id} className={`flex gap-3 ${!message.isAI ? "flex-row-reverse" : ""}`}>
+                      <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs
+                            ${message.isAI ? "bg-gradient-to-br from-secondary/20 to-primary/20 border border-primary/30" : "bg-terminal-green/20 border border-terminal-green/30"}`}>
+                        {message.isAI ? "A" : <User className="w-4 h-4" />}
+                      </div>
+                      <div className={`max-w-[85%] ${!message.isAI ? "items-end flex flex-col" : ""}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-bold text-primary">{message.isAI ? "ATLAS" : "YOU"}</span>
+                          <span className="text-[10px] text-muted-foreground">{message.timestamp}</span>
+                        </div>
+                        <div>{renderMessageContent(message)}</div>
+                      </div>
+                    </div>
+                  ))}
+                  {isThinking && (
+                    <div className="flex gap-3">
+                      <div className="w-8 h-8 rounded-full bg-secondary/10 border border-secondary/30 flex items-center justify-center text-xs">A</div>
+                      <div className="flex items-center gap-1 text-muted-foreground text-xs h-8">
+                        <span>Atlas is thinking</span>
+                        <span className="animate-bounce">.</span><span className="animate-bounce delay-100">.</span><span className="animate-bounce delay-200">.</span>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+              </ScrollArea>
 
-          <div className="flex-1 bg-background/30 border border-border/30 rounded-lg p-3 overflow-y-auto max-h-[200px] space-y-3">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex gap-2 ${message.isNew ? "animate-pulse" : ""}`}
-              >
-                {/* Avatar */}
-                <div className={`w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs
-                  ${message.isAI
-                    ? "bg-gradient-to-br from-secondary/50 to-primary/50 border border-primary/30"
-                    : "bg-terminal-green/20 border border-terminal-green/30"
-                  }`}
+              <div className="mt-3 flex gap-2">
+                <Input
+                  placeholder="Type symbol (e.g., BTCUSD) or command..."
+                  className="bg-background/50 border-border/50 h-9 font-mono text-xs"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                />
+                <Button size="icon" className="h-9 w-9 shrink-0" onClick={handleSendMessage}>
+                  <Send className="w-4 h-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant={isTalking ? "default" : "outline"}
+                  className={`h-9 w-9 shrink-0 ${isTalking ? "bg-terminal-green text-black hover:bg-terminal-green/90" : ""}`}
+                  onClick={handleTalkToggle}
                 >
-                  {message.isAI ? "A" : <User className="w-3 h-3" />}
-                </div>
-
-                {/* Message */}
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className={`text-xs font-semibold ${message.isAI ? "text-primary" : "text-terminal-green"}`}>
-                      {message.isAI ? "Atlas" : "You"}
-                    </span>
-                    <span className="text-xs text-muted-foreground">{message.timestamp}</span>
-                    {message.isNew && (
-                      <span className="text-xs bg-secondary/30 text-secondary px-1.5 py-0.5 rounded">NEW</span>
-                    )}
-                  </div>
-                  <p className={`text-sm leading-relaxed ${message.isAI ? "text-foreground/90" : "text-foreground/70"}`}>
-                    {message.text}
-                  </p>
-                </div>
+                  {isTalking ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </Button>
               </div>
-            ))}
-
-            {/* Thinking indicator in chat */}
-            {isThinking && (
-              <div className="flex gap-2">
-                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-secondary/50 to-primary/50 border border-primary/30 flex items-center justify-center text-xs">
-                  A
-                </div>
-                <div className="flex items-center gap-1 text-muted-foreground">
-                  <span className="text-xs">Atlas is thinking</span>
-                  <div className="flex gap-0.5">
-                    <div className="w-1 h-1 bg-secondary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <div className="w-1 h-1 bg-secondary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <div className="w-1 h-1 bg-secondary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+            </>
+          ) : (
+            <ScrollArea className="flex-1">
+              <div className="space-y-4">
+                {pinnedMessages.length === 0 && <div className="text-center text-muted-foreground text-xs py-10">No pinned insights yet.</div>}
+                {pinnedMessages.map((message) => (
+                  <div key={message.id} className="relative group">
+                    {renderMessageContent(message, true)}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 h-6 w-6 bg-background/80"
+                      onClick={() => handleUnpinMessage(message.id)}
+                    >
+                      <Pin className="w-3 h-3 fill-current text-primary" />
+                    </Button>
                   </div>
-                </div>
+                ))}
               </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Quick Status */}
-          <div className="mt-2 flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">
-              {isTalking ? "🎤 Listening..." : isThinking ? "🤔 Analyzing..." : "💚 Ready to help"}
-            </span>
-            <span className="text-primary">{messages.length} messages</span>
-          </div>
+            </ScrollArea>
+          )}
         </div>
       </div>
-    </div>
+    </div >
   );
 };
 

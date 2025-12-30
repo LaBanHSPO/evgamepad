@@ -224,6 +224,20 @@ class TechnicalAnalyzer:
                 else:
                     result["signals"]["trend"] = "mixed"
 
+            # === VOLUME VALIDATION ===
+            # Add volume validation results from DataFrame attrs if available
+            if hasattr(df, 'attrs') and 'volume_validation' in df.attrs:
+                volume_val = df.attrs['volume_validation']
+                if volume_val:
+                    result["volume_validation"] = volume_val
+                    # Add volume signal based on validation
+                    if volume_val.get('is_fake_pump'):
+                        result["signals"]["volume"] = "fake_pump_warning"
+                    elif volume_val.get('is_divergent'):
+                        result["signals"]["volume"] = "divergence_warning"
+                    else:
+                        result["signals"]["volume"] = "confirmed"
+
             return result
 
         except Exception as e:

@@ -33,4 +33,13 @@ class Config:
     REDIS_PORT: int = int(os.getenv('REDIS_PORT', '6379'))
     REDIS_DB: int = int(os.getenv('REDIS_DB', '0'))
 
+    # LLM API Keys (Phase 04 - AI Recommendations)
+    ANTHROPIC_API_KEY: str = os.getenv('ANTHROPIC_API_KEY', '')
+    DEEPSEEK_API_KEY: str = os.getenv('DEEPSEEK_API_KEY', '')
+    DEFAULT_LLM_MODEL: str = os.getenv('DEFAULT_LLM_MODEL', 'claude')
+
+    # TwelveData API (Volume Validation)
+    TWELVEDATA_API_KEY: str = os.getenv('TWELVEDATA_API_KEY', '')
+    VOLUME_DIVERGENCE_THRESHOLD: float = float(os.getenv('VOLUME_DIVERGENCE_THRESHOLD', '0.30'))  # 30% divergence threshold
+
 config = Config()

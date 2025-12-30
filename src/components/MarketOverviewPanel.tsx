@@ -1,12 +1,7 @@
 import { TrendingUp, TrendingDown, Activity } from "lucide-react";
 
 const marketData = [
-  { pair: "BTC/USD", price: "97,842.50", change: "+2.34%", trend: "up", volume: "2.4B" },
-  { pair: "ETH/USD", price: "3,456.78", change: "+1.87%", trend: "up", volume: "1.2B" },
-  { pair: "EUR/USD", price: "1.0845", change: "-0.12%", trend: "down", volume: "890M" },
-  { pair: "GBP/USD", price: "1.2634", change: "+0.08%", trend: "up", volume: "456M" },
   { pair: "XAU/USD", price: "2,634.50", change: "-0.45%", trend: "down", volume: "234M" },
-  { pair: "SOL/USD", price: "187.45", change: "+5.67%", trend: "up", volume: "567M" },
 ];
 
 export const MarketOverviewPanel = () => {
@@ -37,16 +32,14 @@ export const MarketOverviewPanel = () => {
         {marketData.map((item, index) => (
           <div
             key={item.pair}
-            className={`grid grid-cols-5 gap-2 text-sm px-2 py-2 font-mono transition-colors hover:bg-primary/10 ${
-              index % 2 === 0 ? "bg-panel-bg/50" : "bg-background/50"
-            }`}
+            className={`grid grid-cols-5 gap-2 text-sm px-2 py-2 font-mono transition-colors hover:bg-primary/10 ${index % 2 === 0 ? "bg-panel-bg/50" : "bg-background/50"
+              }`}
           >
             <span className="text-primary font-bold">{item.pair}</span>
             <span className="text-right text-foreground">{item.price}</span>
             <span
-              className={`text-right ${
-                item.trend === "up" ? "text-terminal-green" : "text-danger-red"
-              }`}
+              className={`text-right ${item.trend === "up" ? "text-terminal-green" : "text-danger-red"
+                }`}
             >
               {item.change}
             </span>

@@ -19,12 +19,7 @@ const Plan = () => {
       {/* Main content */}
       <div className="relative z-10 max-w-7xl mx-auto">
         <div className="p-4 pb-0">
-          <SystemHeader monitorNumber={1} title="PLAN" />
-        </div>
-
-        {/* Top: Capital Companion Logic - Sticky */}
-        <div className="sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4 border-b border-border/50 shadow-md">
-          <CapitalCompanionPanel />
+          <SystemHeader monitorNumber={2} title="PLAN" />
         </div>
 
         <div className="p-4 space-y-4">
@@ -33,6 +28,15 @@ const Plan = () => {
             <MarketOverviewPanel />
             <MarketSentimentPanel />
           </div>
+        </div>
+
+        {/* Top: Capital Companion Logic - Sticky */}
+        <div className="sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4 border-b border-border/50 shadow-md">
+          <CapitalCompanionPanel />
+        </div>
+
+        <div className="p-4 space-y-4">
+
 
           {/* Row 2: Price Action */}
           <PriceActionPanel />

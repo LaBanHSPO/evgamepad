@@ -4,18 +4,18 @@ import { useSocket } from "@/context/SocketContext";
 import { toast } from "sonner";
 
 const pairs = [
-  { symbol: "BTC/USD", price: "97,842.50", change: "+2.34%" },
-  { symbol: "ETH/USD", price: "3,456.78", change: "+1.87%" },
-  { symbol: "SOL/USD", price: "187.45", change: "+5.67%" },
+  // { symbol: "BTC/USD", price: "97,842.50", change: "+2.34%" },
+  // { symbol: "ETH/USD", price: "3,456.78", change: "+1.87%" },
+  // { symbol: "SOL/USD", price: "187.45", change: "+5.67%" },
   { symbol: "XAU/USD", price: "2,634.50", change: "-0.45%" },
 ];
 
-const sizes = ["0.01", "0.05", "0.10", "0.25", "0.50", "1.00"];
+const sizes = ["0.01", "0.05", "0.10", "0.25", "0.50"];
 
 export const GamepadQuickTrade = () => {
   const [selectedPair, setSelectedPair] = useState(0);
   const [selectedSize, setSelectedSize] = useState(2);
-  const [side, setSide] = useState<"LONG" | "SHORT">("LONG");
+  const [side, setSide] = useState<"BUY" | "SELL">("BUY");
   const [focusArea, setFocusArea] = useState<"pair" | "size" | "action">("pair");
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -68,7 +68,7 @@ export const GamepadQuickTrade = () => {
     const symbol = currentPair.symbol.replace("/", "");
 
     setIsProcessing(true);
-    const event = side === "LONG" ? "buy" : "sell";
+    const event = side === "BUY" ? "buy" : "sell";
 
     console.log(`Emitting ${event}: ${symbol} ${volume}`);
 
@@ -95,24 +95,24 @@ export const GamepadQuickTrade = () => {
         case "ArrowLeft":
           if (focusArea === "pair" && selectedPair > 0) setSelectedPair(selectedPair - 1);
           if (focusArea === "size" && selectedSize > 0) setSelectedSize(selectedSize - 1);
-          if (focusArea === "action") setSide("LONG");
+          if (focusArea === "action") setSide("BUY");
           break;
         case "ArrowRight":
           if (focusArea === "pair" && selectedPair < pairs.length - 1) setSelectedPair(selectedPair + 1);
           if (focusArea === "size" && selectedSize < sizes.length - 1) setSelectedSize(selectedSize + 1);
-          if (focusArea === "action") setSide("SHORT");
+          if (focusArea === "action") setSide("SELL");
           break;
         case "Enter": // A Button
           if (focusArea === "action") {
             executeTrade();
           }
           break;
-        case "x": // X Button -> Set Long
-          setSide("LONG");
+        case "x": // X Button -> Set BUY
+          setSide("BUY");
           setFocusArea("action");
           break;
-        case "b": // B Button -> Set Short (if not used for back)
-          setSide("SHORT");
+        case "b": // B Button -> Set SELL (if not used for back)
+          setSide("SELL");
           setFocusArea("action");
           break;
       }
@@ -196,10 +196,10 @@ export const GamepadQuickTrade = () => {
       <div className={`grid grid-cols-2 gap-6 ${focusArea === "action" ? "ring-2 ring-primary/50 rounded-lg p-3" : "p-1"}`}>
         <button
           onClick={() => {
-            setSide("LONG");
+            setSide("BUY");
             setFocusArea("action");
           }}
-          className={`relative py-8 rounded-xl border-4 transition-all font-display text-2xl tracking-wider ${side === "LONG"
+          className={`relative py-8 rounded-xl border-4 transition-all font-display text-2xl tracking-wider ${side === "BUY"
             ? "bg-terminal-green/20 border-terminal-green text-terminal-green scale-[1.02] shadow-[0_0_30px_rgba(34,197,94,0.3)]"
             : "bg-panel-bg/50 border-muted/30 text-muted-foreground hover:border-terminal-green/50"
             }`}
@@ -208,16 +208,16 @@ export const GamepadQuickTrade = () => {
             <div className="gamepad-button-hint bg-terminal-green/20 text-terminal-green">X</div>
           </div>
           <TrendingUp className="w-10 h-10 mx-auto mb-2" />
-          <div>LONG / BUY</div>
+          <div>BUY</div>
           <div className="text-sm font-mono mt-1 opacity-70">+{currentPair.price}</div>
         </button>
 
         <button
           onClick={() => {
-            setSide("SHORT");
+            setSide("SELL");
             setFocusArea("action");
           }}
-          className={`relative py-8 rounded-xl border-4 transition-all font-display text-2xl tracking-wider ${side === "SHORT"
+          className={`relative py-8 rounded-xl border-4 transition-all font-display text-2xl tracking-wider ${side === "SELL"
             ? "bg-danger-red/20 border-danger-red text-danger-red scale-[1.02] shadow-[0_0_30px_rgba(239,68,68,0.3)]"
             : "bg-panel-bg/50 border-muted/30 text-muted-foreground hover:border-danger-red/50"
             }`}
@@ -226,7 +226,7 @@ export const GamepadQuickTrade = () => {
             <div className="gamepad-button-hint bg-danger-red/20 text-danger-red">B</div>
           </div>
           <TrendingDown className="w-10 h-10 mx-auto mb-2" />
-          <div>SHORT / SELL</div>
+          <div>SELL</div>
           <div className="text-sm font-mono mt-1 opacity-70">-{currentPair.price}</div>
         </button>
       </div>
@@ -235,7 +235,7 @@ export const GamepadQuickTrade = () => {
       <button
         onClick={executeTrade}
         disabled={isProcessing}
-        className={`w-full py-6 rounded-xl border-4 font-display text-3xl tracking-widest transition-all ${isProcessing ? "opacity-50 cursor-not-allowed" : ""} ${side === "LONG"
+        className={`w-full py-6 rounded-xl border-4 font-display text-3xl tracking-widest transition-all ${isProcessing ? "opacity-50 cursor-not-allowed" : ""} ${side === "BUY"
           ? "bg-terminal-green text-background border-terminal-green hover:scale-[1.01] shadow-[0_0_40px_rgba(34,197,94,0.4)]"
           : "bg-danger-red text-background border-danger-red hover:scale-[1.01] shadow-[0_0_40px_rgba(239,68,68,0.4)]"
           }`}

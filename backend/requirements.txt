@@ -15,3 +15,10 @@ pandas==2.0.3
 
 # Redis Cache
 redis==5.2.1
+
+# LLM Integration (Phase 04 - AI Recommendations)
+anthropic==0.40.0
+openai==1.58.1
+
+# Market Data (Volume Validation)
+twelvedata==1.2.14
