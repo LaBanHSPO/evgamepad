@@ -237,7 +237,8 @@ class AISummarizer:
         analysis_data: Dict[str, Any],
         language: str = "vi",
         use_cache: bool = True,
-        model: Optional[str] = None
+        model: Optional[str] = None,
+        temperature: float = 0.5
     ) -> Dict[str, Any]:
         """
         Generate AI summary from technical analysis data.
@@ -247,6 +248,7 @@ class AISummarizer:
             language: "vi" for Vietnamese, "en" for English
             use_cache: Whether to use semantic cache
             model: Override default model ("claude" or "deepseek")
+            temperature: Sampling temperature 0.0-1.0 (default: 0.5 for balanced output)
 
         Returns:
             Dict with summary, signal, confidence, reasoning
@@ -267,9 +269,9 @@ class AISummarizer:
         # Call LLM
         try:
             if model == "claude":
-                response = await self._call_claude(prompt)
+                response = await self._call_anthropic(prompt, max_tokens=500, temperature=temperature)
             else:
-                response = await self._call_deepseek(prompt)
+                response = await self._call_deepseek(prompt, max_tokens=500, temperature=temperature)
 
             # Parse response
             result = self._parse_response(response)
@@ -334,26 +336,14 @@ class AISummarizer:
             risk_profile=data.get("risk_profile", "moderate"),
         )
 
-    async def _call_claude(self, prompt: str) -> str:
-        """Call Claude API."""
-        client = self._get_anthropic_client()
-        if client is None:
-            raise RuntimeError("Anthropic client not available")
+    async def _call_deepseek(self, prompt: str, max_tokens: int = 500, temperature: float = 0.7) -> str:
+        """Call DeepSeek API (OpenAI-compatible) with configurable parameters.
 
-        def _sync_call():
-            response = client.messages.create(
-                model="claude-3-5-sonnet-20241022",
-                max_tokens=500,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            return response.content[0].text
-
-        return await asyncio.to_thread(_sync_call)
-
-    async def _call_deepseek(self, prompt: str) -> str:
-        """Call DeepSeek API (OpenAI-compatible)."""
+        Args:
+            prompt: The prompt to send to DeepSeek
+            max_tokens: Maximum tokens in response (default: 500)
+            temperature: Sampling temperature 0.0-2.0 (default: 0.7)
+        """
         client = self._get_openai_client()
         if client is None:
             raise RuntimeError("OpenAI/DeepSeek client not available")
@@ -361,7 +351,8 @@ class AISummarizer:
         def _sync_call():
             response = client.chat.completions.create(
                 model="deepseek-chat",
-                max_tokens=500,
+                max_tokens=max_tokens,
+                temperature=temperature,
                 messages=[
                     {"role": "system", "content": "You are a technical analysis expert. Always respond in valid JSON format."},
                     {"role": "user", "content": prompt}
@@ -487,13 +478,13 @@ class AISummarizer:
             # Try Claude first
             client = self._get_anthropic_client()
             if client:
-                response_text = await self._call_anthropic(prompt, temperature=0.3)
+                response_text = await self._call_anthropic(prompt, max_tokens=1024, temperature=0.3)
             # Fallback to DeepSeek
             else:
                 client = self._get_openai_client()
                 if not client:
                     raise ValueError("No LLM client available")
-                response_text = await self._call_deepseek(prompt, temperature=0.3)
+                response_text = await self._call_deepseek(prompt, max_tokens=1024, temperature=0.3)
 
             # Parse JSON response
             try:
@@ -555,12 +546,18 @@ class AISummarizer:
         key_str = json.dumps(key_data, sort_keys=True)
         return f"portfolio_advice:{hashlib.md5(key_str.encode()).hexdigest()}"
 
-    async def _call_anthropic(self, prompt: str, temperature: float = 0.7) -> str:
-        """Call Claude API with async wrapper."""
+    async def _call_anthropic(self, prompt: str, max_tokens: int = 1024, temperature: float = 0.7) -> str:
+        """Call Claude API with configurable parameters.
+
+        Args:
+            prompt: The prompt to send to Claude
+            max_tokens: Maximum tokens in response (default: 1024)
+            temperature: Sampling temperature 0.0-1.0 (default: 0.7)
+        """
         def _sync_call():
             response = self._get_anthropic_client().messages.create(
                 model="claude-3-5-sonnet-20241022",
-                max_tokens=1024,
+                max_tokens=max_tokens,
                 temperature=temperature,
                 messages=[{"role": "user", "content": prompt}]
             )
