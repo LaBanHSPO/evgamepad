@@ -22,3 +22,6 @@ openai==1.58.1
 
 # Market Data (Volume Validation)
 twelvedata==1.2.14
+
+# PostgreSQL Async Driver (Phase 01 - Leaderboard Infrastructure)
+asyncpg==0.29.0

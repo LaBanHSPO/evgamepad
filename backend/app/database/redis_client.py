@@ -89,3 +89,53 @@ class RedisClient:
             return True
         except Exception:
             return False
+
+    # ==================== Sorted Set Operations (Phase 01 - Leaderboard) ====================
+
+    async def zadd(self, key: str, mapping: Dict[str, float]):
+        """Add members to sorted set."""
+        if not self._client:
+            return 0
+        return await self._client.zadd(key, mapping)
+
+    async def zrevrange(
+        self,
+        key: str,
+        start: int,
+        stop: int,
+        withscores: bool = False
+    ):
+        """Get members by reverse rank (highest first)."""
+        if not self._client:
+            return []
+        return await self._client.zrevrange(key, start, stop, withscores=withscores)
+
+    async def zrevrank(self, key: str, member: str) -> Optional[int]:
+        """Get reverse rank of member (0 = highest)."""
+        if not self._client:
+            return None
+        return await self._client.zrevrank(key, member)
+
+    async def zscore(self, key: str, member: str) -> Optional[float]:
+        """Get score of member."""
+        if not self._client:
+            return None
+        return await self._client.zscore(key, member)
+
+    async def zcard(self, key: str) -> int:
+        """Get total number of members in sorted set."""
+        if not self._client:
+            return 0
+        return await self._client.zcard(key)
+
+    async def expire(self, key: str, seconds: int) -> bool:
+        """Set TTL on key."""
+        if not self._client:
+            return False
+        return await self._client.expire(key, seconds)
+
+    async def delete(self, key: str) -> int:
+        """Delete key."""
+        if not self._client:
+            return 0
+        return await self._client.delete(key)

@@ -42,4 +42,11 @@ class Config:
     TWELVEDATA_API_KEY: str = os.getenv('TWELVEDATA_API_KEY', '')
     VOLUME_DIVERGENCE_THRESHOLD: float = float(os.getenv('VOLUME_DIVERGENCE_THRESHOLD', '0.30'))  # 30% divergence threshold
 
+    # PostgreSQL (Phase 01 - Leaderboard Infrastructure)
+    POSTGRES_HOST: str = os.getenv('POSTGRES_HOST', 'localhost')
+    POSTGRES_PORT: int = int(os.getenv('POSTGRES_PORT', '5432'))
+    POSTGRES_DB: str = os.getenv('POSTGRES_DB', 'ev_gamepad')
+    POSTGRES_USER: str = os.getenv('POSTGRES_USER', 'postgres')
+    POSTGRES_PASSWORD: str = os.getenv('POSTGRES_PASSWORD', '')
+
 config = Config()

@@ -313,6 +313,64 @@ class CommandProcessor:
         finally:
              self.pending_commands.pop(command_id, None)
 
+    async def process_top_command(
+        self,
+        sid: str,
+        user_id: str,
+        session_id: str,
+        limit: int = 10
+    ) -> Dict[str, Any]:
+        """
+        Process /top command to show leaderboard.
+
+        Args:
+            sid: Socket.IO session ID
+            user_id: User identifier
+            session_id: Game session ID
+            limit: Number of teams to show (1-50)
+        """
+        from app.services.leaderboard_service import leaderboard_service
+
+        command_id = str(uuid.uuid4())
+        logger.info(f"[{command_id}] Processing /top command (client: {sid}, session: {session_id})")
+
+        try:
+            # Clamp limit to 1-50
+            limit = max(1, min(limit, 50))
+
+            # Get leaderboard
+            rankings = await leaderboard_service.get_leaderboard(session_id, limit)
+            my_rank = await leaderboard_service.get_my_rank(session_id, user_id)
+
+            # Format response message
+            lines = ["🏆 **Leaderboard** 🏆\n"]
+            for entry in rankings:
+                medal = "🥇" if entry.rank == 1 else "🥈" if entry.rank == 2 else "🥉" if entry.rank == 3 else "  "
+                lines.append(
+                    f"{medal} #{entry.rank}. {entry.team_name} - "
+                    f"${entry.total_pnl:,.2f} ({entry.team_size} players)"
+                )
+
+            if my_rank:
+                lines.append(f"\n**Your Team:** #{my_rank.rank} - ${my_rank.total_pnl:,.2f}")
+
+            message = "\n".join(lines)
+
+            logger.info(f"[{command_id}] /top command completed: {len(rankings)} teams returned")
+
+            return success_response({
+                'command_id': command_id,
+                'type': 'leaderboard',
+                'session_id': session_id,
+                'rankings': [r.dict() for r in rankings],
+                'my_rank': my_rank.dict() if my_rank else None,
+                'message': message
+            })
+
+        except Exception as e:
+            logger.error(f"[{command_id}] /top command failed: {e}")
+            return error_response(ErrorCode.INTERNAL_ERROR, f"/top command failed: {str(e)}")
+
     def get_pending_commands(self) -> Dict[str, Dict[str, Any]]:
         """Get all pending commands (for debugging)"""
         return self.pending_commands.copy()
