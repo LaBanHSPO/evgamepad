@@ -1,0 +1,62 @@
+[
+    {
+        "login": 12345678,
+        "password": "YourDemoPassword1",
+        "server": "YourBroker-Demo",
+        "expiry_date": "2025-06-30"
+    },
+    {
+        "login": 12345679,
+        "password": "YourDemoPassword2",
+        "server": "YourBroker-Demo",
+        "expiry_date": "2025-06-30"
+    },
+    {
+        "login": 12345680,
+        "password": "YourDemoPassword3",
+        "server": "YourBroker-Demo",
+        "expiry_date": "2025-06-30"
+    },
+    {
+        "login": 12345681,
+        "password": "YourDemoPassword4",
+        "server": "YourBroker-Demo",
+        "expiry_date": "2025-06-30"
+    },
+    {
+        "login": 12345682,
+        "password": "YourDemoPassword5",
+        "server": "YourBroker-Demo",
+        "expiry_date": "2025-06-30"
+    },
+    {
+        "login": 12345683,
+        "password": "YourDemoPassword6",
+        "server": "YourBroker-Demo",
+        "expiry_date": "2025-06-30"
+    },
+    {
+        "login": 12345684,
+        "password": "YourDemoPassword7",
+        "server": "YourBroker-Demo",
+        "expiry_date": "2025-06-30"
+    },
+    {
+        "login": 12345685,
+        "password": "YourDemoPassword8",
+        "server": "YourBroker-Demo",
+        "expiry_date": "2025-06-30"
+    },
+    {
+        "login": 12345686,
+        "password": "YourDemoPassword9",
+        "server": "YourBroker-Demo",
+        "expiry_date": "2025-06-30"
+    },
+    {
+        "login": 12345687,
+        "password": "YourDemoPassword10",
+        "server": "YourBroker-Demo",
+        "expiry_date": "2025-06-30"
+    }
+]

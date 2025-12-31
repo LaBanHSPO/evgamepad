@@ -1,9 +1,10 @@
 # Phase 02: MT5 Integration Service
 
 **Priority:** P1 (CRITICAL - Core differentiator)
-**Status:** Pending
-**Effort:** 35 hours (2 weeks)
-**Dependencies:** Phase 1 (Leaderboard), 10 pre-provisioned MT5 demo accounts
+**Status:** IMPLEMENTATION COMPLETE - CRITICAL ISSUES BLOCKING DEPLOYMENT
+**Effort:** 35 hours (2 weeks) - 30h completed, 3h fixes needed
+**Dependencies:** Phase 1 (Leaderboard) ✅, 10 pre-provisioned MT5 demo accounts ⚠️
+**Code Review:** [2025-12-31 08:30] - 3 CRITICAL issues found, deployment blocked
 
 ## Context Links
 
@@ -1021,11 +1022,37 @@ async def test_full_trading_flow(mt5_service, test_user):
 - **Account Isolation:** Each user gets dedicated account
 - **Order Validation:** Validate volume, symbol before MT5 call
 
+## Known Issues (Code Review 2025-12-31)
+
+### 🔴 CRITICAL - Deployment Blockers
+1. **CRITICAL-01:** MT5_ENCRYPTION_KEY not configured - accounts unrecoverable on restart
+   - **Fix:** Generate key and add to `.env` (2 min)
+   - **Impact:** Account pool permanently unusable if service restarts
+
+2. **CRITICAL-02:** MT5 terminal shutdown missing - resource leak
+   - **Fix:** Add `mt5.shutdown()` to health check finally block (5 min)
+   - **Impact:** Service crashes after 4-6 hours due to connection accumulation
+
+3. **CRITICAL-03:** Account pool leak on exception during session creation
+   - **Fix:** Add try/finally with guaranteed release (10 min)
+   - **Impact:** Pool exhausts after 10 allocation failures
+
+### 🟠 HIGH - Pre-Production Fixes
+4. **HIGH-01:** Position sync inefficient user lookup (subquery per position)
+5. **HIGH-02:** Missing session membership validation in order execution
+6. **HIGH-03:** Health check interval conflicts with position sync logins
+
+**Total Fix Time:** ~3 hours
+**Review Report:** `/plans/251231-0023-multiplayer-mvp/reports/code-review-phase-02-251231-0830.md`
+
 ## Next Steps
 
-1. **Phase 3:** Game Sessions & Teams (uses MT5 service for trading)
-2. **Operations:** Monitor account pool usage, renewal alerts
-3. **Optimization:** Connection pooling for MT5 login calls
+1. **IMMEDIATE:** Fix 3 critical issues (2-3 hours)
+2. **REQUIRED:** Configure MT5_ENCRYPTION_KEY and provision 10 demo accounts
+3. **TESTING:** Integration tests with real MT5 connection
+4. **THEN:** Phase 3 - Game Sessions & Teams
+5. **Operations:** Monitor account pool usage, renewal alerts
+6. **Optimization:** Connection pooling for MT5 login calls
 
 ## Resolved Decisions
 

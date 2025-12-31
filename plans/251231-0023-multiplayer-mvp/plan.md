@@ -53,7 +53,7 @@ External Integration
 | # | Phase | Status | Effort | Link |
 |---|-------|--------|--------|------|
 | 1 | Leaderboard Infrastructure | Done | 40h | [phase-01](./phase-01-leaderboard-infrastructure.md) |
-| 2 | MT5 Integration Service | Pending | 35h | [phase-02-mt5-integration-service.md) |
+| 2 | MT5 Integration Service | Done | 35h | [phase-02](./phase-02-mt5-integration-service.md) |
 | 3 | Game Sessions & Teams | Pending | 30h | [phase-03-game-sessions-teams.md) |
 
 ## Dependencies

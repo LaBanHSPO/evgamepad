@@ -49,4 +49,8 @@ class Config:
     POSTGRES_USER: str = os.getenv('POSTGRES_USER', 'postgres')
     POSTGRES_PASSWORD: str = os.getenv('POSTGRES_PASSWORD', '')
 
+    # MT5 Account Pool Encryption (Phase 02 - MT5 Integration Service)
+    # CRITICAL: Set this in .env before deployment! Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    MT5_ENCRYPTION_KEY: str = os.getenv('MT5_ENCRYPTION_KEY', '')  # Fernet key for password encryption
+
 config = Config()

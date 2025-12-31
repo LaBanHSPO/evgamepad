@@ -25,3 +25,6 @@ twelvedata==1.2.14
 
 # PostgreSQL Async Driver (Phase 01 - Leaderboard Infrastructure)
 asyncpg==0.29.0
+
+# Password Encryption (Phase 02 - MT5 Integration Service)
+cryptography==42.0.5
