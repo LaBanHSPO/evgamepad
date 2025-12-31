@@ -101,6 +101,38 @@ export const IndicatorOverlayChart: React.FC<IndicatorOverlayChartProps> = ({
     if (!socket) return;
 
     setLoading(true);
+
+    const handleTechnicalResult = (data: TechnicalResultData) => {
+      if (data.success && data.data) {
+        // Transform technical data into chart format
+        const technicalData = data.data;
+
+        // Extract OHLCV data if available
+        // For this demo, we'll create mock data based on the technical indicators
+        // In production, you'd fetch actual OHLCV data from MT5
+        const mockOHLCV = generateMockOHLCV(technicalData);
+        setChartData(mockOHLCV);
+
+        // Extract support/resistance if available
+        if (technicalData.support_resistance) {
+          setSupportResistance({
+            support: technicalData.support_resistance.support || [],
+            resistance: technicalData.support_resistance.resistance || []
+          });
+        }
+
+        setLoading(false);
+      } else {
+        setLoading(false);
+        console.error('Failed to fetch technical data:', data);
+      }
+    };
+
+    const handleError = (error: { message: string }) => {
+      console.error('Socket.IO error:', error);
+      setLoading(false);
+    };
+
     socket.emit('advisor:technical_summary', {
       symbol,
       timeframe,
@@ -108,34 +140,13 @@ export const IndicatorOverlayChart: React.FC<IndicatorOverlayChartProps> = ({
     });
 
     socket.on('advisor:technical_result', handleTechnicalResult);
+    socket.on('advisor:error', handleError);
 
     return () => {
       socket.off('advisor:technical_result', handleTechnicalResult);
+      socket.off('advisor:error', handleError);
     };
   }, [socket, symbol, timeframe]);
-
-  const handleTechnicalResult = (data: TechnicalResultData) => {
-    if (data.success && data.data) {
-      // Transform technical data into chart format
-      const technicalData = data.data;
-
-      // Extract OHLCV data if available
-      // For this demo, we'll create mock data based on the technical indicators
-      // In production, you'd fetch actual OHLCV data from MT5
-      const mockOHLCV = generateMockOHLCV(technicalData);
-      setChartData(mockOHLCV);
-
-      // Extract support/resistance if available
-      if (technicalData.support_resistance) {
-        setSupportResistance({
-          support: technicalData.support_resistance.support || [],
-          resistance: technicalData.support_resistance.resistance || []
-        });
-      }
-
-      setLoading(false);
-    }
-  };
 
   // Generate mock OHLCV data based on technical indicators
   const generateMockOHLCV = (technicalData: TechnicalData): OHLCVDataPoint[] => {

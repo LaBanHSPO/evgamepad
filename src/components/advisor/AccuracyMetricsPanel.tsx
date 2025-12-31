@@ -51,9 +51,23 @@ export const AccuracyMetricsPanel: React.FC<AccuracyMetricsPanelProps> = ({
     });
 
     const handleAccuracyResult = (data: { success: boolean; data?: { report: AccuracyMetrics }; message?: string }) => {
-      if (data.success && data.data) {
-        setMetrics(data.data.report);
-        setError(null);
+      if (data.success && data.data && data.data.report) {
+        // Validate report structure
+        const report = data.data.report;
+        if (
+          typeof report.total_trades === 'number' &&
+          typeof report.wins === 'number' &&
+          typeof report.losses === 'number' &&
+          typeof report.win_rate_pct === 'number' &&
+          typeof report.avg_pnl_pct === 'number' &&
+          typeof report.profit_factor === 'number'
+        ) {
+          setMetrics(report);
+          setError(null);
+        } else {
+          setError('Invalid accuracy metrics format');
+          console.error('Invalid report structure:', report);
+        }
       } else {
         setError(data.message || 'Failed to fetch accuracy metrics');
       }

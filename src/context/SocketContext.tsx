@@ -17,13 +17,16 @@ export const SocketProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
   useEffect(() => {
     const newSocket = io(SOCKET_URL, {
       transports: ['websocket'],
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: 10,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 10000,
+      randomizationFactor: 0.5,
     });
 
     setSocket(newSocket);
@@ -32,11 +35,32 @@ export const SocketProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       console.log('Socket connected');
       setIsConnected(true);
       setLastError(null);
+      setReconnectAttempt(0);
     });
 
-    newSocket.on('disconnect', () => {
-      console.log('Socket disconnected');
+    newSocket.on('disconnect', (reason) => {
+      console.log('Socket disconnected:', reason);
       setIsConnected(false);
+
+      // Auto-reconnect for client-side disconnects
+      if (reason === 'io client disconnect') {
+        newSocket.connect();
+      }
+    });
+
+    newSocket.on('reconnect_attempt', (attemptNumber) => {
+      console.log(`Reconnection attempt ${attemptNumber}`);
+      setReconnectAttempt(attemptNumber);
+    });
+
+    newSocket.on('reconnect_failed', () => {
+      console.error('All reconnection attempts failed');
+      setLastError('Failed to reconnect after maximum attempts');
+    });
+
+    newSocket.on('reconnect', (attemptNumber) => {
+      console.log(`Reconnected after ${attemptNumber} attempts`);
+      setReconnectAttempt(0);
     });
 
     newSocket.on('connect_error', (err) => {
@@ -45,10 +69,12 @@ export const SocketProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setLastError(err.message);
     });
 
-    newSocket.on('error', (data: any) => {
+    newSocket.on('error', (data: unknown) => {
         console.error('Socket operational error:', data);
         // If data is an object with message, extract it, otherwise stringify
-        const msg = data?.message || (typeof data === 'string' ? data : JSON.stringify(data));
+        const msg = (data && typeof data === 'object' && 'message' in data)
+          ? (data as { message: string }).message
+          : (typeof data === 'string' ? data : JSON.stringify(data));
         setLastError(msg);
     });
 

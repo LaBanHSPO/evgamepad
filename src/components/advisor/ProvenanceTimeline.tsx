@@ -23,6 +23,15 @@ interface ProvenanceTimelineProps {
  * Displays data source freshness and provenance information
  */
 export const ProvenanceTimeline: React.FC<ProvenanceTimelineProps> = ({ provenance }) => {
+  // Validate provenance data
+  if (!provenance || typeof provenance.total_data_points !== 'number') {
+    return (
+      <div className="bg-danger-red/10 border border-danger-red/30 rounded p-3">
+        <div className="text-xs text-danger-red">Invalid provenance data</div>
+      </div>
+    );
+  }
+
   const formatAge = (seconds: number): string => {
     if (seconds < 60) return `${Math.floor(seconds)}s ago`;
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;

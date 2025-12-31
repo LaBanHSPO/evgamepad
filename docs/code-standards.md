@@ -711,8 +711,37 @@ except Exception as e:
     ), to=sid)
 ```
 
-### Frontend Error Pattern
+### Frontend Error Boundary Pattern (Phase 5.4)
 
+**ErrorBoundary Component Usage:**
+```typescript
+import { ErrorBoundary, withErrorBoundary } from '@/components/ErrorBoundary';
+
+// Wrap single component
+<ErrorBoundary>
+  <IndicatorOverlayChart symbol="XAUUSD" timeframe="H1" />
+</ErrorBoundary>
+
+// Wrap with custom fallback
+<ErrorBoundary
+  fallback={<CustomErrorUI />}
+  onError={(error, errorInfo) => console.error(error)}
+>
+  <AccuracyMetricsPanel {...props} />
+</ErrorBoundary>
+
+// Higher-order component
+const SafeComponent = withErrorBoundary(MyComponent, <CustomFallback />);
+```
+
+**Error Boundary Responsibilities:**
+- Catches rendering errors from child components
+- Prevents cascade failures (rest of app continues)
+- Displays user-friendly error UI with "Try Again" option
+- Logs errors to console (development mode includes stack trace)
+- Optional error callback for reporting services
+
+**Component Error Pattern:**
 ```typescript
 const { result, error, loading, analyze } = usePortfolioAnalysis();
 
@@ -729,6 +758,27 @@ if (!result) {
 }
 
 return <AIRiskAdvisoryPanel {...result.data} />;
+```
+
+**Type Guard Validation (Phase 5.4 - NEW):**
+```typescript
+// In components receiving Socket.IO data
+function isValidTechnicalData(data: unknown): data is TechnicalResultData {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'symbol' in data &&
+    'timeframe' in data &&
+    typeof (data as any).symbol === 'string'
+  );
+}
+
+// Usage
+if (isValidTechnicalData(responseData)) {
+  setData(responseData);
+} else {
+  setError('Invalid data format');
+}
 ```
 
 ---
@@ -906,5 +956,100 @@ Before submitting a PR:
 
 ---
 
-**Last Updated:** 2025-12-30
+## Socket.IO Connection Management (Phase 5.4)
+
+### Cleanup Guidelines
+
+**Memory Leak Prevention:**
+- Always unsubscribe from Socket.IO events on component unmount
+- Remove event listeners before closing connections
+- Clean up timers and intervals
+
+**Hook Cleanup Pattern:**
+```typescript
+export const useSocketIO = () => {
+  const socketRef = useRef<Socket | null>(null);
+
+  useEffect(() => {
+    socketRef.current = io(SOCKET_URL);
+
+    // Setup listeners
+    socketRef.current.on('event:data', handleData);
+    socketRef.current.on('event:error', handleError);
+
+    // CRITICAL: Cleanup on unmount
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.off('event:data', handleData);
+        socketRef.current.off('event:error', handleError);
+        socketRef.current.disconnect();
+      }
+    };
+  }, []);
+
+  return socketRef.current;
+};
+```
+
+**Component Cleanup Pattern:**
+```typescript
+export const MyComponent: React.FC = () => {
+  const [isLoading, setIsLoading] = useState(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    const handleResponse = (data: unknown) => {
+      if (isMountedRef.current) {  // Only update if mounted
+        setIsLoading(false);
+      }
+    };
+
+    socket.on('event:response', handleResponse);
+
+    return () => {
+      isMountedRef.current = false;
+      socket.off('event:response', handleResponse);
+    };
+  }, []);
+
+  return <div>...</div>;
+};
+```
+
+### Reconnection Configuration (Phase 5.4)
+
+**Exponential Backoff Parameters:**
+```typescript
+io(URL, {
+  reconnection: true,
+  reconnectionAttempts: 10,          // Max 10 attempts
+  reconnectionDelay: 1000,            // Start at 1s
+  reconnectionDelayMax: 10000,        // Max 10s
+  randomizationFactor: 0.5,           // ±50% jitter
+});
+
+// Timeline: 1s → 1.5s → 2.25s → 3.38s → 5.06s → 7.59s → 10s (capped)
+```
+
+**Error Handling:**
+```typescript
+socket.on('disconnect', (reason) => {
+  if (reason === 'io client disconnect') {
+    // User manually disconnected, don't auto-reconnect
+    return;
+  }
+  // Server disconnect or network error - will auto-reconnect
+});
+
+socket.on('reconnect_failed', () => {
+  console.error('All reconnection attempts exhausted');
+  // Show UI notification to user
+});
+```
+
+---
+
+**Last Updated:** 2025-12-31 (Phase 5.4)
 **Maintained By:** Backend & Frontend Teams

@@ -1,9 +1,9 @@
 # EV GamePad - Codebase Summary
 
 **Generated:** 2025-12-31
-**Version:** Phase 5.3 (Visual Indicator Dashboard)
-**Total Files:** 178 (added 4 frontend components for Phase 5.3)
-**Total Tokens:** ~435K (repomix: ~145K tokens from 112 files)
+**Version:** Phase 5.4 (Integration & Testing)
+**Total Files:** 179 (added ErrorBoundary component + Phase 5.4 fixes)
+**Total Tokens:** ~440K (repomix: ~150K tokens from 115 files)
 
 ---
 
@@ -247,6 +247,21 @@ EV GamePad is a real-time AI trading advisor backend built with Python (FastAPI/
     4. ProvenanceTimeline (data sources freshness)
   - Socket.IO event: `advisor:explain_recommendation` - request explanation
   - Socket.IO event: `advisor:explanation_result` - receive CoT + provenance data
+
+**Error Boundary Component (Phase 5.4 - NEW):**
+- `src/components/ErrorBoundary.tsx` - React error boundary for crash prevention
+  - Class component implementation (required for error boundaries)
+  - Catches rendering errors from child components
+  - Prevents cascade failures across UI
+  - Features:
+    - User-friendly fallback UI with "Try Again" button
+    - Optional error callback for custom error reporting
+    - Development mode: Shows full error stack trace + component stack
+    - Production mode: Shows generic error message
+  - Higher-order component wrapper: `withErrorBoundary(Component, fallback?, onError?)`
+  - Usage: Wrap critical components to isolate failures
+  - Styled with danger colors (AlertTriangle icon, red text)
+  - No TypeScript 'any' types (fully typed)
   - State management:
     - `cotData` - chain-of-thought reasoning data
     - `provenanceData` - data source freshness info
@@ -259,11 +274,26 @@ EV GamePad is a real-time AI trading advisor backend built with Python (FastAPI/
   - Manages loading/error states
   - Sends `advisor:portfolio_analysis` event to backend
 
+### Context & Connection Management (Phase 5.4)
+
+**Socket Context:**
+- `src/context/SocketContext.tsx` - Global Socket.IO connection provider
+  - Singleton connection instance
+  - Reconnection logic with exponential backoff
+    - Start: 1s delay
+    - Max: 10s delay with 50% jitter
+    - Attempts: 10 maximum
+  - Connection state: `isConnected`, `lastError`
+  - Graceful degradation: Works without connected state
+  - Auto-reconnect on server-side disconnects
+  - Manual control: Respects user-initiated disconnects
+
 ### State Management
 
 - **React Hooks:** `useState`, `useCallback` for local state
-- **Socket.IO Integration:** Direct event emission/listening
+- **Socket.IO Integration:** Event-driven via context provider
 - **Type Safety:** Full TypeScript interfaces for requests/responses
+- **Memory Management:** Proper cleanup with useEffect return functions
 
 ---
 
