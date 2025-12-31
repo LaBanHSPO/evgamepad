@@ -5,7 +5,7 @@ Uses pandas-ta for candlestick patterns, custom logic for chart patterns.
 import logging
 from typing import Dict, Any, List, Optional, Tuple
 import pandas as pd
-import pandas_ta as ta
+import pandas_ta_classic as ta
 import numpy as np
 
 from app.advisor.swing_utils import find_swing_points
