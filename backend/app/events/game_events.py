@@ -109,6 +109,85 @@ async def broadcast_leaderboard_update(session_id: str, team_id: str, new_pnl: D
     except Exception as e:
         logger.error(f"Error broadcasting leaderboard update: {e}")
 
+
+async def broadcast_session_start(session_id: str):
+    """
+    Notify all players session has started (Phase 03).
+    Called when 4+ players join session.
+    """
+    try:
+        await sio.emit("session:started", {
+            "session_id": session_id,
+            "message": "Game started! Trading is now active."
+        }, room=f"session:{session_id}")
+
+        logger.info(f"Broadcasted session start for {session_id}")
+
+    except Exception as e:
+        logger.error(f"Error broadcasting session start: {e}")
+
+
+@sio.on("session:info")
+async def handle_session_info(sid, data):
+    """
+    Get session information (Phase 03).
+
+    Request:
+    {
+        "session_name": "MyGameSession"
+    }
+
+    Response:
+    {
+        "session": {...},
+        "teams": [...],
+        "player_count": 10
+    }
+    """
+    try:
+        from app.services.game_service import game_service
+
+        session_name = data.get("session_name")
+
+        if not session_name:
+            await sio.emit("error", {
+                "message": "Missing session_name"
+            }, room=sid)
+            return
+
+        # Get session details
+        session = await game_service.get_session_by_name(session_name)
+
+        if not session:
+            await sio.emit("error", {
+                "message": "Session not found"
+            }, room=sid)
+            return
+
+        # Get teams
+        teams = await postgres_client.fetch(
+            "SELECT * FROM teams WHERE session_id = $1",
+            session.session_id
+        )
+
+        # Get player count
+        player_count = await postgres_client.fetchval("""
+            SELECT COUNT(DISTINCT tm.user_id)
+            FROM team_members tm
+            JOIN teams t ON tm.team_id = t.team_id
+            WHERE t.session_id = $1
+        """, session.session_id)
+
+        await sio.emit("session:info_result", {
+            "session": session.dict(),
+            "teams": [dict(t) for t in teams],
+            "player_count": player_count
+        }, room=sid)
+
+    except Exception as e:
+        logger.error(f"Error handling session:info: {e}")
+        await sio.emit("error", {"message": str(e)}, room=sid)
+
 # ============= GAME SESSION MANAGEMENT (Phase 02) =============
 
 @sio.on("game:create_session")

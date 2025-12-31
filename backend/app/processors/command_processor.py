@@ -371,6 +371,178 @@ class CommandProcessor:
             logger.error(f"[{command_id}] /top command failed: {e}")
             return error_response(ErrorCode.INTERNAL_ERROR, f"/top command failed: {str(e)}")
 
+    async def process_create_server(
+        self,
+        sid: str,
+        user_id: str,
+        args: str
+    ) -> Dict[str, Any]:
+        """
+        Process /csv <ServerName> command to create game session.
+
+        Args:
+            sid: Socket.IO session ID
+            user_id: User creating the session
+            args: Command arguments (server name)
+
+        Returns:
+            Success response with session details or error
+        """
+        from app.services.game_service import game_service
+
+        command_id = str(uuid.uuid4())
+        logger.info(
+            f"[{command_id}] Processing /csv command (client: {sid}, "
+            f"user: {user_id})"
+        )
+
+        if not args or len(args.strip()) == 0:
+            return error_response(
+                ErrorCode.VALIDATION_ERROR,
+                "Usage: /csv <ServerName>"
+            )
+
+        server_name = args.strip()
+
+        try:
+            session = await game_service.create_session(server_name, user_id)
+
+            return success_response({
+                'command_id': command_id,
+                'type': 'session_created',
+                'session': session.dict(),
+                'message': (
+                    f"✅ Server '{server_name}' created! "
+                    f"Share with friends: /jsv {server_name}"
+                )
+            })
+
+        except Exception as e:
+            logger.error(f"[{command_id}] /csv command failed: {e}")
+            return error_response(ErrorCode.INTERNAL_ERROR, str(e))
+
+    async def process_join_server(
+        self,
+        sid: str,
+        user_id: str,
+        args: str
+    ) -> Dict[str, Any]:
+        """
+        Process /jsv <ServerName> command to join game session.
+
+        Args:
+            sid: Socket.IO session ID
+            user_id: User joining the session
+            args: Command arguments (server name)
+
+        Returns:
+            Success response with session and team details or error
+        """
+        from app.services.game_service import game_service
+
+        command_id = str(uuid.uuid4())
+        logger.info(
+            f"[{command_id}] Processing /jsv command (client: {sid}, "
+            f"user: {user_id})"
+        )
+
+        if not args or len(args.strip()) == 0:
+            return error_response(
+                ErrorCode.VALIDATION_ERROR,
+                "Usage: /jsv <ServerName>"
+            )
+
+        server_name = args.strip()
+        # Use user_id as username for now (can be replaced with profile lookup)
+        username = user_id[:8]
+
+        try:
+            result = await game_service.join_session(
+                server_name, user_id, username
+            )
+
+            message = (
+                f"✅ Joined '{server_name}'! "
+                f"Team: {result['team'].team_name}"
+            )
+            if not result['account_allocated']:
+                message += " (Warning: Account pool exhausted)"
+
+            return success_response({
+                'command_id': command_id,
+                'type': 'session_joined',
+                'session': result['session'].dict(),
+                'team': result['team'].dict(),
+                'account_allocated': result['account_allocated'],
+                'message': message
+            })
+
+        except Exception as e:
+            logger.error(f"[{command_id}] /jsv command failed: {e}")
+            return error_response(ErrorCode.INTERNAL_ERROR, str(e))
+
+    async def process_close_server(
+        self,
+        sid: str,
+        user_id: str
+    ) -> Dict[str, Any]:
+        """
+        Process /close command - Owner closes session.
+
+        Args:
+            sid: Socket.IO session ID
+            user_id: User requesting close
+
+        Returns:
+            Success response or error
+        """
+        from app.services.game_service import game_service
+
+        command_id = str(uuid.uuid4())
+        logger.info(
+            f"[{command_id}] Processing /close command (client: {sid}, "
+            f"user: {user_id})"
+        )
+
+        try:
+            # Get user's current session
+            session = await postgres_client.fetchrow("""
+                SELECT gs.* FROM game_sessions gs
+                JOIN teams t ON gs.session_id = t.session_id
+                JOIN team_members tm ON t.team_id = tm.team_id
+                WHERE tm.user_id = $1 AND gs.status != 'completed'
+            """, user_id)
+
+            if not session:
+                return error_response(
+                    ErrorCode.VALIDATION_ERROR,
+                    "You are not in an active session"
+                )
+
+            # Check if user is the creator
+            if session["creator_id"] != user_id:
+                return error_response(
+                    ErrorCode.VALIDATION_ERROR,
+                    "Only the session creator can close the server"
+                )
+
+            # Close session
+            await game_service.complete_session(str(session["session_id"]))
+
+            return success_response({
+                'command_id': command_id,
+                'type': 'session_closed',
+                'session_id': str(session["session_id"]),
+                'message': (
+                    f"✅ Server '{session['name']}' closed! "
+                    f"Final rankings saved."
+                )
+            })
+
+        except Exception as e:
+            logger.error(f"[{command_id}] /close command failed: {e}")
+            return error_response(ErrorCode.INTERNAL_ERROR, str(e))
+
     def get_pending_commands(self) -> Dict[str, Dict[str, Any]]:
         """Get all pending commands (for debugging)"""
         return self.pending_commands.copy()

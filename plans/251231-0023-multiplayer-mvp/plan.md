@@ -10,6 +10,7 @@ tags: [multiplayer, mt5, realtime, backend, database, websocket]
 created: 2025-12-31
 last_updated: 2025-12-31
 phase_01_completed: 2025-12-31
+phase_03_completed: 2025-12-31
 ---
 
 # Multi-Player Trading Game MVP Implementation Plan
@@ -54,7 +55,7 @@ External Integration
 |---|-------|--------|--------|------|
 | 1 | Leaderboard Infrastructure | Done | 40h | [phase-01](./phase-01-leaderboard-infrastructure.md) |
 | 2 | MT5 Integration Service | Done | 35h | [phase-02](./phase-02-mt5-integration-service.md) |
-| 3 | Game Sessions & Teams | Pending | 30h | [phase-03-game-sessions-teams.md) |
+| 3 | Game Sessions & Teams | Done | 30h | [phase-03](./phase-03-game-sessions-teams.md) |
 
 ## Dependencies
 

@@ -1,7 +1,8 @@
 # Documentation Index - EV GamePad Project
 
 **Last Updated:** 2025-12-31
-**Current Phase:** Phase 01 - Leaderboard Infrastructure (COMPLETE)
+**Current Phase:** Phase 03 - Game Sessions & Teams (IN PROGRESS)
+**Previous Phases:** Phase 01 (Leaderboard) COMPLETE, Phase 02 (MT5 Integration) COMPLETE
 
 ---
 
@@ -10,30 +11,46 @@
 ### Core Architecture & Design
 
 #### `system-architecture.md` ⭐ PRIMARY
-**2,800 lines | Complete Phase 01 coverage**
+**1,146 lines | Phase 01-03 complete coverage (UPDATED Phase 03)**
 
-Comprehensive documentation of leaderboard infrastructure and system design:
+Comprehensive documentation of system architecture and game implementation:
+
+**Phase 01 (Leaderboard):**
 - High-level system architecture diagram
-- Data model layer (GameSession, Team, Position, Leaderboard)
 - Three-tier caching architecture (detailed)
 - LeaderboardService orchestration
-- Socket.IO event handlers
+- Socket.IO leaderboard event handlers
 - Database integration & PostgreSQL setup
 - Background refresh task (30s cycle)
 - P&L update lifecycle (end-to-end)
-- Configuration & startup sequence
-- Performance SLOs & scaling limits
-- Error handling & resilience patterns
-- Monitoring & observability
 
-**Best For:** Understanding overall system design, three-tier caching, performance targets
+**Phase 03 (Game Sessions & Teams - NEW):**
+- Game session lifecycle (waiting → active → completed)
+- Round-robin team assignment algorithm
+- MT5 account allocation on join
+- Auto-start trigger at 4+ players
+- Session creator controls (/csv, /jsv, /close)
+- Database schema (game_sessions, teams, team_members, user_account_allocations)
+- Socket.IO game session event handlers
+- Service architecture (GameService, TeamService)
+- Data flow: Session join end-to-end
+- Performance characteristics & scalability
+- Error handling & account leak prevention
+- Testing strategy (Phase 03)
+
+**Best For:** Understanding overall system design, architecture decisions, implementation patterns
 
 **Key Sections:**
 - §2: Three-Tier Caching Architecture (visual + detailed explanation)
 - §3: LeaderboardService Code (core business logic)
-- §4: Socket.IO Events (all handlers)
+- §4: Socket.IO Events (leaderboard handlers)
 - §6: Integration with Technical Analysis (advisor coexistence)
 - §8: Data Flow: Complete P&L Update Lifecycle
+- §10: Phase 03 Game Sessions & Team Management (NEW - 411 lines)
+  - §10.1-10.5: Key features (lifecycle, assignment, allocation, auto-start, controls)
+  - §10.6: Database schema for Phase 03
+  - §10.7: Socket.IO events (/csv, /jsv, auto-start)
+  - §10.8-10.12: Service architecture, data flows, performance, error handling, testing
 
 ---
 
@@ -328,17 +345,21 @@ Complete analysis of Phase 01 documentation work:
 
 ## Related Code Files
 
-### Implementation Files (Phase 01)
+### Implementation Files (Phase 01-03)
 
-| Component | Files | Docs Reference |
-|-----------|-------|-----------------|
-| PostgreSQL Client | `app/database/postgres_client.py` | system-architecture.md §5 |
-| Redis Client | `app/database/redis_client.py` | system-architecture.md §2.1 |
-| Game Models | `app/models/game_models.py` | codebase-summary.md §1.1 |
-| Leaderboard Service | `app/services/leaderboard_service.py` | system-architecture.md §3 |
-| Game Events | `app/events/game_events.py` | system-architecture.md §4 |
-| Refresh Task | `app/tasks/leaderboard_refresh_task.py` | system-architecture.md §6 |
-| Migrations | `migrations/001-005_*.sql` | codebase-summary.md §2 |
+| Component | Files | Docs Reference | Phase |
+|-----------|-------|-----------------|-------|
+| PostgreSQL Client | `app/database/postgres_client.py` | system-architecture.md §5 | 01 |
+| Redis Client | `app/database/redis_client.py` | system-architecture.md §2.1 | 01 |
+| Game Models | `app/models/game_models.py` | codebase-summary.md §1.1 | 01 |
+| Leaderboard Service | `app/services/leaderboard_service.py` | system-architecture.md §3 | 01 |
+| Game Events | `app/events/game_events.py` | system-architecture.md §4, §10.7 | 01, 03 |
+| Refresh Task | `app/tasks/leaderboard_refresh_task.py` | system-architecture.md §6 | 01 |
+| Migrations | `migrations/001-005_*.sql` | codebase-summary.md §2 | 01 |
+| **GameService** | **`app/services/game_service.py`** | **system-architecture.md §10.8, codebase-summary.md §3** | **03** |
+| **TeamService** | **`app/services/team_service.py`** | **system-architecture.md §10.8, codebase-summary.md §3** | **03** |
+| **MT5 Integration** | **`app/services/mt5_integration_service.py`** | **system-architecture.md §10.8** | **02-03** |
+| **Test Suite** | **`backend/tests/test_game_session_flow.py`** | **system-architecture.md §10.12, PHASE_03_SUMMARY.md** | **03** |
 
 ---
 

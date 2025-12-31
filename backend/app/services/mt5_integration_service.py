@@ -82,7 +82,11 @@ class MT5IntegrationService:
 
     # ============= ACCOUNT POOL MANAGEMENT =============
 
-    async def allocate_account(self, user_id: str) -> Optional[MT5AccountAllocation]:
+    async def allocate_account(
+        self,
+        user_id: str,
+        session_id: Optional[str] = None
+    ) -> Optional[MT5AccountAllocation]:
         """
         Allocate an available MT5 account to user.
 
@@ -90,6 +94,7 @@ class MT5IntegrationService:
 
         Args:
             user_id: User requesting account
+            session_id: Optional game session ID (Phase 03)
 
         Returns:
             MT5AccountAllocation with decrypted credentials, or None if pool exhausted
