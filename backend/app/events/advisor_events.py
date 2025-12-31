@@ -26,6 +26,7 @@ def validate_timeframe(timeframe: str) -> bool:
 # Global instances (injected from main.py)
 advisor_processor = None
 redis_client = None
+accuracy_tracker = None  # Phase 5.2: Accuracy tracking
 
 @sio.event
 async def advisor_technical_summary(sid: str, data: Dict[str, Any]):
@@ -486,4 +487,253 @@ async def advisor_explain_recommendation(sid: str, data: Dict[str, Any]):
         await sio.emit('advisor:error', error_response(
             ErrorCode.INTERNAL_ERROR,
             f"Explanation generation failed: {str(e)}"
+        ), to=sid)
+
+@sio.event
+async def advisor_record_outcome(sid: str, data: Dict[str, Any]):
+    """
+    Record trade outcome for accuracy tracking.
+
+    Request: {
+        "symbol": "XAUUSD",
+        "timeframe": "H1",
+        "signal": "BUY",
+        "confidence": 85,
+        "entry_price": 2634.50,
+        "exit_price": 2640.20,
+        "stop_loss": 2625.50,  # optional
+        "take_profit": 2645.00,  # optional
+        "exit_reason": "take_profit",
+        "entry_at": "2025-12-30T10:00:00Z",  # optional
+        "exit_at": "2025-12-30T14:30:00Z"  # optional
+    }
+
+    Response: {
+        "success": true,
+        "outcome_id": "uuid",
+        "message": "Trade outcome recorded successfully"
+    }
+    """
+    logger.info(f"Record outcome request from {sid}: {data.get('symbol')} {data.get('signal')}")
+
+    try:
+        # Validate required fields
+        required_fields = ["symbol", "signal", "entry_price", "exit_price"]
+        for field in required_fields:
+            if field not in data:
+                await sio.emit('advisor:error', error_response(
+                    ErrorCode.VALIDATION_ERROR,
+                    f"Missing required field: {field}"
+                ), to=sid)
+                return
+
+        # Validate symbol
+        symbol = data.get('symbol', '').upper()
+        if not validate_symbol(symbol):
+            await sio.emit('advisor:error', error_response(
+                ErrorCode.VALIDATION_ERROR,
+                "Invalid symbol format (alphanumeric, max 20 chars)"
+            ), to=sid)
+            return
+
+        # Validate signal
+        signal = data.get('signal', '').upper()
+        if signal not in ['BUY', 'SELL', 'HOLD']:
+            await sio.emit('advisor:error', error_response(
+                ErrorCode.VALIDATION_ERROR,
+                "Invalid signal (must be BUY, SELL, or HOLD)"
+            ), to=sid)
+            return
+
+        # Validate timeframe if provided
+        timeframe = data.get('timeframe', 'H1').upper()
+        if not validate_timeframe(timeframe):
+            await sio.emit('advisor:error', error_response(
+                ErrorCode.VALIDATION_ERROR,
+                f"Invalid timeframe '{timeframe}'. Allowed: {', '.join(MT5_TIMEFRAMES.keys())}"
+            ), to=sid)
+            return
+
+        # Validate numeric fields
+        try:
+            entry_price = float(data["entry_price"])
+            exit_price = float(data["exit_price"])
+            confidence = float(data.get("confidence", 50))
+            stop_loss = float(data["stop_loss"]) if "stop_loss" in data else None
+            take_profit = float(data["take_profit"]) if "take_profit" in data else None
+        except (ValueError, TypeError):
+            await sio.emit('advisor:error', error_response(
+                ErrorCode.VALIDATION_ERROR,
+                "Price and confidence fields must be valid numbers"
+            ), to=sid)
+            return
+
+        # Parse timestamps
+        entry_at = None
+        exit_at = None
+        if "entry_at" in data:
+            try:
+                entry_at = datetime.fromisoformat(data["entry_at"].replace('Z', '+00:00'))
+            except (ValueError, AttributeError):
+                await sio.emit('advisor:error', error_response(
+                    ErrorCode.VALIDATION_ERROR,
+                    "Invalid entry_at timestamp format (use ISO 8601)"
+                ), to=sid)
+                return
+
+        if "exit_at" in data:
+            try:
+                exit_at = datetime.fromisoformat(data["exit_at"].replace('Z', '+00:00'))
+            except (ValueError, AttributeError):
+                await sio.emit('advisor:error', error_response(
+                    ErrorCode.VALIDATION_ERROR,
+                    "Invalid exit_at timestamp format (use ISO 8601)"
+                ), to=sid)
+                return
+
+        # Record outcome
+        if accuracy_tracker:
+            outcome_id = await accuracy_tracker.record_outcome(
+                symbol=symbol,
+                timeframe=timeframe,
+                signal=signal,
+                confidence=confidence,
+                entry_price=entry_price,
+                exit_price=exit_price,
+                stop_loss=stop_loss,
+                take_profit=take_profit,
+                exit_reason=data.get("exit_reason", "manual"),
+                entry_at=entry_at,
+                exit_at=exit_at
+            )
+
+            await sio.emit('advisor:outcome_recorded', {
+                "success": True,
+                "outcome_id": str(outcome_id),
+                "message": "Trade outcome recorded successfully"
+            }, to=sid)
+        else:
+            await sio.emit('advisor:error', error_response(
+                ErrorCode.INTERNAL_ERROR,
+                "Accuracy tracker not initialized"
+            ), to=sid)
+
+    except Exception as e:
+        logger.exception(f"Record outcome failed for {sid}: {e}")
+        await sio.emit('advisor:error', error_response(
+            ErrorCode.INTERNAL_ERROR,
+            f"Failed to record outcome: {str(e)}"
+        ), to=sid)
+
+@sio.event
+async def advisor_accuracy_report(sid: str, data: Dict[str, Any]):
+    """
+    Get accuracy performance report.
+
+    Request: {
+        "symbol": "XAUUSD",  # optional
+        "timeframe": "H1",   # optional
+        "signal": "BUY",     # optional
+        "days": 30           # optional, default 30
+    }
+
+    Response: {
+        "success": true,
+        "data": {
+            "report": {
+                "period_days": 30,
+                "symbol": "XAUUSD",
+                "timeframe": "H1",
+                "signal": "BUY",
+                "total_trades": 50,
+                "wins": 35,
+                "losses": 15,
+                "break_evens": 0,
+                "win_rate_pct": 70.0,
+                "avg_pnl_pct": 2.5,
+                "profit_factor": 2.33,
+                "recommendation": "Excellent - High confidence trades"
+            },
+            "best_performing": [...]
+        }
+    }
+    """
+    logger.info(f"Accuracy report request from {sid}: {data}")
+
+    try:
+        # Validate symbol if provided
+        symbol = data.get('symbol')
+        if symbol:
+            symbol = symbol.upper()
+            if not validate_symbol(symbol):
+                await sio.emit('advisor:error', error_response(
+                    ErrorCode.VALIDATION_ERROR,
+                    "Invalid symbol format (alphanumeric, max 20 chars)"
+                ), to=sid)
+                return
+
+        # Validate timeframe if provided
+        timeframe = data.get('timeframe')
+        if timeframe:
+            timeframe = timeframe.upper()
+            if not validate_timeframe(timeframe):
+                await sio.emit('advisor:error', error_response(
+                    ErrorCode.VALIDATION_ERROR,
+                    f"Invalid timeframe '{timeframe}'. Allowed: {', '.join(MT5_TIMEFRAMES.keys())}"
+                ), to=sid)
+                return
+
+        # Validate signal if provided
+        signal = data.get('signal')
+        if signal:
+            signal = signal.upper()
+            if signal not in ['BUY', 'SELL', 'HOLD']:
+                await sio.emit('advisor:error', error_response(
+                    ErrorCode.VALIDATION_ERROR,
+                    "Invalid signal (must be BUY, SELL, or HOLD)"
+                ), to=sid)
+                return
+
+        # Validate days
+        days = int(data.get('days', 30))
+        if days < 1 or days > 365:
+            await sio.emit('advisor:error', error_response(
+                ErrorCode.VALIDATION_ERROR,
+                "Days must be between 1 and 365"
+            ), to=sid)
+            return
+
+        # Generate report
+        if accuracy_tracker:
+            report = await accuracy_tracker.get_accuracy_report(
+                symbol=symbol,
+                timeframe=timeframe,
+                signal=signal,
+                days=days
+            )
+
+            # Get best-performing configs
+            best_configs = await accuracy_tracker.get_best_performing_configs(
+                min_trades=10,
+                days=days
+            )
+
+            await sio.emit('advisor:accuracy_result', {
+                "success": True,
+                "data": {
+                    "report": report,
+                    "best_performing": best_configs
+                }
+            }, to=sid)
+        else:
+            await sio.emit('advisor:error', error_response(
+                ErrorCode.INTERNAL_ERROR,
+                "Accuracy tracker not initialized"
+            ), to=sid)
+
+    except Exception as e:
+        logger.exception(f"Accuracy report failed for {sid}: {e}")
+        await sio.emit('advisor:error', error_response(
+            ErrorCode.INTERNAL_ERROR,
+            f"Failed to generate accuracy report: {str(e)}"
         ), to=sid)

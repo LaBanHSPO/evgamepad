@@ -11,7 +11,11 @@ from app.reconnection_manager import ReconnectionManager
 from app.processors.command_processor import CommandProcessor
 from app.tasks.cleanup_task import CleanupTask
 from app.database.redis_client import RedisClient
+from app.database.pool_manager import DatabasePoolManager
 from app.processors.advisor_processor import AdvisorProcessor
+from app.advisor.accuracy_tracker import AccuracyTracker
+from app.advisor.mt5_history_parser import MT5HistoryParser
+import asyncio
 
 # Initialize logging
 logger = setup_logging(config.DEBUG)
@@ -24,6 +28,10 @@ command_processor = None
 cleanup_task = None
 redis_client = None
 advisor_processor = None
+db_pool_manager = None  # Phase 5.2: PostgreSQL pool
+accuracy_tracker = None  # Phase 5.2: Accuracy tracking
+mt5_history_parser = None  # Phase 5.2: MT5 auto-detection
+mt5_sync_task = None  # Phase 5.2: Background sync task
 
 from app.sio import sio
 
@@ -37,7 +45,7 @@ async def lifespan(app: FastAPI):
     Application lifespan management
     Initialize and cleanup resources
     """
-    global mt5_manager, session_manager, reconnection_manager, command_processor, cleanup_task, redis_client, advisor_processor
+    global mt5_manager, session_manager, reconnection_manager, command_processor, cleanup_task, redis_client, advisor_processor, db_pool_manager, accuracy_tracker, mt5_history_parser, mt5_sync_task
 
     logger.info("Starting MT5 Socket.IO Trading Server...")
 
@@ -78,6 +86,51 @@ async def lifespan(app: FastAPI):
     # Initialize Advisor Processor
     advisor_processor = AdvisorProcessor(mt5_manager, redis_client)
 
+    # Initialize PostgreSQL pool (Phase 5.2)
+    if config.ENABLE_ACCURACY_TRACKING:
+        db_pool_manager = DatabasePoolManager(
+            host=config.DB_HOST,
+            port=config.DB_PORT,
+            database=config.DB_NAME,
+            user=config.DB_USER,
+            password=config.DB_PASSWORD,
+            min_size=config.DB_MIN_POOL_SIZE,
+            max_size=config.DB_MAX_POOL_SIZE
+        )
+        if await db_pool_manager.connect():
+            logger.info("PostgreSQL pool initialized for accuracy tracking")
+
+            # Initialize accuracy tracker
+            accuracy_tracker = AccuracyTracker(db_pool_manager.get_pool())
+            logger.info("Accuracy tracker initialized")
+
+            # Initialize MT5 history parser
+            mt5_history_parser = MT5HistoryParser(
+                mt5_manager,
+                accuracy_tracker,
+                db_pool_manager.get_pool()
+            )
+            logger.info("MT5 history parser initialized")
+
+            # Start background MT5 sync task
+            async def mt5_sync_loop():
+                """Background task to sync MT5 closed positions every 5 minutes."""
+                while True:
+                    try:
+                        await asyncio.sleep(300)  # 5 minutes
+                        result = await mt5_history_parser.sync_closed_positions(days_back=7)
+                        logger.info(f"MT5 sync completed: {result}")
+                    except Exception as e:
+                        logger.exception(f"MT5 sync failed: {e}")
+
+            mt5_sync_task = asyncio.create_task(mt5_sync_loop())
+            logger.info("MT5 sync background task started (5-minute interval)")
+        else:
+            logger.warning("PostgreSQL connection failed - accuracy tracking disabled")
+            db_pool_manager = None
+    else:
+        logger.info("Accuracy tracking disabled (ENABLE_ACCURACY_TRACKING=false)")
+
     # Start cleanup task
     cleanup_task = CleanupTask(reconnection_manager, interval=60)
     cleanup_task.start()
@@ -91,6 +144,7 @@ async def lifespan(app: FastAPI):
     # Inject into advisor events
     advisor_events.advisor_processor = advisor_processor
     advisor_events.redis_client = redis_client
+    advisor_events.accuracy_tracker = accuracy_tracker  # Phase 5.2
 
     # Store in app state (only mt5_manager is directly used by health check)
     app.state.mt5_manager = mt5_manager
@@ -101,8 +155,20 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down server...")
 
+    # Cancel MT5 sync task (Phase 5.2)
+    if mt5_sync_task:
+        mt5_sync_task.cancel()
+        try:
+            await mt5_sync_task
+        except asyncio.CancelledError:
+            logger.info("MT5 sync task cancelled")
+
     if cleanup_task:
         await cleanup_task.stop()
+
+    # Disconnect PostgreSQL pool (Phase 5.2)
+    if db_pool_manager:
+        await db_pool_manager.disconnect()
 
     if redis_client:
         await redis_client.disconnect()
@@ -125,6 +191,8 @@ async def health_check():
         "status": "healthy" if mt5_manager and mt5_manager.is_connected() else "unhealthy",
         "mt5_connected": mt5_manager.is_connected() if mt5_manager else False,
         "redis_connected": await redis_client.is_connected() if redis_client else False,
+        "db_connected": await db_pool_manager.is_connected() if db_pool_manager else False,  # Phase 5.2
+        "accuracy_tracking_enabled": accuracy_tracker is not None,  # Phase 5.2
         "connected_clients": len(session_manager.sessions) if session_manager else 0,
     }
 

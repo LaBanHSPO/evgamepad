@@ -45,5 +45,15 @@ class Config:
     # Phase 5: Explainability Layer Feature Flags
     ENABLE_EXPLAINABILITY: bool = os.getenv('ENABLE_EXPLAINABILITY', 'false').lower() == 'true'
     ENABLE_PROVENANCE_TRACKING: bool = os.getenv('ENABLE_PROVENANCE_TRACKING', 'false').lower() == 'true'
+    ENABLE_ACCURACY_TRACKING: bool = os.getenv('ENABLE_ACCURACY_TRACKING', 'false').lower() == 'true'
+
+    # PostgreSQL Database (Phase 5.2: Accuracy Tracking)
+    DB_HOST: str = os.getenv('DB_HOST', 'localhost')
+    DB_PORT: int = int(os.getenv('DB_PORT', '5432'))
+    DB_NAME: str = os.getenv('DB_NAME', 'ev_gamepad')
+    DB_USER: str = os.getenv('DB_USER', 'postgres')
+    DB_PASSWORD: str = os.getenv('DB_PASSWORD', '')
+    DB_MIN_POOL_SIZE: int = int(os.getenv('DB_MIN_POOL_SIZE', '2'))
+    DB_MAX_POOL_SIZE: int = int(os.getenv('DB_MAX_POOL_SIZE', '10'))
 
 config = Config()

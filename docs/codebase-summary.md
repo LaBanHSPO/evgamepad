@@ -1,9 +1,9 @@
 # EV GamePad - Codebase Summary
 
-**Generated:** 2025-12-30
-**Version:** Phase 04 (Portfolio Analysis & AI Risk Advisory)
-**Total Files:** 160
-**Total Tokens:** ~298K
+**Generated:** 2025-12-31
+**Version:** Phase 5.3 (Visual Indicator Dashboard)
+**Total Files:** 178 (added 4 frontend components for Phase 5.3)
+**Total Tokens:** ~435K (repomix: ~145K tokens from 112 files)
 
 ---
 
@@ -66,13 +66,78 @@ EV GamePad is a real-time AI trading advisor backend built with Python (FastAPI/
 **Recommendation Engine:**
 - `app/advisor/recommendation_engine.py` - Aggregates technical signals + AI summary
 
-**Portfolio Analysis (NEW):**
+**Portfolio Analysis:**
 - `app/processors/advisor_processor.py` - `process_portfolio_analysis()` method
   - Per-position technical + risk analysis
   - Portfolio health scoring (0-100)
   - LLM-powered capital preservation advice
 
-### 4. API & Events (WebSocket)
+### 4. Explainability Layer (Phase 5.1)
+
+**Data Provenance Tracking:**
+- `app/advisor/data_provenance_tracker.py` - Source tracking for all signals
+  - DataSource enum: MT5, TwelveData, pandas-ta, Claude API, DeepSeek, Redis cache
+  - DataType enum: price, volume, indicator, pattern, llm_summary, risk_metric
+  - ValidationStatus: validated, unvalidated, conflicting, stale
+  - Metadata: fetched_at, cache_hit, confidence (0.0-1.0), raw_value, computed_value
+
+**Chain-of-Thought Engine:**
+- `app/advisor/chain_of_thought_engine.py` - Transparent reasoning breakdown
+  - 5-step analysis: Trend (3pts), Momentum (3pts), Volume (2pts), Pattern (2pts), Risk (2pts)
+  - Point-based scoring: 0-12 total, maps to confidence 0.0-1.0
+  - Recommendation actions: STRONG_BUY, BUY, WEAK_BUY, HOLD, WEAK_SELL, SELL, STRONG_SELL
+  - Output: ReasoningStep list + summary + risks + data gaps
+
+**Explainability Models:**
+- `app/models/explainability_models.py` - Pydantic request/response schemas
+  - ExplainRecommendationRequest
+  - ChainOfThoughtResponse
+  - ExplainRecommendationResponse
+  - ProvenanceMetadata
+
+### 5. Accuracy Tracking System (Phase 5.2 - NEW)
+
+**Core Tracking Module:**
+- `app/advisor/accuracy_tracker.py` - Performance metrics tracking
+  - `AccuracyTracker` class: Record outcomes, generate reports, find best-performing configs
+  - Calculates: win rate, profit factor, Sharpe ratio, avg P/L, best/worst trades
+  - Database integration: PostgreSQL via asyncpg connection pool
+  - Materialized view refresh for fast queries
+  - Support for filtering by symbol, timeframe, signal, user_id
+
+**MT5 Auto-Detection:**
+- `app/advisor/mt5_history_parser.py` - Automatic outcome detection from MT5
+  - `MT5HistoryParser` class: Sync closed positions every 5 minutes
+  - Match deals to recommendations using 3-factor scoring (symbol, price, time)
+  - Determine exit reason: take_profit, stop_loss, manual, unknown
+  - Process and auto-record outcomes without manual input
+  - Matching criteria: symbol exact, price within ±0.1%, time within ±5 minutes
+
+**Database Layer:**
+- `app/database/pool_manager.py` - PostgreSQL connection pool management
+  - Async pool initialization and cleanup
+  - Connection parameters from environment variables
+  - Min/max pool size configuration
+  - Health check integration
+
+**Data Models:**
+- `app/models/accuracy_models.py` - Request/response schemas
+  - RecordOutcomeRequest: Manual outcome submission
+  - AccuracyReportRequest: Query parameters for reports
+  - AccuracyMetrics: Response containing performance stats
+  - BestPerformingConfig: Top-performing symbol/timeframe/signal combinations
+  - OutcomeRecordResponse, AccuracyReportResponse: API responses
+
+**Database Schema:**
+- `app/database/migrations/005_recommendation_outcomes.sql` - PostgreSQL migration
+  - `recommendation_outcomes` table: Stores all trade outcomes
+  - 19 columns: IDs, trade details, prices, outcomes, P/L metrics, timestamps
+  - Materialized view: `recommendation_accuracy` for aggregated metrics
+  - Indexes on: symbol+timeframe, signal+outcome, created_at, user_id
+  - Auto-update trigger for timestamps
+  - Refresh function for materialized view
+
+### 6. API & Events (WebSocket)
 
 **Event Layer:**
 - `app/events/advisor_events.py` - Socket.IO event handlers
@@ -81,7 +146,12 @@ EV GamePad is a real-time AI trading advisor backend built with Python (FastAPI/
   - `advisor:pattern_scan` - Pattern detection
   - `advisor:risk_analysis` - Risk metrics
   - `advisor:recommendation` - AI-powered recommendation
-  - `advisor:portfolio_analysis` - **NEW** Portfolio analysis + AI advisory
+  - `advisor:portfolio_analysis` - Portfolio analysis + AI advisory (Phase 04)
+  - `advisor:explain_recommendation` - Chain-of-thought explanation (Phase 5.1)
+  - `advisor:record_outcome` - Record trade outcome (Phase 5.2)
+  - `advisor:accuracy_report` - Get accuracy metrics report (Phase 5.2)
+  - `advisor:explain_recommendation` - **NEW** Trigger CoT + provenance explanation (Phase 5.3 Frontend)
+  - `advisor:explanation_result` - **NEW** Return CoT reasoning + data freshness info (Phase 5.3 Frontend)
 
 **Data Models:**
 - `PortfolioAnalysisRequest` - User position input + account balance
@@ -100,6 +170,7 @@ EV GamePad is a real-time AI trading advisor backend built with Python (FastAPI/
 - `ai_summary:{hash}` - 300s TTL (semantic cache)
 - `portfolio_advice:{hash}` - 300s TTL (semantic cache)
 - `portfolio_analysis:{hash}` - 300s TTL (semantic cache)
+- `cot:{symbol}:{timeframe}:{score_hash}` - 300s TTL (Phase 5.1 chain-of-thought)
 
 **Cache Hit Logic:**
 - Technical indicators cached by symbol + timeframe
@@ -116,6 +187,71 @@ EV GamePad is a real-time AI trading advisor backend built with Python (FastAPI/
 - `src/components/PositionInputForm.tsx` - Position entry form (symbol, entry, current, size, stop loss)
 - `src/components/AIRiskAdvisoryPanel.tsx` - Portfolio health display + AI advisory results
 - `src/hooks/usePortfolioAnalysis.ts` - Socket.IO event handling + state management
+
+**Explainability Components (Phase 5.1):**
+- `src/components/advisor/ChainOfThoughtViewer.tsx` - 5-step reasoning breakdown with scoring
+
+**New Visual Dashboard Components (Phase 5.3):**
+- `src/components/advisor/IndicatorOverlayChart.tsx` - TradingView-style chart with toggleable technical indicators
+  - Uses Recharts for responsive visualization (alternative to lightweight-charts)
+  - Displays: candlestick price, EMA 21/50, SMA 200, Bollinger Bands, Volume
+  - Support/Resistance reference lines (colored dashed lines)
+  - Real-time updates via Socket.IO `advisor:technical_result` event
+  - Mock OHLCV generation from technical data (production: use MT5 feeds)
+  - Controls: Indicator toggle buttons with color indicators
+  - Responsive sizing with chart metadata display
+
+- `src/components/advisor/ChainOfThoughtViewer.tsx` - Step-by-step reasoning display
+  - 5 reasoning steps with category icons (trend, momentum, volume, pattern, risk)
+  - Point-based scoring visualization (color-coded: green ≥80%, orange ≥50%, red <50%)
+  - Confidence percentage per step
+  - Recommendation color-coding (green=BUY, red=SELL, orange=HOLD)
+  - Risk identification section with shield alert icon
+  - Data gaps section for transparency
+  - Indicators used per step (optional field)
+
+- `src/components/advisor/AccuracyMetricsPanel.tsx` - Historical performance statistics
+  - 30-day (configurable) period analysis
+  - 4-metric grid display:
+    - Total trades count
+    - Win rate % with W/L breakdown (color-coded: green ≥70%, orange ≥60%, red <60%)
+    - Avg P/L % with trending icons (green=up, red=down)
+    - Profit factor with quality assessment (Excellent ≥2.0, Good ≥1.5, Fair ≥1.0, Poor <1.0)
+  - Optional additional stats: Avg Win, Avg Loss, Avg Hold Hours
+  - Recommendation assessment box with primary color background
+  - Error/no-data states with appropriate messaging
+  - Socket.IO integration: `advisor:accuracy_report` event
+
+- `src/components/advisor/ProvenanceTimeline.tsx` - Data source freshness tracker
+  - Source icon mapping (MT5=Database, TwelveData=Cloud, pandas-ta=Activity, LLM=Bot, Redis=RefreshCw)
+  - Cache hit rate progress bar (green color when >0%)
+  - Per-source freshness indicators:
+    - Data point count
+    - Cache hits ratio
+    - Average confidence %
+    - Age of oldest data (color-coded: green <1min, orange <5min, yellow <1hr, red >1hr)
+  - Overall data freshness status with emoji indicators:
+    - ✅ All data fresh (< 1min)
+    - ✅ Freshness acceptable (< 5min)
+    - ⚠️ May be stale (< 1hr)
+    - ❌ Requires refresh (> 1hr)
+
+**Integration with CapitalCompanionPanel:**
+- `src/components/CapitalCompanionPanel.tsx` - Updated with explainability tab/view
+  - Three view modes: 'chat' | 'pinned' | 'explainability'
+  - Explainability toggle button ("Show/Hide Details")
+  - Explainability section displays in sequence:
+    1. IndicatorOverlayChart (chart with toggles)
+    2. ChainOfThoughtViewer (reasoning breakdown)
+    3. AccuracyMetricsPanel (performance stats)
+    4. ProvenanceTimeline (data sources freshness)
+  - Socket.IO event: `advisor:explain_recommendation` - request explanation
+  - Socket.IO event: `advisor:explanation_result` - receive CoT + provenance data
+  - State management:
+    - `cotData` - chain-of-thought reasoning data
+    - `provenanceData` - data source freshness info
+    - `showExplainability` - UI toggle state
+    - `currentSymbol`, `currentTimeframe` - context for chart
 
 **Integration:**
 - `src/pages/Portfolio.tsx` - Main portfolio analysis page
@@ -230,12 +366,20 @@ backend/
 │
 src/                                # React Frontend
 ├── components/
-│   ├── PositionInputForm.tsx        # Position input + account balance form (NEW)
-│   └── AIRiskAdvisoryPanel.tsx      # Portfolio health + AI advisory display (NEW)
+│   ├── advisor/                     # Advisor-specific components (Phase 5.1+)
+│   │   ├── IndicatorOverlayChart.tsx      # Technical indicator visualization (Phase 5.3)
+│   │   ├── ChainOfThoughtViewer.tsx       # 5-step reasoning display (Phase 5.1)
+│   │   ├── AccuracyMetricsPanel.tsx       # Performance statistics (Phase 5.3)
+│   │   └── ProvenanceTimeline.tsx         # Data freshness tracker (Phase 5.3)
+│   ├── PositionInputForm.tsx        # Position input + account balance form (Phase 04)
+│   ├── AIRiskAdvisoryPanel.tsx      # Portfolio health + AI advisory display (Phase 04)
+│   └── CapitalCompanionPanel.tsx    # Main advisor panel with explainability (updated Phase 5.3)
 ├── hooks/
-│   └── usePortfolioAnalysis.ts      # Socket.IO integration + state management (NEW)
+│   └── usePortfolioAnalysis.ts      # Socket.IO integration + state management (Phase 04)
+├── context/
+│   └── SocketContext.tsx            # Socket.IO client provider + hooks
 ├── pages/
-│   └── Portfolio.tsx                # Portfolio analysis page (updated)
+│   └── Portfolio.tsx                # Portfolio analysis page
 └── types/                           # TypeScript interfaces
 
 docs/
@@ -295,8 +439,10 @@ docs/
 - `react` - UI framework
 - `typescript` - Type safety
 - `socket.io-client` - WebSocket client
-- `lucide-react` - Icons
+- `lucide-react` - Icons (used in Phase 5.3 components)
+- `recharts` - Chart visualization (Phase 5.3: IndicatorOverlayChart)
 - `tailwindcss` - Styling
+- `sonner` - Toast notifications
 
 ---
 
@@ -457,6 +603,6 @@ class ErrorCode(Enum):
 
 ---
 
-**Last Updated:** 2025-12-30
-**Maintainer:** Backend Team
-**Status:** Phase 04 (Portfolio Analysis Complete)
+**Last Updated:** 2025-12-31
+**Maintainer:** Backend + Frontend Team
+**Status:** Phase 5.3 (Visual Indicator Dashboard - Frontend Complete)

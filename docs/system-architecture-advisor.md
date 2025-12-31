@@ -2,69 +2,93 @@
 
 ## Module Context
 
-The AI Trading Advisor is an integrated module within EV GamePad backend providing real-time technical analysis and AI-powered recommendations. Phase 01-03 provide technical analysis, pattern recognition, and risk assessment. Phase 04 adds Claude/DeepSeek LLM integration for AI-generated summaries and personalized recommendations with semantic caching.
+The AI Trading Advisor is an integrated module within EV GamePad backend providing real-time technical analysis, AI-powered recommendations, and performance accuracy tracking. Phase 01-03 provide technical analysis, pattern recognition, and risk assessment. Phase 04 adds Claude/DeepSeek LLM integration for AI-generated summaries and personalized recommendations with semantic caching. Phase 5.1 adds explainability with chain-of-thought reasoning and data provenance tracking. Phase 5.2 adds accuracy tracking with PostgreSQL integration and MT5 auto-detection of trade outcomes.
 
 ---
 
 ## High-Level Architecture
 
 ```
-┌───────────────────────────────────────────────────────────────────────────┐
-│                         EV GamePad Backend                                 │
-│                                                                             │
-│  ┌──────────────────┐               ┌─────────────────────────────────┐   │
-│  │   Socket.IO      │               │ LLM Services (Phase 04)         │   │
-│  │   Server         │               │ - Claude 3.7 Sonnet (primary)   │   │
-│  │  (Port 8000)     │               │ - DeepSeek (fallback)           │   │
-│  └────────┬─────────┘               └─────────────────────────────────┘   │
-│           │                                   ↑                           │
-│           │ WebSocket Events                  │ API Calls                 │
-│           ↓                                   │                           │
-│  ┌──────────────────────────────────────────────────────┐                 │
-│  │  Advisor Events Layer                                │                 │
-│  │  (app/events/advisor_events.py)                      │                 │
-│  │  - technical_summary, multi_timeframe, pattern_scan  │                 │
-│  │  - recommendation, portfolio_analysis ⬅ Phase 04 NEW│                 │
-│  │  - risk_analysis                                     │                 │
-│  └────────┬─────────────────────────────────────────────┘                 │
-│           │                                                              │
-│           ↓                                                              │
-│  ┌──────────────────────────────────────────────────────┐                 │
-│  │  Advisor Processor (app/processors/advisor_processor) │                 │
-│  │  - process_technical_summary, process_multi_timeframe │                 │
-│  │  - process_pattern_scan, process_risk_analysis        │                 │
-│  │  - process_recommendation ⬅ Phase 04 NEW             │                 │
-│  └─┬────────────────────────────────────────────────────┘                 │
-│   │                                                                        │
-│   ├─ Technical Analysis Chain (Phase 1-3)                                 │
-│   │  ├─ Data Fetcher → Technical Analyzer                                │
-│   │  ├─ Pattern Detector → Support/Resistance                             │
-│   │  └─ Risk Analyzer                                                     │
-│   │                                                                        │
-│   └─ AI Recommendations Chain (Phase 04) ⬅ NEW                           │
-│      ├─ AI Summarizer (app/advisor/ai_summarizer.py)                    │
-│      │  ├─ Claude API integration                                         │
-│      │  ├─ DeepSeek fallback                                              │
-│      │  └─ Semantic caching via Redis                                     │
-│      └─ Recommendation Engine (app/advisor/recommendation_engine.py)     │
-│         ├─ Aggregate technical signals                                    │
-│         ├─ Aggregate pattern signals                                      │
-│         ├─ Calculate overall signal + targets                             │
-│         └─ Format final recommendation                                    │
-│                                                                            │
-│  ┌────────────────────────────────────────────────────────┐              │
-│  │  Redis Cache (app/database/redis_client.py)            │              │
-│  │  - Indicators cache (60s TTL)                          │              │
-│  │  - Pattern cache (300s TTL)                            │              │
-│  │  - AI Summary cache (300s TTL) ⬅ Phase 04 NEW         │              │
-│  └─────────────────────────────────────────────────────────┘              │
-│                      ↓ ↑                                                   │
-│  ┌─────────────────────────────────────────────────────────┐              │
-│  │  MT5 Terminal (Market Data)  │  Redis Server            │              │
-│  │  (Windows/WSL)               │  (localhost:6379)        │              │
-│  └─────────────────────────────────────────────────────────┘              │
-│                                                                            │
-└────────────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                         EV GamePad Backend                                     │
+│                                                                                 │
+│  ┌──────────────────┐               ┌─────────────────────────────────────┐   │
+│  │   Socket.IO      │               │ LLM Services (Phase 04)             │   │
+│  │   Server         │               │ - Claude 3.7 Sonnet (primary)       │   │
+│  │  (Port 8000)     │               │ - DeepSeek (fallback)               │   │
+│  └────────┬─────────┘               └─────────────────────────────────────┘   │
+│           │                                   ↑                               │
+│           │ WebSocket Events                  │ API Calls                     │
+│           ↓                                   │                               │
+│  ┌──────────────────────────────────────────────────────────┐                 │
+│  │  Advisor Events Layer                                    │                 │
+│  │  (app/events/advisor_events.py)                          │                 │
+│  │  - technical_summary, multi_timeframe, pattern_scan      │                 │
+│  │  - recommendation, portfolio_analysis (Phase 04)         │                 │
+│  │  - explain_recommendation (Phase 5.1)                    │                 │
+│  │  - record_outcome, accuracy_report (Phase 5.2 NEW)       │                 │
+│  │  - risk_analysis                                         │                 │
+│  └────────┬─────────────────────────────────────────────────┘                 │
+│           │                                                                  │
+│           ↓                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐                 │
+│  │  Advisor Processor (app/processors/advisor_processor)     │                 │
+│  │  - process_technical_summary, process_multi_timeframe     │                 │
+│  │  - process_pattern_scan, process_risk_analysis            │                 │
+│  │  - process_recommendation (Phase 04)                      │                 │
+│  │  - process_portfolio_analysis (Phase 04)                  │                 │
+│  └─┬────────────────────────────────────────────────────────┘                 │
+│   │                                                                            │
+│   ├─ Technical Analysis Chain (Phase 1-3)                                     │
+│   │  ├─ Data Fetcher → Technical Analyzer                                    │
+│   │  ├─ Pattern Detector → Support/Resistance                                 │
+│   │  └─ Risk Analyzer                                                         │
+│   │                                                                            │
+│   ├─ AI Recommendations Chain (Phase 04)                                      │
+│   │  ├─ AI Summarizer (app/advisor/ai_summarizer.py)                        │
+│   │  │  ├─ Claude API integration                                             │
+│   │  │  ├─ DeepSeek fallback                                                  │
+│   │  │  └─ Semantic caching via Redis                                         │
+│   │  └─ Recommendation Engine (app/advisor/recommendation_engine.py)         │
+│   │     ├─ Aggregate technical signals                                        │
+│   │     ├─ Aggregate pattern signals                                          │
+│   │     ├─ Calculate overall signal + targets                                 │
+│   │     └─ Format final recommendation                                        │
+│   │                                                                            │
+│   ├─ Explainability Chain (Phase 5.1)                                         │
+│   │  ├─ Data Provenance Tracker (app/advisor/data_provenance_tracker.py)    │
+│   │  │  └─ Track source, confidence, validation status of all signals        │
+│   │  └─ Chain-of-Thought Engine (app/advisor/chain_of_thought_engine.py)    │
+│   │     └─ 5-step reasoning: Trend, Momentum, Volume, Pattern, Risk         │
+│   │                                                                            │
+│   └─ Accuracy Tracking Chain (Phase 5.2 NEW)                                 │
+│      ├─ AccuracyTracker (app/advisor/accuracy_tracker.py)                   │
+│      │  ├─ Manual outcome recording                                           │
+│      │  ├─ Metrics calculation (win rate, profit factor, Sharpe)             │
+│      │  └─ Configuration analysis                                             │
+│      └─ MT5HistoryParser (app/advisor/mt5_history_parser.py)                │
+│         ├─ Auto-detect closed positions (5-min sync)                         │
+│         ├─ Match deals to recommendations (3-factor scoring)                  │
+│         └─ Classify exit reasons                                              │
+│                                                                                │
+│  ┌────────────────────────────────────────────────────────────┐              │
+│  │  Redis Cache (app/database/redis_client.py)                │              │
+│  │  - Indicators cache (60s TTL)                              │              │
+│  │  - Pattern cache (300s TTL)                                │              │
+│  │  - AI Summary cache (300s TTL) (Phase 04)                  │              │
+│  │  - CoT Results cache (300s TTL) (Phase 5.1)                │              │
+│  └─────────────────────────────────────────────────────────────┘              │
+│                      ↓ ↑                                                       │
+│  ┌──────────────────────────────────────────────────────────────────────────┐ │
+│  │  PostgreSQL Database (Phase 5.2 NEW)  │  MT5 Terminal (Windows/WSL)    │ │
+│  │  (localhost:5432)                      │  (Market Data)                 │ │
+│  │  ├─ recommendation_outcomes table      │                               │ │
+│  │  ├─ recommendation_accuracy view       │                               │ │
+│  │  └─ Connection pool (2-10 connections)│ Redis Server                  │ │
+│  │                                        │ (localhost:6379)              │ │
+│  └──────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                │
+└────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -921,3 +945,728 @@ Makes full LLM request (no cost savings but still functional)
    - Subscription model (subscribe to symbol/TF)
    - Efficient delta updates
 
+---
+
+## Phase 05.1: Chain-of-Thought Reasoning Engine & Explainability Layer
+
+### Overview
+
+Phase 5.1 adds transparent, step-by-step reasoning to recommendations through chain-of-thought (CoT) breakdown and data provenance tracking. Every signal and recommendation now traces back to its source with confidence levels and validation status.
+
+### Architecture
+
+**New Components:**
+
+```
+Recommendation Request
+        ↓
+ExplainabilityLayer
+  ├─ DataProvenanceTracker (tracks all data sources)
+  ├─ ChainOfThoughtEngine (5-step breakdown)
+  └─ ExplainabilityModels (Pydantic schemas)
+        ↓
+Response {
+  chain_of_thought: {
+    steps: [Trend, Momentum, Volume, Pattern, Risk],
+    total_score: 0-12,
+    recommendation: STRONG_BUY|BUY|WEAK_BUY|HOLD|WEAK_SELL|SELL|STRONG_SELL
+  },
+  provenance_map: {
+    "rsi_14": { source, fetched_at, confidence, ... },
+    "sma_50": { source, fetched_at, confidence, ... }
+  }
+}
+```
+
+### 1. Data Provenance Tracker (`app/advisor/data_provenance_tracker.py`)
+
+**Responsibilities:**
+- Tag every data point with metadata
+- Track source (MT5, TwelveData, pandas-ta, LLM, cache)
+- Timestamp and age calculation
+- Validation status (validated, unvalidated, conflicting, stale)
+- Confidence levels (0.0-1.0)
+
+**Data Structure:**
+
+```python
+@dataclass
+class DataProvenance:
+    source: DataSource  # Enum: MT5, TWELVEDATA, PANDAS_TA, CLAUDE_API, etc
+    data_type: DataType  # Enum: price, volume, indicator, pattern, llm_summary, risk_metric
+    fetched_at: datetime
+    cache_hit: bool
+    confidence: float  # 0.0-1.0
+    validation_status: ValidationStatus  # validated|unvalidated|conflicting|stale
+    raw_value: Any
+    computed_value: Optional[Any]
+```
+
+**Example Usage:**
+
+```python
+tracker = ProvenanceTracker()
+tracker.record(
+    key="rsi_14",
+    source=DataSource.PANDAS_TA,
+    data_type=DataType.INDICATOR,
+    raw_value=45.2,
+    confidence=0.98,
+    validation_status=ValidationStatus.VALIDATED,
+    cache_hit=False
+)
+provenance = tracker.get("rsi_14")  # Returns DataProvenance
+```
+
+### 2. Chain-of-Thought Engine (`app/advisor/chain_of_thought_engine.py`)
+
+**Scoring System (0-12 points total):**
+
+| Step | Category | Max Points | Indicators |
+|------|----------|-----------|-----------|
+| 1 | Trend Analysis | 3 | EMA21, EMA50, SMA200, ADX |
+| 2 | Momentum Signals | 3 | RSI, MACD, Stochastic |
+| 3 | Volume Validation | 2 | OBV, Volume Profile |
+| 4 | Pattern Confirmation | 2 | Candlestick + Chart patterns |
+| 5 | Risk Assessment | 2 | ATR, Support/Resistance |
+
+**Confidence Mapping:**
+
+```
+Points  Confidence  Signal Strength  Action
+10-12   0.80-1.00   STRONG          Trade with confidence
+7-9     0.60-0.79   MODERATE        Trade with caution
+4-6     0.40-0.59   WEAK            Trade only on confirmation
+0-3     0.00-0.39   NO TRADE        Wait for setup
+```
+
+**Recommendation Action Enum:**
+
+```python
+STRONG_BUY, BUY, WEAK_BUY, HOLD, WEAK_SELL, SELL, STRONG_SELL
+```
+
+**Output Structure:**
+
+```python
+@dataclass
+class ChainOfThoughtResult:
+    steps: List[ReasoningStep]
+    total_score: int  # 0-12
+    max_score: int  # 12
+    confidence: float  # Mapped from score
+    recommendation: RecommendationAction
+    reasoning_summary: str
+    risks_identified: List[str]
+    data_gaps: List[str]
+```
+
+**Example Reasoning Steps:**
+
+```json
+{
+  "step_number": 1,
+  "category": "trend",
+  "description": "EMA21 > EMA50 > SMA200, price above all EMAs = strong uptrend",
+  "indicators_used": ["EMA21", "EMA50", "SMA200", "ADX"],
+  "points_awarded": 3,
+  "max_points": 3,
+  "confidence": 0.95,
+  "provenance_keys": ["ema21", "ema50", "sma200", "adx"]
+}
+```
+
+### 3. Explainability Models (`app/models/explainability_models.py`)
+
+**Pydantic Request/Response Models:**
+
+```python
+class ExplainRecommendationRequest(BaseModel):
+    symbol: str
+    timeframe: str = "H1"
+    recommendation_id: Optional[str] = None
+
+class ChainOfThoughtResponse(BaseModel):
+    steps: List[ReasoningStepResponse]
+    total_score: int
+    max_score: int
+    confidence: float
+    confidence_pct: int
+    recommendation: str  # Action enum value
+    reasoning_summary: str
+    risks_identified: List[str]
+    data_gaps: List[str]
+
+class ExplainRecommendationResponse(BaseModel):
+    symbol: str
+    timeframe: str
+    explainability: ChainOfThoughtResponse
+    provenance: Dict[str, Any]  # Full provenance map
+```
+
+### 4. Integration with RecommendationEngine
+
+The `RecommendationEngine` now calls CoT during signal aggregation:
+
+```python
+def generate_recommendation(self, ...):
+    # ... existing logic ...
+
+    # NEW: Generate chain-of-thought
+    cot_result = self.cot_engine.generate_explanation(
+        technical_analysis=analysis,
+        pattern_data=patterns,
+        provenance_tracker=self.provenance_tracker
+    )
+
+    return {
+        "recommendation": {...},
+        "explainability": cot_result.to_dict(),
+        "provenance": self.provenance_tracker.to_dict()
+    }
+```
+
+### 5. Feature Flags
+
+New configuration in `app/config.py`:
+
+```python
+ENABLE_EXPLAINABILITY = os.getenv("ENABLE_EXPLAINABILITY", "false").lower() == "true"
+```
+
+Default: **false** (opt-in for performance)
+
+Can be enabled via:
+- Environment variable: `ENABLE_EXPLAINABILITY=true`
+- Or in `.env.example`
+
+### 6. Socket.IO Event: `advisor:explain_recommendation`
+
+**Request:**
+
+```json
+{
+  "symbol": "XAUUSD",
+  "timeframe": "H1",
+  "recommendation_id": "rec_12345"  // Optional: specific recommendation to explain
+}
+```
+
+**Response:**
+
+```json
+{
+  "status": "success",
+  "data": {
+    "symbol": "XAUUSD",
+    "timeframe": "H1",
+    "explainability": {
+      "steps": [
+        {
+          "step_number": 1,
+          "category": "trend",
+          "description": "...",
+          "indicators_used": [...],
+          "points_awarded": 3,
+          "max_points": 3,
+          "confidence": 0.95,
+          "provenance_keys": ["ema21", "ema50"]
+        },
+        // ... more steps
+      ],
+      "total_score": 11,
+      "max_score": 12,
+      "confidence": 0.92,
+      "confidence_pct": 92,
+      "recommendation": "STRONG_BUY",
+      "reasoning_summary": "Strong uptrend with bullish momentum...",
+      "risks_identified": ["Near resistance at 2050"],
+      "data_gaps": []
+    },
+    "provenance": {
+      "ema21": {
+        "source": "pandas-ta calculation",
+        "data_type": "indicator",
+        "fetched_at": "2025-12-31T10:30:45Z",
+        "age_seconds": 12,
+        "cache_hit": true,
+        "confidence": 0.98,
+        "validation_status": "validated",
+        "raw_value": 2043.5,
+        "computed_value": 2043.5
+      },
+      // ... more provenance entries
+    }
+  }
+}
+```
+
+### 7. Performance Characteristics
+
+**With ENABLE_EXPLAINABILITY=false (default):**
+- No performance impact
+- Chain-of-thought not generated
+- Response structure unchanged
+
+**With ENABLE_EXPLAINABILITY=true:**
+- Additional 100-200ms for CoT generation
+- Redis caching: 300s TTL for CoT results
+- Cache key: hash(symbol, timeframe, scores_hash)
+- Cache hit latency: ~50ms
+
+### 8. Caching Strategy
+
+New Redis cache entries:
+
+```
+Key: cot:{symbol}:{timeframe}:{score_hash}
+TTL: 300s (5 minutes)
+Value: Serialized ChainOfThoughtResult
+```
+
+Cache invalidation triggers:
+- TTL expiration
+- Market close (daily reset)
+- New indicator calculation
+
+### 9. Error Handling
+
+**Graceful Degradation:**
+
+If CoT generation fails:
+1. Log warning with error details
+2. Continue without explainability
+3. Return recommendation without chain-of-thought
+4. Client receives partial response
+
+**Validation Errors:**
+
+```python
+if not validate_symbol(symbol):
+    return error_response(VALIDATION_ERROR, "Invalid symbol")
+
+if score > max_score:
+    logger.warning(f"CoT score {score} exceeds max {max_score}, clamping")
+    score = max_score
+```
+
+### 10. Data Flow with Phase 5.1
+
+```
+advisor:recommendation_request
+    ├─ Fetch technical analysis + patterns
+    ├─ Build user profile
+    ├─ Call RecommendationEngine.generate_recommendation()
+    │   ├─ Aggregate signals
+    │   ├─ Call ChainOfThoughtEngine.generate_explanation()
+    │   │   ├─ Track provenance for each indicator
+    │   │   ├─ Calculate 5-step breakdown
+    │   │   ├─ Compute confidence from score
+    │   │   └─ Generate reasoning summary
+    │   └─ Cache CoT result (300s)
+    ├─ Combine recommendation + explainability
+    └─ advisor:recommendation_result {
+         recommendation: {...},
+         explainability: {...},
+         provenance: {...},
+         cached: true/false
+       }
+```
+
+### 11. Testing
+
+**New Test Files:**
+
+- `tests/test_data_provenance_tracker.py` - DataProvenance CRUD
+- `tests/test_chain_of_thought_engine.py` - CoT generation, scoring logic
+
+**Test Coverage:**
+
+- Provenance tracking for all data types
+- Score calculation across all 5 categories
+- Confidence mapping from scores
+- Cache hit/miss behavior
+- Error handling and degradation
+
+### 12. Migration Notes
+
+**Breaking Changes:** None. Explainability is opt-in via feature flag.
+
+**Backward Compatibility:**
+
+- Existing recommendations unchanged when `ENABLE_EXPLAINABILITY=false`
+- Response format extended (no removed fields)
+- Clients can ignore `explainability` field if not needed
+
+**Deployment Checklist:**
+
+1. Add `ENABLE_EXPLAINABILITY` to `.env.example`
+2. Deploy backend code
+3. Test with `ENABLE_EXPLAINABILITY=false` (default)
+4. Enable in staging environment
+5. Monitor performance + cache hit rates
+6. Enable in production (if desired)
+
+---
+
+## 7. Accuracy Tracking System (Phase 5.2)
+
+### Overview
+
+Phase 5.2 introduces automated trade outcome tracking and performance analytics with PostgreSQL integration and MT5 auto-detection.
+
+**Components:**
+1. `AccuracyTracker` - Core accuracy calculation engine
+2. `MT5HistoryParser` - Automatic deal detection and matching
+3. `PoolManager` - PostgreSQL connection pool management
+4. Database schema with materialized views for fast queries
+
+### 7.1 AccuracyTracker (`app/advisor/accuracy_tracker.py`)
+
+**Responsibilities:**
+- Record manual trade outcomes
+- Generate accuracy reports
+- Calculate performance metrics
+- Identify best-performing configurations
+- Refresh materialized views
+
+**Core Methods:**
+
+#### `record_outcome()`
+```python
+async def record_outcome(
+    symbol: str,
+    timeframe: str,
+    signal: str,
+    confidence: float,
+    entry_price: float,
+    exit_price: float,
+    ...
+) -> UUID:
+```
+
+**Flow:**
+1. Calculate P/L based on signal direction
+2. Determine outcome: win/loss/break_even
+3. Insert into recommendation_outcomes table
+4. Refresh materialized view
+5. Return outcome_id
+
+**Calculations:**
+```python
+# For BUY signal
+pnl = exit_price - entry_price
+matched = exit_price > entry_price
+
+# For SELL signal
+pnl = entry_price - exit_price
+matched = exit_price < entry_price
+
+# Outcome classification
+if abs(pnl_pct) < 0.1:
+    outcome = "break_even"
+elif pnl_pct > 0:
+    outcome = "win"
+else:
+    outcome = "loss"
+```
+
+#### `get_accuracy_report()`
+```python
+async def get_accuracy_report(
+    symbol: Optional[str] = None,
+    timeframe: Optional[str] = None,
+    signal: Optional[str] = None,
+    days: int = 30,
+    user_id: Optional[UUID] = None
+) -> Dict[str, Any]:
+```
+
+**Query Pattern:**
+```sql
+SELECT
+    COUNT(*) as total_trades,
+    SUM(CASE WHEN outcome = 'win' THEN 1 ELSE 0 END) as wins,
+    SUM(CASE WHEN outcome = 'loss' THEN 1 ELSE 0 END) as losses,
+    ROUND(wins::NUMERIC / NULLIF(wins + losses, 0) * 100, 1) as win_rate_pct,
+    ROUND(SUM(pnl_pct) FILTER (WHERE outcome = 'win') /
+          NULLIF(SUM(ABS(pnl_pct)) FILTER (WHERE outcome = 'loss'), 0), 2) as profit_factor,
+    -- ... more metrics
+FROM recommendation_outcomes
+WHERE outcome IN ('win', 'loss', 'break_even')
+    AND created_at >= (NOW() - INTERVAL '$days days')
+    -- ... optional filters
+GROUP BY symbol, timeframe, signal
+```
+
+**Performance:**
+- Indexes on (symbol, timeframe), (signal, outcome), (created_at)
+- Materialized view for pre-aggregated results
+- Query latency: 200-500ms (cache miss), <50ms (materialized view hit)
+
+#### `get_best_performing_configs()`
+```python
+async def get_best_performing_configs(
+    min_trades: int = 10,
+    days: int = 30,
+    user_id: Optional[UUID] = None
+) -> List[Dict[str, Any]]:
+```
+
+**Logic:**
+1. Query grouped by symbol, timeframe, signal
+2. Filter by min_trades minimum
+3. Order by win_rate DESC, profit_factor DESC
+4. Limit to top 10 results
+
+**Use Cases:**
+- Identify which symbol/timeframe combos work best
+- Optimize trading focus
+- Avoid over-trading unprofitable configs
+
+### 7.2 MT5HistoryParser (`app/advisor/mt5_history_parser.py`)
+
+**Responsibilities:**
+- Fetch closed positions from MT5 history
+- Match deals to advisor recommendations
+- Classify exit reasons
+- Auto-record outcomes
+
+**Core Methods:**
+
+#### `sync_closed_positions()`
+```python
+async def sync_closed_positions(days_back: int = 7) -> Dict[str, Any]:
+```
+
+**Flow:**
+```
+1. Fetch closed deals from MT5 (last N days)
+2. Fetch recent recommendations from database
+3. Match deals to recommendations (3-factor scoring)
+4. For each match:
+   - Classify exit reason
+   - Call accuracy_tracker.record_outcome()
+5. Return sync statistics
+```
+
+**Background Task:**
+- Runs every 5 minutes
+- Configured in `app/main.py` via `asyncio.create_task()`
+- Graceful error handling with logging
+
+#### `_match_deals_to_recommendations()`
+
+**3-Factor Matching Algorithm:**
+
+```python
+def _calculate_match_score(deal, rec) -> float:
+    score = 0.0
+
+    # Factor 1: Symbol match (40% weight, required)
+    if deal['symbol'] == rec['symbol']:
+        score += 0.4
+    else:
+        return 0.0  # No match without symbol
+
+    # Factor 2: Price match (40% weight)
+    price_diff = abs(deal['entry_price'] - rec['entry_price']) / rec['entry_price']
+    if price_diff <= 0.001:  # Within ±0.1%
+        score += 0.4
+    elif price_diff <= 0.005:  # Within 0.5%
+        score += 0.2
+
+    # Factor 3: Time match (20% weight)
+    time_diff = abs((deal['entry_at'] - rec['created_at']).total_seconds())
+    if time_diff <= 300:  # Within 5 minutes
+        score += 0.2
+    elif time_diff <= 900:  # Within 15 minutes
+        score += 0.1
+
+    return score  # 0.0-1.0
+```
+
+**Matching Threshold:**
+- Minimum 80% confidence (score >= 0.8)
+- Picks best match if multiple candidates
+
+#### `_determine_exit_reason()`
+
+**Logic:**
+```python
+# 1. Check if take_profit hit (price within 0.1% of TP)
+if rec.get('take_profit'):
+    if abs(exit_price - rec['take_profit']) / rec['take_profit'] < 0.001:
+        return "take_profit"
+
+# 2. Check if stop_loss hit (price within 0.1% of SL)
+if rec.get('stop_loss'):
+    if abs(exit_price - rec['stop_loss']) / rec['stop_loss'] < 0.001:
+        return "stop_loss"
+
+# 3. Check comment for manual close indicators
+if "manual" in comment.lower() or "closed" in comment.lower():
+    return "manual"
+
+# 4. Unknown
+return "unknown"
+```
+
+### 7.3 Database Integration
+
+**Schema Overview:**
+```
+recommendation_outcomes (19 columns)
+├─ Identifiers: id, recommendation_id, user_id
+├─ Trade details: symbol, timeframe, signal, confidence
+├─ Prices: entry_price, exit_price, stop_loss, take_profit
+├─ Outcomes: outcome, pnl, pnl_pct, held_duration, matched_prediction
+├─ Exit reason: exit_reason
+├─ Metadata: provenance (JSONB), notes
+└─ Timestamps: created_at, updated_at, entry_at, exit_at
+
+recommendation_accuracy (materialized view)
+├─ Dimensions: symbol, timeframe, signal
+├─ Metrics: total_trades, wins, losses, break_evens
+├─ Performance: win_rate_pct, avg_pnl_pct, profit_factor
+├─ Risk: avg_win_pct, avg_loss_pct
+├─ Duration: avg_hold_hours
+└─ Metadata: last_updated
+```
+
+**Performance Optimization:**
+- Indexes: (symbol, timeframe), (signal, outcome), (created_at DESC), (user_id)
+- Materialized view: Pre-aggregated by symbol/timeframe/signal
+- Connection pool: 2-10 asyncpg connections
+- Query latency targets: <500ms for detailed queries, <50ms for view queries
+
+**Connection Pool:**
+```python
+# pool_manager.py
+async def init_pool():
+    pool = await asyncpg.create_pool(
+        host=DB_HOST,
+        port=DB_PORT,
+        database=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        min_size=DB_MIN_POOL_SIZE,
+        max_size=DB_MAX_POOL_SIZE
+    )
+    return pool
+
+# Usage in AccuracyTracker
+async with self.db.acquire() as conn:
+    row = await conn.fetchrow(query, *params)
+```
+
+### 7.4 Socket.IO Integration
+
+**New Events:**
+```python
+@sio.event
+async def advisor_record_outcome(sid: str, data: Dict[str, Any]):
+    """Record manual trade outcome"""
+    # Validate input
+    # Call accuracy_tracker.record_outcome()
+    # Emit success/error response
+
+@sio.event
+async def advisor_accuracy_report(sid: str, data: Dict[str, Any]):
+    """Get accuracy metrics report"""
+    # Validate filters
+    # Call accuracy_tracker.get_accuracy_report()
+    # Emit report + best_performing_configs
+```
+
+**Event Injection (main.py):**
+```python
+from app.advisor.accuracy_tracker import AccuracyTracker
+
+accuracy_tracker = AccuracyTracker(db_pool)
+advisor_events.accuracy_tracker = accuracy_tracker  # Inject
+```
+
+### 7.5 Configuration & Deployment
+
+**Environment Variables:**
+```bash
+ENABLE_ACCURACY_TRACKING=true
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=ev_gamepad
+DB_USER=postgres
+DB_PASSWORD=your_password
+DB_MIN_POOL_SIZE=2
+DB_MAX_POOL_SIZE=10
+```
+
+**Database Setup:**
+```bash
+# 1. Create database
+psql -U postgres -c "CREATE DATABASE ev_gamepad;"
+
+# 2. Run migration
+psql -U postgres -d ev_gamepad -f backend/app/database/migrations/005_recommendation_outcomes.sql
+
+# 3. Verify
+psql -U postgres -d ev_gamepad -c "\dt recommendation_outcomes"
+psql -U postgres -d ev_gamepad -c "\dv recommendation_accuracy"
+```
+
+**Background Task (main.py):**
+```python
+async def start_background_tasks():
+    """Start 5-minute MT5 sync task"""
+    async def sync_loop():
+        while True:
+            try:
+                await mt5_history_parser.sync_closed_positions()
+            except Exception as e:
+                logger.error(f"MT5 sync error: {e}")
+            await asyncio.sleep(300)  # 5 minutes
+
+    asyncio.create_task(sync_loop())
+```
+
+**Health Check:**
+```bash
+curl http://localhost:8686/health
+
+# Expected response includes:
+{
+  "db_connected": true,
+  "accuracy_tracking_enabled": true,
+  "recent_syncs": 12,
+  "pending_outcomes": 0
+}
+```
+
+### 7.6 Error Handling & Resilience
+
+**Failure Modes:**
+
+| Scenario | Handling |
+|----------|----------|
+| DB connection down | Graceful degradation, queue outcomes in-memory, retry on reconnect |
+| MT5 terminal offline | Skip sync, resume when available |
+| Matching failure | Log and continue, manual investigation possible |
+| View refresh fails | Log error, view refreshed on next successful outcome |
+
+**Logging:**
+```python
+# Success
+logger.info(f"Recorded outcome: {symbol} {timeframe} {signal} -> {outcome} (P/L: {pnl_pct:.2f}%)")
+
+# Sync
+logger.info(f"MT5 sync: {matched}/{total_deals} matched, {new_outcomes} recorded")
+
+# Error
+logger.exception(f"Failed to record outcome for deal {deal_id}: {e}")
+```
+
+---
+
+**Architecture Document Status:** Complete (Phase 5.2)
+**Last Updated:** 2025-12-31
+**Next Review:** 2026-01-15
