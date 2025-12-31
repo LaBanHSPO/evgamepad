@@ -13,6 +13,7 @@ from app.tasks.cleanup_task import CleanupTask
 from app.database.redis_client import RedisClient
 from app.database.pool_manager import DatabasePoolManager
 from app.processors.advisor_processor import AdvisorProcessor
+from app.processors.kol_processor import KOLProcessor
 from app.advisor.accuracy_tracker import AccuracyTracker
 from app.advisor.mt5_history_parser import MT5HistoryParser
 import asyncio
@@ -32,6 +33,7 @@ db_pool_manager = None  # Phase 5.2: PostgreSQL pool
 accuracy_tracker = None  # Phase 5.2: Accuracy tracking
 mt5_history_parser = None  # Phase 5.2: MT5 auto-detection
 mt5_sync_task = None  # Phase 5.2: Background sync task
+kol_processor = None  # Phase 6: KOL message processor
 
 from app.sio import sio
 
@@ -45,7 +47,7 @@ async def lifespan(app: FastAPI):
     Application lifespan management
     Initialize and cleanup resources
     """
-    global mt5_manager, session_manager, reconnection_manager, command_processor, cleanup_task, redis_client, advisor_processor, db_pool_manager, accuracy_tracker, mt5_history_parser, mt5_sync_task
+    global mt5_manager, session_manager, reconnection_manager, command_processor, cleanup_task, redis_client, advisor_processor, db_pool_manager, accuracy_tracker, mt5_history_parser, mt5_sync_task, kol_processor
 
     logger.info("Starting MT5 Socket.IO Trading Server...")
 
@@ -131,6 +133,17 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Accuracy tracking disabled (ENABLE_ACCURACY_TRACKING=false)")
 
+    # Initialize KOL Processor (Phase 6: KOL Updates MVP)
+    if db_pool_manager:
+        kol_processor = KOLProcessor(db_pool_manager, sio)
+        logger.info("KOL processor initialized")
+
+        # Inject processor into router
+        from app.routers import kol_router
+        kol_router.set_kol_processor(kol_processor)
+    else:
+        logger.warning("KOL processor disabled - database not available")
+
     # Start cleanup task
     cleanup_task = CleanupTask(reconnection_manager, interval=60)
     cleanup_task.start()
@@ -182,6 +195,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Register API routers
+from app.routers import kol_router
+app.include_router(kol_router.router)
 
 # Health check endpoint
 @app.get("/health")
