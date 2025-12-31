@@ -19,8 +19,8 @@ phase_03_completed: 2025-12-31
 
 Transform EV GamePad into cooperative multi-player trading game where 5-10 friends compete in teams via chat commands with real-time leaderboards and authentic MT5 demo account execution.
 
-**Scope:** Sprints 1-3 (MVP - Core Multiplayer Functionality)
-**Total Effort:** 105 hours (5 weeks)
+**Scope:** Sprints 1-4 (MVP + Basic Dashboard)
+**Total Effort:** 125 hours (6-7 weeks)
 **Target Scale:** 5-10 concurrent players
 
 ## Key Features
@@ -56,6 +56,7 @@ External Integration
 | 1 | Leaderboard Infrastructure | Done | 40h | [phase-01](./phase-01-leaderboard-infrastructure.md) |
 | 2 | MT5 Integration Service | Done | 35h | [phase-02](./phase-02-mt5-integration-service.md) |
 | 3 | Game Sessions & Teams | Done | 30h | [phase-03](./phase-03-game-sessions-teams.md) |
+| 4 | Basic Frontend Dashboard | Pending | 20h | [phase-04](./phase-04-basic-frontend-dashboard.md) |
 
 ## Dependencies
 
