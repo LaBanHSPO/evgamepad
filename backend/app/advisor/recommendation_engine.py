@@ -7,6 +7,9 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 from enum import Enum
 
+from .chain_of_thought_engine import ChainOfThoughtEngine, ChainOfThoughtResult
+from .data_provenance_tracker import ProvenanceTracker, DataSource, DataType, ValidationStatus
+
 logger = logging.getLogger(__name__)
 
 class SignalStrength(Enum):
@@ -28,12 +31,25 @@ class RecommendationEngine:
     - AI-generated insights
     """
 
-    def __init__(self, ai_summarizer=None):
+    def __init__(self, ai_summarizer=None, enable_explainability: bool = None):
         """
         Args:
             ai_summarizer: AISummarizer instance for natural language generation
+            enable_explainability: Enable chain-of-thought explanations (None = use config default)
         """
         self.ai_summarizer = ai_summarizer
+
+        # Read from config if not explicitly set
+        if enable_explainability is None:
+            from app.config import config
+            self.enable_explainability = config.ENABLE_EXPLAINABILITY
+        else:
+            self.enable_explainability = enable_explainability
+
+        # Initialize explainability components
+        if self.enable_explainability:
+            self.provenance = ProvenanceTracker()
+            self.cot_engine = ChainOfThoughtEngine(self.provenance)
 
     async def generate_recommendation(
         self,
@@ -71,6 +87,10 @@ class RecommendationEngine:
                 "risk_tolerance": "moderate",
                 "preferred_timeframe": "H1",
             }
+
+        # Track data provenance
+        if self.enable_explainability:
+            self._track_provenance(technical_data, pattern_data, risk_data)
 
         # 1. Aggregate signals from technical analysis
         tech_signal = self._aggregate_technical_signals(technical_data)
@@ -111,7 +131,21 @@ class RecommendationEngine:
             )
             result["ai_summary"] = ai_result
 
-        # 6. Final recommendation
+        # 6. Generate chain-of-thought explanation
+        if self.enable_explainability:
+            volume_validation = technical_data.get("volume_validation")
+            cot_result = self.cot_engine.generate_explanation(
+                technical_data=technical_data,
+                pattern_data=pattern_data,
+                risk_data=risk_data,
+                volume_validation=volume_validation,
+                current_price=technical_data.get("last_close", 0)
+            )
+
+            result["explainability"] = cot_result.to_dict()
+            result["provenance"] = self.provenance.to_summary()
+
+        # 7. Final recommendation
         result["recommendation"] = self._format_recommendation(
             result, user_profile, language
         )
@@ -431,3 +465,57 @@ class RecommendationEngine:
             "summary": ai.get("summary", ""),
             "reasoning": ai.get("reasoning", ""),
         }
+
+    def _track_provenance(
+        self,
+        technical_data: Dict[str, Any],
+        pattern_data: Optional[Dict[str, Any]],
+        risk_data: Optional[Dict[str, Any]]
+    ):
+        """Track provenance for all data sources."""
+        # Track technical indicators
+        indicators = technical_data.get("indicators", {})
+        for key, value in indicators.items():
+            self.provenance.track(
+                key=key,
+                source=DataSource.PANDAS_TA,
+                data_type=DataType.INDICATOR,
+                value=value,
+                confidence=1.0,  # Deterministic calculation
+                validation_status=ValidationStatus.VALIDATED
+            )
+
+        # Track volume validation
+        volume_validation = technical_data.get("volume_validation")
+        if volume_validation:
+            is_divergent = volume_validation.get("is_divergent", False)
+            self.provenance.track(
+                key="volume_validation",
+                source=DataSource.TWELVEDATA,
+                data_type=DataType.VOLUME,
+                value=volume_validation,
+                confidence=volume_validation.get("confidence", 0.85),
+                validation_status=ValidationStatus.VALIDATED if not is_divergent else ValidationStatus.CONFLICTING
+            )
+
+        # Track patterns
+        if pattern_data:
+            self.provenance.track(
+                key="candlestick_patterns",
+                source=DataSource.PANDAS_TA,
+                data_type=DataType.PATTERN,
+                value=pattern_data,
+                confidence=0.8,  # Pattern detection has some uncertainty
+                validation_status=ValidationStatus.UNVALIDATED
+            )
+
+        # Track risk metrics
+        if risk_data:
+            self.provenance.track(
+                key="risk_analysis",
+                source=DataSource.PANDAS_TA,
+                data_type=DataType.RISK_METRIC,
+                value=risk_data,
+                confidence=0.9,
+                validation_status=ValidationStatus.VALIDATED
+            )

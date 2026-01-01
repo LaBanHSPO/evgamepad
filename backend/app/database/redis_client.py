@@ -139,3 +139,31 @@ class RedisClient:
         if not self._client:
             return 0
         return await self._client.delete(key)
+    async def get_portfolio_analysis(self, cache_key: str) -> Optional[Dict]:
+        """Get cached portfolio analysis."""
+        if not self._client:
+            return None
+
+        try:
+            data = await self._client.get(cache_key)
+            return json.loads(data) if data else None
+        except Exception as e:
+            logger.warning(f"Portfolio analysis cache get failed: {e}")
+            return None
+
+    async def set_portfolio_analysis(
+        self,
+        cache_key: str,
+        data: Dict,
+        ttl: int = 300
+    ) -> bool:
+        """Cache portfolio analysis for 5 minutes."""
+        if not self._client:
+            return False
+
+        try:
+            await self._client.setex(cache_key, ttl, json.dumps(data))
+            return True
+        except Exception as e:
+            logger.warning(f"Portfolio analysis cache set failed: {e}")
+            return False

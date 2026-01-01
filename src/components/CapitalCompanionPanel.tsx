@@ -1,9 +1,13 @@
 import { useState, useEffect, useRef } from "react";
-import { Mic, MicOff, Volume2, VolumeX, MessageCircle, Sparkles, Play, User, Send, Pin, LayoutTemplate, Target, ShieldCheck } from "lucide-react";
+import { Mic, MicOff, Volume2, VolumeX, MessageCircle, Sparkles, Play, User, Send, Pin, LayoutTemplate, Target, ShieldCheck, Eye } from "lucide-react";
 import { useSocket } from "@/context/SocketContext";
 import { TechnicalAnalysisCard, TechnicalAnalysisData } from "./chat/TechnicalAnalysisCard";
 import { PatternAnalysisCard, PatternAnalysisData } from "./chat/PatternAnalysisCard";
 import { RiskAnalysisCard, RiskAnalysisData } from "./chat/RiskAnalysisCard";
+import { IndicatorOverlayChart } from "./advisor/IndicatorOverlayChart";
+import { ChainOfThoughtViewer } from "./advisor/ChainOfThoughtViewer";
+import { AccuracyMetricsPanel } from "./advisor/AccuracyMetricsPanel";
+import { ProvenanceTimeline } from "./advisor/ProvenanceTimeline";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -14,7 +18,7 @@ interface Message {
   id: number;
   type: "text" | "technical" | "pattern" | "risk" | "error";
   text?: string;
-  data?: any;
+  data?: TechnicalAnalysisData | PatternAnalysisData | RiskAnalysisData | Record<string, unknown>;
   isAI: boolean;
   timestamp: string;
   isNew?: boolean;
@@ -29,7 +33,37 @@ const CapitalCompanionPanel = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [aiMood, setAiMood] = useState<"happy" | "thinking" | "alert">("happy");
-  const [view, setView] = useState<'chat' | 'pinned'>('chat');
+  const [view, setView] = useState<'chat' | 'pinned' | 'explainability'>('chat');
+  const [showExplainability, setShowExplainability] = useState(false);
+  const [currentSymbol, setCurrentSymbol] = useState('XAUUSD');
+  const [currentTimeframe, setCurrentTimeframe] = useState('H1');
+  const [cotData, setCotData] = useState<{
+    steps: Array<{
+      step_number: number;
+      category: string;
+      description: string;
+      points_awarded: number;
+      max_points: number;
+      confidence: number;
+      indicators_used?: string[];
+    }>;
+    total_score: number;
+    max_score: number;
+    recommendation: string;
+    reasoning_summary: string;
+    risks_identified: string[];
+    data_gaps: string[];
+  } | null>(null);
+  const [provenanceData, setProvenanceData] = useState<{
+    total_data_points: number;
+    sources: Record<string, {
+      count: number;
+      cache_hits: number;
+      avg_confidence: number;
+      oldest_age_seconds: number;
+    }>;
+    oldest_data_age_seconds: number;
+  } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Scroll to bottom when new messages arrive
@@ -63,15 +97,31 @@ const CapitalCompanionPanel = () => {
       toast.error(`Advisor Error: ${error.message}`);
     };
 
+    const handleExplanationResult = (data: { success: boolean; data?: { explainability?: typeof cotData; provenance?: typeof provenanceData } }) => {
+      if (data.success && data.data) {
+        if (data.data.explainability) {
+          setCotData(data.data.explainability);
+        }
+        if (data.data.provenance) {
+          setProvenanceData(data.data.provenance);
+        }
+        setShowExplainability(true);
+        setView('explainability');
+      }
+      setIsThinking(false);
+    };
+
     socket.on('advisor:technical_result', handleTechnicalResult);
     socket.on('advisor:pattern_result', handlePatternResult);
     socket.on('advisor:risk_result', handleRiskResult);
+    socket.on('advisor:explanation_result', handleExplanationResult);
     socket.on('advisor:error', handleError);
 
     return () => {
       socket.off('advisor:technical_result', handleTechnicalResult);
       socket.off('advisor:pattern_result', handlePatternResult);
       socket.off('advisor:risk_result', handleRiskResult);
+      socket.off('advisor:explanation_result', handleExplanationResult);
       socket.off('advisor:error', handleError);
     };
   }, [socket]);
@@ -153,6 +203,11 @@ const CapitalCompanionPanel = () => {
         stop_loss: 2140,
         take_profit: 2170
       });
+    } else if (type === 'explainability') {
+      addMessage({ type: 'text', text: `Requesting AI Explanation for ${symbol}...`, isAI: false });
+      setCurrentSymbol(symbol);
+      setCurrentTimeframe('H1');
+      socket.emit('advisor:explain_recommendation', { symbol, timeframe: 'H1' });
     }
   };
 
@@ -204,6 +259,9 @@ const CapitalCompanionPanel = () => {
           <button onClick={() => setView('chat')} className={`text-xs ${view === 'chat' ? 'text-primary font-bold' : 'text-muted-foreground'}`}>CHAT</button>
           <button onClick={() => setView('pinned')} className={`text-xs flex items-center gap-1 ${view === 'pinned' ? 'text-primary font-bold' : 'text-muted-foreground'}`}>
             <Pin className="w-3 h-3" /> PINNED ({pinnedMessages.length})
+          </button>
+          <button onClick={() => setView('explainability')} className={`text-xs flex items-center gap-1 ${view === 'explainability' ? 'text-primary font-bold' : 'text-muted-foreground'}`}>
+            <Eye className="w-3 h-3" /> INSIGHTS
           </button>
         </div>
       </div>
@@ -264,6 +322,9 @@ const CapitalCompanionPanel = () => {
             </Button>
             <Button variant="outline" size="sm" className="w-full text-[10px] h-7 justify-start px-2 bg-background/50" onClick={() => handleTemplateClick('risk')}>
               <ShieldCheck className="w-3 h-3 mr-1.5" /> Risk Calc
+            </Button>
+            <Button variant="outline" size="sm" className="w-full text-[10px] h-7 justify-start px-2 bg-background/50" onClick={() => handleTemplateClick('explainability')}>
+              <Eye className="w-3 h-3 mr-1.5" /> Explain AI
             </Button>
           </div>
 
@@ -339,7 +400,7 @@ const CapitalCompanionPanel = () => {
                 </Button>
               </div>
             </>
-          ) : (
+          ) : view === 'pinned' ? (
             <ScrollArea className="flex-1">
               <div className="space-y-4">
                 {pinnedMessages.length === 0 && <div className="text-center text-muted-foreground text-xs py-10">No pinned insights yet.</div>}
@@ -356,6 +417,46 @@ const CapitalCompanionPanel = () => {
                     </Button>
                   </div>
                 ))}
+              </div>
+            </ScrollArea>
+          ) : (
+            <ScrollArea className="flex-1">
+              <div className="space-y-4">
+                {!cotData && !provenanceData ? (
+                  <div className="text-center text-muted-foreground text-xs py-10 opacity-50">
+                    Click "Explain AI" to see chain-of-thought reasoning and accuracy metrics
+                  </div>
+                ) : (
+                  <>
+                    {/* Indicator Overlay Chart */}
+                    <IndicatorOverlayChart symbol={currentSymbol} timeframe={currentTimeframe} />
+
+                    {/* Chain of Thought Viewer */}
+                    {cotData && (
+                      <ChainOfThoughtViewer
+                        steps={cotData.steps}
+                        totalScore={cotData.total_score}
+                        maxScore={cotData.max_score}
+                        recommendation={cotData.recommendation}
+                        reasoningSummary={cotData.reasoning_summary}
+                        risksIdentified={cotData.risks_identified}
+                        dataGaps={cotData.data_gaps}
+                      />
+                    )}
+
+                    {/* Accuracy Metrics Panel */}
+                    <AccuracyMetricsPanel
+                      symbol={currentSymbol}
+                      timeframe={currentTimeframe}
+                      periodDays={30}
+                    />
+
+                    {/* Provenance Timeline */}
+                    {provenanceData && (
+                      <ProvenanceTimeline provenance={provenanceData} />
+                    )}
+                  </>
+                )}
               </div>
             </ScrollArea>
           )}

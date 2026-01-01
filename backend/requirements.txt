@@ -10,8 +10,8 @@ uvicorn[standard]==0.24.0
 numpy<2
 
 # Technical Analysis
-pandas-ta==0.3.14b
-pandas==2.0.3
+# pandas-ta-classic (Installing separately to bypass numpy conflict)
+pandas
 
 # Redis Cache
 redis==5.2.1
@@ -28,3 +28,6 @@ asyncpg==0.29.0
 
 # Password Encryption (Phase 02 - MT5 Integration Service)
 cryptography==42.0.5
+
+# PostgreSQL Database (Phase 5.2 - Accuracy Tracking)
+asyncpg==0.29.0

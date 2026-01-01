@@ -36,6 +36,7 @@ class Config:
     # LLM API Keys (Phase 04 - AI Recommendations)
     ANTHROPIC_API_KEY: str = os.getenv('ANTHROPIC_API_KEY', '')
     DEEPSEEK_API_KEY: str = os.getenv('DEEPSEEK_API_KEY', '')
+    ZAI_API_KEY: str = os.getenv('ZAI_API_KEY', '')
     DEFAULT_LLM_MODEL: str = os.getenv('DEFAULT_LLM_MODEL', 'claude')
 
     # TwelveData API (Volume Validation)
@@ -52,5 +53,21 @@ class Config:
     # MT5 Account Pool Encryption (Phase 02 - MT5 Integration Service)
     # CRITICAL: Set this in .env before deployment! Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     MT5_ENCRYPTION_KEY: str = os.getenv('MT5_ENCRYPTION_KEY', '')  # Fernet key for password encryption
+    # Phase 5: Explainability Layer Feature Flags
+    ENABLE_EXPLAINABILITY: bool = os.getenv('ENABLE_EXPLAINABILITY', 'false').lower() == 'true'
+    ENABLE_PROVENANCE_TRACKING: bool = os.getenv('ENABLE_PROVENANCE_TRACKING', 'false').lower() == 'true'
+    ENABLE_ACCURACY_TRACKING: bool = os.getenv('ENABLE_ACCURACY_TRACKING', 'false').lower() == 'true'
+
+    # PostgreSQL Database (Phase 5.2: Accuracy Tracking)
+    DB_HOST: str = os.getenv('DB_HOST', 'localhost')
+    DB_PORT: int = int(os.getenv('DB_PORT', '5432'))
+    DB_NAME: str = os.getenv('DB_NAME', 'ev_gamepad')
+    DB_USER: str = os.getenv('DB_USER', 'postgres')
+    DB_PASSWORD: str = os.getenv('DB_PASSWORD', '')
+    DB_MIN_POOL_SIZE: int = int(os.getenv('DB_MIN_POOL_SIZE', '2'))
+    DB_MAX_POOL_SIZE: int = int(os.getenv('DB_MAX_POOL_SIZE', '10'))
+
+    # KOL Updates MVP (Phase 6)
+    KOL_WEBHOOK_API_KEY: str = os.getenv('KOL_WEBHOOK_API_KEY', '')
 
 config = Config()

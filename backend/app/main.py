@@ -19,6 +19,12 @@ from app.services.leaderboard_service import leaderboard_service
 from app.services.mt5_integration_service import mt5_integration_service
 from app.tasks.mt5_position_sync_task import mt5_position_sync_task
 from app.tasks.mt5_health_check_task import mt5_health_check_task
+from app.database.pool_manager import DatabasePoolManager
+from app.processors.advisor_processor import AdvisorProcessor
+from app.processors.kol_processor import KOLProcessor
+from app.advisor.accuracy_tracker import AccuracyTracker
+from app.advisor.mt5_history_parser import MT5HistoryParser
+import asyncio
 
 # Initialize logging
 logger = setup_logging(config.DEBUG)
@@ -31,6 +37,11 @@ command_processor = None
 cleanup_task = None
 redis_client = None
 advisor_processor = None
+db_pool_manager = None  # Phase 5.2: PostgreSQL pool
+accuracy_tracker = None  # Phase 5.2: Accuracy tracking
+mt5_history_parser = None  # Phase 5.2: MT5 auto-detection
+mt5_sync_task = None  # Phase 5.2: Background sync task
+kol_processor = None  # Phase 6: KOL message processor
 
 from app.sio import sio
 
@@ -45,7 +56,7 @@ async def lifespan(app: FastAPI):
     Application lifespan management
     Initialize and cleanup resources
     """
-    global mt5_manager, session_manager, reconnection_manager, command_processor, cleanup_task, redis_client, advisor_processor
+    global mt5_manager, session_manager, reconnection_manager, command_processor, cleanup_task, redis_client, advisor_processor, db_pool_manager, accuracy_tracker, mt5_history_parser, mt5_sync_task, kol_processor
 
     logger.info("Starting MT5 Socket.IO Trading Server...")
 
@@ -108,6 +119,61 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"MT5 integration service initialization failed: {e}")
         logger.warning("MT5 trading features will be unavailable")
+    # Initialize PostgreSQL pool (Phase 5.2)
+    if config.ENABLE_ACCURACY_TRACKING:
+        db_pool_manager = DatabasePoolManager(
+            host=config.DB_HOST,
+            port=config.DB_PORT,
+            database=config.DB_NAME,
+            user=config.DB_USER,
+            password=config.DB_PASSWORD,
+            min_size=config.DB_MIN_POOL_SIZE,
+            max_size=config.DB_MAX_POOL_SIZE
+        )
+        if await db_pool_manager.connect():
+            logger.info("PostgreSQL pool initialized for accuracy tracking")
+
+            # Initialize accuracy tracker
+            accuracy_tracker = AccuracyTracker(db_pool_manager.get_pool())
+            logger.info("Accuracy tracker initialized")
+
+            # Initialize MT5 history parser
+            mt5_history_parser = MT5HistoryParser(
+                mt5_manager,
+                accuracy_tracker,
+                db_pool_manager.get_pool()
+            )
+            logger.info("MT5 history parser initialized")
+
+            # Start background MT5 sync task
+            async def mt5_sync_loop():
+                """Background task to sync MT5 closed positions every 5 minutes."""
+                while True:
+                    try:
+                        await asyncio.sleep(300)  # 5 minutes
+                        result = await mt5_history_parser.sync_closed_positions(days_back=7)
+                        logger.info(f"MT5 sync completed: {result}")
+                    except Exception as e:
+                        logger.exception(f"MT5 sync failed: {e}")
+
+            mt5_sync_task = asyncio.create_task(mt5_sync_loop())
+            logger.info("MT5 sync background task started (5-minute interval)")
+        else:
+            logger.warning("PostgreSQL connection failed - accuracy tracking disabled")
+            db_pool_manager = None
+    else:
+        logger.info("Accuracy tracking disabled (ENABLE_ACCURACY_TRACKING=false)")
+
+    # Initialize KOL Processor (Phase 6: KOL Updates MVP)
+    if db_pool_manager:
+        kol_processor = KOLProcessor(db_pool_manager, sio)
+        logger.info("KOL processor initialized")
+
+        # Inject processor into router
+        from app.routers import kol_router
+        kol_router.set_kol_processor(kol_processor)
+    else:
+        logger.warning("KOL processor disabled - database not available")
 
     # Start cleanup task
     cleanup_task = CleanupTask(reconnection_manager, interval=60)
@@ -122,6 +188,7 @@ async def lifespan(app: FastAPI):
     # Inject into advisor events
     advisor_events.advisor_processor = advisor_processor
     advisor_events.redis_client = redis_client
+    advisor_events.accuracy_tracker = accuracy_tracker  # Phase 5.2
 
     # Store in app state (only mt5_manager is directly used by health check)
     app.state.mt5_manager = mt5_manager
@@ -132,6 +199,14 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down server...")
 
+    # Cancel MT5 sync task (Phase 5.2)
+    if mt5_sync_task:
+        mt5_sync_task.cancel()
+        try:
+            await mt5_sync_task
+        except asyncio.CancelledError:
+            logger.info("MT5 sync task cancelled")
+
     if cleanup_task:
         await cleanup_task.stop()
 
@@ -141,6 +216,9 @@ async def lifespan(app: FastAPI):
     # Stop MT5 background tasks (Phase 02)
     await mt5_position_sync_task.stop()
     await mt5_health_check_task.stop()
+    # Disconnect PostgreSQL pool (Phase 5.2)
+    if db_pool_manager:
+        await db_pool_manager.disconnect()
 
     if redis_client:
         await redis_client.disconnect()
@@ -158,6 +236,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Register API routers
+from app.routers import kol_router
+app.include_router(kol_router.router)
+
 # Health check endpoint
 @app.get("/health")
 async def health_check():
@@ -166,6 +248,8 @@ async def health_check():
         "status": "healthy" if mt5_manager and mt5_manager.is_connected() else "unhealthy",
         "mt5_connected": mt5_manager.is_connected() if mt5_manager else False,
         "redis_connected": await redis_client.is_connected() if redis_client else False,
+        "db_connected": await db_pool_manager.is_connected() if db_pool_manager else False,  # Phase 5.2
+        "accuracy_tracking_enabled": accuracy_tracker is not None,  # Phase 5.2
         "connected_clients": len(session_manager.sessions) if session_manager else 0,
     }
 
