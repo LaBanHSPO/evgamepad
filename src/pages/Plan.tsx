@@ -2,7 +2,7 @@ import { SystemHeader } from "@/components/SystemHeader";
 import { MarketOverviewPanel } from "@/components/MarketOverviewPanel";
 import { PriceActionPanel } from "@/components/PriceActionPanel";
 import { MarketSentimentPanel } from "@/components/MarketSentimentPanel";
-import { KOLUpdatesPanel } from "@/components/KOLUpdatesPanel";
+import { KOLUpdatesFeed } from "@/components/KOLUpdatesFeed";
 import { AIAnalysisPanel } from "@/components/AIAnalysisPanel";
 import { MajorNewsPanel } from "@/components/MajorNewsPanel";
 import CapitalCompanionPanel from "@/components/CapitalCompanionPanel";
@@ -43,7 +43,7 @@ const Plan = () => {
 
           {/* Row 3: KOL Updates, AI Analysis, Major News */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <KOLUpdatesPanel />
+            <KOLUpdatesFeed />
             <AIAnalysisPanel />
             <MajorNewsPanel />
           </div>

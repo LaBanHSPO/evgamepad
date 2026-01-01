@@ -57,4 +57,7 @@ class Config:
     DB_MIN_POOL_SIZE: int = int(os.getenv('DB_MIN_POOL_SIZE', '2'))
     DB_MAX_POOL_SIZE: int = int(os.getenv('DB_MAX_POOL_SIZE', '10'))
 
+    # KOL Updates MVP (Phase 6)
+    KOL_WEBHOOK_API_KEY: str = os.getenv('KOL_WEBHOOK_API_KEY', '')
+
 config = Config()

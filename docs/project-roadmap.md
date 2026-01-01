@@ -1,7 +1,7 @@
 # EV GamePad Project Roadmap
 
-**Last Updated:** 2025-12-31 09:45
-**Overall Progress:** 48% Complete
+**Last Updated:** 2025-12-31 10:15
+**Overall Progress:** 51% Complete (Phase 6 initiated, Phase 1 complete)
 
 ## Overview
 
@@ -14,6 +14,68 @@ EV GamePad is a comprehensive trading and game control platform combining:
 ---
 
 ## Phase Breakdown
+
+### Phase 6: KOL Updates MVP - Real-time Trading Signals (IN PROGRESS - 14%)
+
+**Timeline:** 2025-12-31 → 2026-01-03
+**Status:** IN PROGRESS (Phase 1 COMPLETE)
+**Estimated Duration:** 3.5 days
+
+**Objective:** Implement real-time KOL (Key Opinion Leader) trading signal distribution system via Zalo webhook with <200ms latency for <100 concurrent users.
+
+#### Phase 6.1: Database Layer
+**Status:** DONE (2025-12-31)
+**Effort:** 0.5h actual / 0.5h planned
+**Completion:** 100%
+
+**Deliverables:**
+- [x] Migration file: `app/database/migrations/006_kol_messages.sql`
+  - Table `kol_messages` with all columns (id, kol_id, kol_name, message_text, message_hash, zalo_message_id, received_at, created_at, updated_at, metadata)
+  - UNIQUE constraint on `message_hash` for deduplication
+  - 3 performance indexes (received_at, kol_id, message_hash)
+  - Auto-update trigger for `updated_at`
+  - Documentation comments
+- [x] Verification script: `app/database/migrations/verify_006_kol_messages.sql`
+- [x] Testing checklist: `plans/2025-12-31-kol-updates-mvp/phase-1-testing-checklist.md`
+
+**Code Review:** 8.5/10 ✅ (User approved)
+
+#### Phase 6.2: Data Models (PENDING)
+**Status:** Pending
+**Effort:** 0.5h planned
+**Target:** 2026-01-01
+
+#### Phase 6.3: KOL Processor (PENDING)
+**Status:** Pending
+**Effort:** 0.75h planned
+**Target:** 2026-01-01
+
+#### Phase 6.4: REST API Endpoint (PENDING)
+**Status:** Pending
+**Effort:** 0.75h planned
+**Target:** 2026-01-02
+
+#### Phase 6.5: Frontend - TypeScript Types (PENDING)
+**Status:** Pending
+**Effort:** 0.25h planned
+**Target:** 2026-01-02
+
+#### Phase 6.6: Frontend - KOL Feed Component (PENDING)
+**Status:** Pending
+**Effort:** 0.75h planned
+**Target:** 2026-01-02
+
+#### Phase 6.7: Testing (PENDING)
+**Status:** Pending
+**Effort:** 0.5h planned
+**Target:** 2026-01-03
+
+#### Phase 6.8: Documentation & Deployment (PENDING)
+**Status:** Pending
+**Effort:** 0.5h planned
+**Target:** 2026-01-03
+
+---
 
 ### Phase 5.1: Chain-of-Thought Reasoning Engine & Explainability (COMPLETE - 100%)
 
@@ -443,6 +505,34 @@ EV GamePad is a comprehensive trading and game control platform combining:
 ---
 
 ## Changelog
+
+### [Phase 6.1 - KOL Updates MVP Database Layer - COMPLETION] - 2025-12-31
+#### Completed
+- PostgreSQL migration file: `app/database/migrations/006_kol_messages.sql`
+  - Table `kol_messages` with 9 columns (id, kol_id, kol_name, message_text, message_hash, zalo_message_id, received_at, created_at, updated_at, metadata)
+  - UNIQUE constraint on `message_hash` for hash-based deduplication
+  - 3 performance indexes: idx_kol_messages_received_at, idx_kol_messages_kol_id, idx_kol_messages_hash
+  - Auto-update trigger for `updated_at` (reuses existing function)
+  - Full documentation comments
+- Verification script: `app/database/migrations/verify_006_kol_messages.sql`
+- Testing checklist: `plans/2025-12-31-kol-updates-mvp/phase-1-testing-checklist.md`
+
+#### Quality Metrics
+- Code Review: 8.5/10 (User approved)
+- Acceptance Criteria: 4/4 met
+- Files Created: 3/3
+- Schema follows existing migration pattern
+
+#### Architecture
+- Supports deduplication via MD5 hash
+- Ready for webhook payload (Zalo messages)
+- Indexed for fast query performance
+- Production-ready schema
+
+#### Next Phase
+- Phase 6.2: Data Models (Pydantic schemas) - Target: 2026-01-01
+
+---
 
 ### [Phase 5.4 - Integration & Testing - COMPLETION] - 2025-12-31
 #### Completed

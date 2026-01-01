@@ -1,8 +1,8 @@
 # EV GamePad - Codebase Summary
 
 **Generated:** 2025-12-31
-**Version:** Phase 5.4 (Integration & Testing)
-**Total Files:** 179 (added ErrorBoundary component + Phase 5.4 fixes)
+**Version:** Phase 5.4 + Phase 1 KOL Updates MVP (Integration & Testing + Database Layer)
+**Total Files:** 181 (added KOL Messages migration + Phase 1 database schema)
 **Total Tokens:** ~440K (repomix: ~150K tokens from 115 files)
 
 ---
@@ -136,6 +136,17 @@ EV GamePad is a real-time AI trading advisor backend built with Python (FastAPI/
   - Indexes on: symbol+timeframe, signal+outcome, created_at, user_id
   - Auto-update trigger for timestamps
   - Refresh function for materialized view
+
+**KOL Messages Storage (Phase 1 - KOL Updates MVP):**
+- `app/database/migrations/006_kol_messages.sql` - KOL trading signals storage
+  - `kol_messages` table: Real-time trading signals from KOL sources via Zalo webhook
+  - 9 columns: id (UUID), kol_id, kol_name, message_text, message_hash, zalo_message_id, received_at, created_at, updated_at, metadata (JSONB)
+  - Deduplication: UNIQUE constraint on `message_hash` (MD5 hash of kol_id|timestamp|message)
+  - Performance indexes:
+    - `idx_kol_messages_received_at` - Descending on received_at for time-based queries
+    - `idx_kol_messages_kol_id` - Composite on (kol_id, received_at DESC) for KOL-specific queries
+    - `idx_kol_messages_hash` - Hash-based deduplication lookup
+  - Auto-update trigger on `updated_at` column via `update_updated_at_column()` function
 
 ### 6. API & Events (WebSocket)
 
@@ -379,7 +390,11 @@ backend/
 │   │   ├── recommendation_engine.py # Signal aggregation
 │   │   └── data_fetcher.py          # MT5 data fetching
 │   ├── database/
-│   │   └── redis_client.py          # Redis caching + portfolio methods
+│   │   ├── redis_client.py          # Redis caching + portfolio methods
+│   │   ├── pool_manager.py          # PostgreSQL async connection pool
+│   │   └── migrations/
+│   │       ├── 005_recommendation_outcomes.sql  # Trade outcomes table + materialized view
+│   │       ├── 006_kol_messages.sql            # KOL messages table + deduplication
 │   ├── events/
 │   │   └── advisor_events.py        # Socket.IO event handlers (incl. advisor:portfolio_analysis)
 │   ├── models/
@@ -627,12 +642,13 @@ class ErrorCode(Enum):
 ## Support & Documentation Links
 
 - **API Spec:** `./advisor-api-specification.md`
-- **Architecture:** `./system-architecture-advisor.md`
+- **Architecture:** `./system-architecture.md`
 - **Code Standards:** `./code-standards.md`
 - **Implementation Guide:** `./advisor-implementation-guide.md`
+- **KOL Database Schema:** See system-architecture.md → Database Schema section
 
 ---
 
 **Last Updated:** 2025-12-31
 **Maintainer:** Backend + Frontend Team
-**Status:** Phase 5.3 (Visual Indicator Dashboard - Frontend Complete)
+**Status:** Phase 5.4 (Integration & Testing) + Phase 1 (Database Layer Complete)
