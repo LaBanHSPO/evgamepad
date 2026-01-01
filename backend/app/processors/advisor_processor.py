@@ -45,6 +45,7 @@ class AdvisorProcessor:
         self.ai_summarizer = AISummarizer(
             anthropic_api_key=config.ANTHROPIC_API_KEY,
             deepseek_api_key=config.DEEPSEEK_API_KEY,
+            zai_api_key=config.ZAI_API_KEY,
             default_model=config.DEFAULT_LLM_MODEL,
             redis_client=redis_client
         )

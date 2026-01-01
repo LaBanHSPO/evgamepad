@@ -144,6 +144,7 @@ class AISummarizer:
         self,
         anthropic_api_key: Optional[str] = None,
         deepseek_api_key: Optional[str] = None,
+        zai_api_key: Optional[str] = None,
         default_model: str = "claude",
         redis_client=None
     ):
@@ -151,17 +152,38 @@ class AISummarizer:
         Args:
             anthropic_api_key: Anthropic API key for Claude
             deepseek_api_key: DeepSeek API key
-            default_model: "claude" or "deepseek"
+            zai_api_key: ZAI API key for GLM-4-Flash
+            default_model: "claude", "deepseek", or "zai"
             redis_client: Redis client for semantic caching
         """
         self.anthropic_key = anthropic_api_key
         self.deepseek_key = deepseek_api_key
+        self.zai_key = zai_api_key
         self.default_model = default_model
         self.redis = redis_client
 
         # Initialize clients lazily
         self._anthropic_client = None
         self._openai_client = None
+        self._zai_client = None
+
+        # Track available providers
+        self.available_providers = self._check_available_providers()
+
+    def _check_available_providers(self) -> List[str]:
+        """Check which LLM providers have valid API keys.
+
+        Returns:
+            List of provider names that have configured API keys
+        """
+        providers = []
+        if self.anthropic_key:
+            providers.append("claude")
+        if self.deepseek_key:
+            providers.append("deepseek")
+        if self.zai_key:
+            providers.append("zai")
+        return providers
 
     def _get_anthropic_client(self):
         """Lazy initialization of Anthropic client."""
@@ -185,6 +207,19 @@ class AISummarizer:
             except ImportError:
                 logger.warning("openai package not installed")
         return self._openai_client
+
+    def _get_zai_client(self):
+        """Lazy initialization of ZAI client (OpenAI-compatible)."""
+        if self._zai_client is None and self.zai_key:
+            try:
+                from openai import OpenAI
+                self._zai_client = OpenAI(
+                    api_key=self.zai_key,
+                    base_url="https://api.z.ai/api/paas/v4"
+                )
+            except ImportError:
+                logger.warning("openai package not installed")
+        return self._zai_client
 
     def _generate_cache_key(self, data: Dict[str, Any]) -> str:
         """Generate cache key from analysis data."""
@@ -241,19 +276,21 @@ class AISummarizer:
         temperature: float = 0.5
     ) -> Dict[str, Any]:
         """
-        Generate AI summary from technical analysis data.
+        Generate AI summary from technical analysis data with intelligent fallback.
 
         Args:
             analysis_data: Dict containing technical indicators, patterns, S/R
             language: "vi" for Vietnamese, "en" for English
             use_cache: Whether to use semantic cache
-            model: Override default model ("claude" or "deepseek")
+            model: Override default model ("claude", "deepseek", or "zai")
             temperature: Sampling temperature 0.0-1.0 (default: 0.5 for balanced output)
 
         Returns:
             Dict with summary, signal, confidence, reasoning
         """
-        model = model or self.default_model
+        # Determine provider priority
+        requested_model = model or self.default_model
+        fallback_chain = self._build_fallback_chain(requested_model)
 
         # Check cache first
         if use_cache:
@@ -266,35 +303,50 @@ class AISummarizer:
         # Build prompt
         prompt = self._build_prompt(analysis_data, language)
 
-        # Call LLM
-        try:
-            if model == "claude":
-                response = await self._call_anthropic(prompt, max_tokens=500, temperature=temperature)
-            else:
-                response = await self._call_deepseek(prompt, max_tokens=500, temperature=temperature)
+        # Try providers in order
+        last_error = None
+        for provider in fallback_chain:
+            try:
+                logger.info(f"Attempting LLM call with provider: {provider}")
 
-            # Parse response
-            result = self._parse_response(response)
-            result["model"] = model
-            result["language"] = language
-            result["cached"] = False
-            result["generated_at"] = datetime.utcnow().isoformat()
+                if provider == "claude":
+                    response = await self._call_anthropic(prompt, max_tokens=500, temperature=temperature)
+                elif provider == "deepseek":
+                    response = await self._call_deepseek(prompt, max_tokens=500, temperature=temperature)
+                elif provider == "zai":
+                    response = await self._call_zai(prompt, max_tokens=500, temperature=temperature)
+                else:
+                    continue
 
-            # Save to cache
-            if use_cache:
-                await self._save_to_cache(cache_key, result)
+                # Parse and return successful response
+                result = self._parse_response(response)
+                result["model"] = provider
+                result["language"] = language
+                result["cached"] = False
+                result["generated_at"] = datetime.utcnow().isoformat()
 
-            return result
+                # Save to cache
+                if use_cache:
+                    await self._save_to_cache(cache_key, result)
 
-        except Exception as e:
-            logger.exception(f"AI summary generation failed: {e}")
-            return {
-                "error": str(e),
-                "summary": "Unable to generate AI summary",
-                "signal": "HOLD",
-                "confidence": 0,
-                "reasoning": "AI service unavailable",
-            }
+                return result
+
+            except Exception as e:
+                logger.warning(f"Provider {provider} failed: {e}")
+                last_error = e
+                continue
+
+        # All providers failed - return error fallback
+        logger.exception(f"All LLM providers failed. Last error: {last_error}")
+        return {
+            "error": str(last_error),
+            "summary": "Unable to generate AI summary - all providers unavailable",
+            "signal": "HOLD",
+            "confidence": 0,
+            "reasoning": "AI service unavailable",
+            "model": "fallback",
+            "providers_tried": fallback_chain
+        }
 
     def _build_prompt(
         self,
@@ -351,6 +403,32 @@ class AISummarizer:
         def _sync_call():
             response = client.chat.completions.create(
                 model="deepseek-chat",
+                max_tokens=max_tokens,
+                temperature=temperature,
+                messages=[
+                    {"role": "system", "content": "You are a technical analysis expert. Always respond in valid JSON format."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            return response.choices[0].message.content
+
+        return await asyncio.to_thread(_sync_call)
+
+    async def _call_zai(self, prompt: str, max_tokens: int = 500, temperature: float = 0.7) -> str:
+        """Call ZAI GLM-4-Flash API (OpenAI-compatible).
+
+        Args:
+            prompt: The prompt to send to ZAI
+            max_tokens: Maximum tokens in response (default: 500)
+            temperature: Sampling temperature 0.0-2.0 (default: 0.7)
+        """
+        client = self._get_zai_client()
+        if client is None:
+            raise RuntimeError("ZAI client not available")
+
+        def _sync_call():
+            response = client.chat.completions.create(
+                model="glm-4-flash",
                 max_tokens=max_tokens,
                 temperature=temperature,
                 messages=[
@@ -473,63 +551,104 @@ class AISummarizer:
         )
         prompt = prompt_template.format(**prompt_data)
 
-        # Call LLM
-        try:
-            # Try Claude first
-            client = self._get_anthropic_client()
-            if client:
-                response_text = await self._call_anthropic(prompt, max_tokens=1024, temperature=0.3)
-            # Fallback to DeepSeek
-            else:
-                client = self._get_openai_client()
-                if not client:
-                    raise ValueError("No LLM client available")
-                response_text = await self._call_deepseek(prompt, max_tokens=1024, temperature=0.3)
+        # Build fallback chain
+        fallback_chain = self._build_fallback_chain(self.default_model)
 
-            # Parse JSON response
+        # Try providers in order
+        last_error = None
+        for provider in fallback_chain:
             try:
-                advice = json.loads(response_text)
-            except json.JSONDecodeError:
-                # Fallback parsing with truncation
-                logger.warning("Failed to parse LLM JSON, attempting fallback")
-                advice = {
-                    "summary": response_text[:500],  # Limit to 500 chars
-                    "overall_risk": "MODERATE",
-                    "priority_actions": [],
-                    "reasoning": "Unable to parse structured response",
-                    "confidence": 50,
-                    "raw_response_truncated": response_text[:2000]  # Store more for debugging
-                }
+                logger.info(f"Attempting portfolio advice LLM call with provider: {provider}")
 
-            # Add metadata
-            advice["model"] = "claude" if self._anthropic_client else "deepseek"
-            advice["language"] = language
-            advice["cached"] = False
-            advice["generated_at"] = datetime.utcnow().isoformat()
+                if provider == "claude":
+                    response_text = await self._call_anthropic(prompt, max_tokens=1024, temperature=0.3)
+                elif provider == "deepseek":
+                    response_text = await self._call_deepseek(prompt, max_tokens=1024, temperature=0.3)
+                elif provider == "zai":
+                    response_text = await self._call_zai(prompt, max_tokens=1024, temperature=0.3)
+                else:
+                    continue
 
-            # Cache result
-            if use_cache and cache_key:
-                await self._save_to_cache(cache_key, advice, ttl=300)
+                # Parse JSON response
+                try:
+                    advice = json.loads(response_text)
+                except json.JSONDecodeError:
+                    # Fallback parsing with truncation
+                    logger.warning("Failed to parse LLM JSON, attempting fallback")
+                    advice = {
+                        "summary": response_text[:500],  # Limit to 500 chars
+                        "overall_risk": "MODERATE",
+                        "priority_actions": [],
+                        "reasoning": "Unable to parse structured response",
+                        "confidence": 50,
+                        "raw_response_truncated": response_text[:2000]  # Store more for debugging
+                    }
 
-            return advice
+                # Add metadata
+                advice["model"] = provider
+                advice["language"] = language
+                advice["cached"] = False
+                advice["generated_at"] = datetime.utcnow().isoformat()
 
-        except Exception as e:
-            logger.exception(f"Portfolio advice generation failed: {e}")
-            # Return fallback advice
-            return {
-                "error": str(e),
-                "summary": "Unable to generate AI advice due to API error",
-                "overall_risk": "MODERATE",
-                "priority_actions": [
-                    "Review portfolio manually",
-                    "Consider reducing high-risk positions"
-                ],
-                "reasoning": "AI service temporarily unavailable",
-                "confidence": 0,
-                "model": "fallback",
-                "language": language,
-                "cached": False
-            }
+                # Cache result
+                if use_cache and cache_key:
+                    await self._save_to_cache(cache_key, advice, ttl=300)
+
+                return advice
+
+            except Exception as e:
+                logger.warning(f"Provider {provider} failed for portfolio advice: {e}")
+                last_error = e
+                continue
+
+        # All providers failed - return fallback advice
+        logger.exception(f"All LLM providers failed for portfolio advice. Last error: {last_error}")
+        return {
+            "error": str(last_error),
+            "summary": "Unable to generate AI advice - all providers unavailable",
+            "overall_risk": "MODERATE",
+            "priority_actions": [
+                "Review portfolio manually",
+                "Consider reducing high-risk positions"
+            ],
+            "reasoning": "AI service temporarily unavailable",
+            "confidence": 0,
+            "model": "fallback",
+            "language": language,
+            "cached": False,
+            "providers_tried": fallback_chain
+        }
+
+    def _build_fallback_chain(self, requested_model: str) -> List[str]:
+        """Build provider fallback chain based on requested model and availability.
+
+        Priority:
+        1. User's requested model (if available)
+        2. ZAI (if available and not already tried)
+        3. Any other available provider
+
+        Args:
+            requested_model: The initially requested model
+
+        Returns:
+            List of provider names in priority order
+        """
+        chain = []
+
+        # Add requested model first (if available)
+        if requested_model in self.available_providers:
+            chain.append(requested_model)
+
+        # Add ZAI as fallback if available and not already in chain
+        if "zai" in self.available_providers and "zai" not in chain:
+            chain.append("zai")
+
+        # Add any remaining available providers
+        for provider in self.available_providers:
+            if provider not in chain:
+                chain.append(provider)
+
+        return chain
 
     def _generate_portfolio_advice_cache_key(self, prompt_data: Dict[str, Any]) -> str:
         """Generate cache key for portfolio advice."""
