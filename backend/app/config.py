@@ -43,6 +43,16 @@ class Config:
     TWELVEDATA_API_KEY: str = os.getenv('TWELVEDATA_API_KEY', '')
     VOLUME_DIVERGENCE_THRESHOLD: float = float(os.getenv('VOLUME_DIVERGENCE_THRESHOLD', '0.30'))  # 30% divergence threshold
 
+    # PostgreSQL (Phase 01 - Leaderboard Infrastructure)
+    POSTGRES_HOST: str = os.getenv('POSTGRES_HOST', 'localhost')
+    POSTGRES_PORT: int = int(os.getenv('POSTGRES_PORT', '5432'))
+    POSTGRES_DB: str = os.getenv('POSTGRES_DB', 'ev_gamepad')
+    POSTGRES_USER: str = os.getenv('POSTGRES_USER', 'postgres')
+    POSTGRES_PASSWORD: str = os.getenv('POSTGRES_PASSWORD', '')
+
+    # MT5 Account Pool Encryption (Phase 02 - MT5 Integration Service)
+    # CRITICAL: Set this in .env before deployment! Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    MT5_ENCRYPTION_KEY: str = os.getenv('MT5_ENCRYPTION_KEY', '')  # Fernet key for password encryption
     # Phase 5: Explainability Layer Feature Flags
     ENABLE_EXPLAINABILITY: bool = os.getenv('ENABLE_EXPLAINABILITY', 'false').lower() == 'true'
     ENABLE_PROVENANCE_TRACKING: bool = os.getenv('ENABLE_PROVENANCE_TRACKING', 'false').lower() == 'true'

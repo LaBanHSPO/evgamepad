@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from socketio import AsyncServer, ASGIApp
 from contextlib import asynccontextmanager
 import logging
+import asyncio
 
 from app.config import config
 from app.logging_config import setup_logging
@@ -11,6 +12,13 @@ from app.reconnection_manager import ReconnectionManager
 from app.processors.command_processor import CommandProcessor
 from app.tasks.cleanup_task import CleanupTask
 from app.database.redis_client import RedisClient
+from app.database.postgres_client import postgres_client
+from app.processors.advisor_processor import AdvisorProcessor
+from app.tasks.leaderboard_refresh_task import leaderboard_refresh_task
+from app.services.leaderboard_service import leaderboard_service
+from app.services.mt5_integration_service import mt5_integration_service
+from app.tasks.mt5_position_sync_task import mt5_position_sync_task
+from app.tasks.mt5_health_check_task import mt5_health_check_task
 from app.database.pool_manager import DatabasePoolManager
 from app.processors.advisor_processor import AdvisorProcessor
 from app.processors.kol_processor import KOLProcessor
@@ -39,6 +47,7 @@ from app.sio import sio
 
 from app.events import trading_events
 from app.events import advisor_events
+from app.events import game_events
 
 # FastAPI Application
 @asynccontextmanager
@@ -88,6 +97,28 @@ async def lifespan(app: FastAPI):
     # Initialize Advisor Processor
     advisor_processor = AdvisorProcessor(mt5_manager, redis_client)
 
+    # Initialize PostgreSQL (Phase 01 - Leaderboard Infrastructure)
+    try:
+        await postgres_client.initialize()
+        # Initialize leaderboard service with Redis client
+        leaderboard_service.redis_client = redis_client
+        # Start leaderboard refresh task
+        asyncio.create_task(leaderboard_refresh_task.start())
+    except Exception as e:
+        logger.error(f"PostgreSQL initialization failed: {e}")
+        logger.warning("Leaderboard features will be unavailable")
+
+    # Initialize MT5 Integration Service (Phase 02 - MT5 Integration Service)
+    try:
+        await mt5_integration_service.initialize()
+        # Start position sync task (5s interval)
+        asyncio.create_task(mt5_position_sync_task.start())
+        # Start health check task (10s interval)
+        asyncio.create_task(mt5_health_check_task.start())
+        logger.info("MT5 integration service and background tasks started")
+    except Exception as e:
+        logger.error(f"MT5 integration service initialization failed: {e}")
+        logger.warning("MT5 trading features will be unavailable")
     # Initialize PostgreSQL pool (Phase 5.2)
     if config.ENABLE_ACCURACY_TRACKING:
         db_pool_manager = DatabasePoolManager(
@@ -179,12 +210,21 @@ async def lifespan(app: FastAPI):
     if cleanup_task:
         await cleanup_task.stop()
 
+    # Stop leaderboard refresh (Phase 01)
+    await leaderboard_refresh_task.stop()
+
+    # Stop MT5 background tasks (Phase 02)
+    await mt5_position_sync_task.stop()
+    await mt5_health_check_task.stop()
     # Disconnect PostgreSQL pool (Phase 5.2)
     if db_pool_manager:
         await db_pool_manager.disconnect()
 
     if redis_client:
         await redis_client.disconnect()
+
+    # Close PostgreSQL pool (Phase 01)
+    await postgres_client.close()
 
     if mt5_manager:
         mt5_manager.disconnect()

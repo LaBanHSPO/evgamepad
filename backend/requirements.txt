@@ -21,7 +21,13 @@ anthropic==0.40.0
 openai==1.58.1
 
 # Market Data (Volume Validation)
-twelvedata
+twelvedata==1.2.14
+
+# PostgreSQL Async Driver (Phase 01 - Leaderboard Infrastructure)
+asyncpg==0.29.0
+
+# Password Encryption (Phase 02 - MT5 Integration Service)
+cryptography==42.0.5
 
 # PostgreSQL Database (Phase 5.2 - Accuracy Tracking)
 asyncpg==0.29.0
