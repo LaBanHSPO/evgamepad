@@ -21,8 +21,8 @@ class PostgresClient:
                 database=config.POSTGRES_DB,
                 user=config.POSTGRES_USER,
                 password=config.POSTGRES_PASSWORD,
-                min_size=5,
-                max_size=20,
+                min_size=config.POSTGRES_MIN_POOL_SIZE,
+                max_size=config.POSTGRES_MAX_POOL_SIZE,
                 command_timeout=60,
             )
             logger.info("PostgreSQL pool initialized")
@@ -36,23 +36,39 @@ class PostgresClient:
             await self.pool.close()
             logger.info("PostgreSQL pool closed")
 
+    async def is_connected(self) -> bool:
+        """Check if connection pool is active."""
+        return self.pool is not None
+
     async def execute(self, query: str, *args) -> str:
         """Execute query without returning results."""
+        if not self.pool:
+            logger.warning("PostgreSQL pool not initialized, skipping execute")
+            return ""
         async with self.pool.acquire() as conn:
             return await conn.execute(query, *args)
 
     async def fetch(self, query: str, *args) -> List[asyncpg.Record]:
         """Fetch multiple rows."""
+        if not self.pool:
+            logger.warning("PostgreSQL pool not initialized, returning empty list")
+            return []
         async with self.pool.acquire() as conn:
             return await conn.fetch(query, *args)
 
     async def fetchrow(self, query: str, *args) -> Optional[asyncpg.Record]:
         """Fetch single row."""
+        if not self.pool:
+            logger.warning("PostgreSQL pool not initialized, returning None")
+            return None
         async with self.pool.acquire() as conn:
             return await conn.fetchrow(query, *args)
 
     async def fetchval(self, query: str, *args) -> Any:
         """Fetch single value."""
+        if not self.pool:
+            logger.warning("PostgreSQL pool not initialized, returning None")
+            return None
         async with self.pool.acquire() as conn:
             return await conn.fetchval(query, *args)
 

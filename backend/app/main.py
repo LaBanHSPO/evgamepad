@@ -6,13 +6,15 @@ import asyncio
 
 from app.config import config
 from app.logging_config import setup_logging
+from app.database.redis_client import RedisClient
+from app.database.postgres_client import postgres_client
 from app.mt5.connection_manager import MT5ConnectionManager
+
 from app.session_manager import SessionManager
 from app.reconnection_manager import ReconnectionManager
 from app.processors.command_processor import CommandProcessor
 from app.tasks.cleanup_task import CleanupTask
-from app.database.redis_client import RedisClient
-from app.database.postgres_client import postgres_client
+
 from app.processors.advisor_processor import AdvisorProcessor
 from app.tasks.leaderboard_refresh_task import leaderboard_refresh_task
 from app.services.leaderboard_service import leaderboard_service
@@ -24,7 +26,6 @@ from app.processors.advisor_processor import AdvisorProcessor
 from app.processors.kol_processor import KOLProcessor
 from app.advisor.accuracy_tracker import AccuracyTracker
 from app.advisor.mt5_history_parser import MT5HistoryParser
-import asyncio
 
 # Initialize logging
 logger = setup_logging(config.DEBUG)
@@ -122,13 +123,13 @@ async def lifespan(app: FastAPI):
     # Initialize PostgreSQL pool (Phase 5.2)
     if config.ENABLE_ACCURACY_TRACKING:
         db_pool_manager = DatabasePoolManager(
-            host=config.DB_HOST,
-            port=config.DB_PORT,
-            database=config.DB_NAME,
-            user=config.DB_USER,
-            password=config.DB_PASSWORD,
-            min_size=config.DB_MIN_POOL_SIZE,
-            max_size=config.DB_MAX_POOL_SIZE
+            host=config.POSTGRES_HOST,
+            port=config.POSTGRES_PORT,
+            database=config.POSTGRES_DB,
+            user=config.POSTGRES_USER,
+            password=config.POSTGRES_PASSWORD,
+            min_size=config.POSTGRES_MIN_POOL_SIZE,
+            max_size=config.POSTGRES_MAX_POOL_SIZE
         )
         if await db_pool_manager.connect():
             logger.info("PostgreSQL pool initialized for accuracy tracking")

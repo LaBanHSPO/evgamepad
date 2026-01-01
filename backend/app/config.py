@@ -49,6 +49,8 @@ class Config:
     POSTGRES_DB: str = os.getenv('POSTGRES_DB', 'ev_gamepad')
     POSTGRES_USER: str = os.getenv('POSTGRES_USER', 'postgres')
     POSTGRES_PASSWORD: str = os.getenv('POSTGRES_PASSWORD', '')
+    POSTGRES_MIN_POOL_SIZE: int = int(os.getenv('POSTGRES_MIN_POOL_SIZE', '2'))
+    POSTGRES_MAX_POOL_SIZE: int = int(os.getenv('POSTGRES_MAX_POOL_SIZE', '10'))
 
     # MT5 Account Pool Encryption (Phase 02 - MT5 Integration Service)
     # CRITICAL: Set this in .env before deployment! Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -59,13 +61,8 @@ class Config:
     ENABLE_ACCURACY_TRACKING: bool = os.getenv('ENABLE_ACCURACY_TRACKING', 'false').lower() == 'true'
 
     # PostgreSQL Database (Phase 5.2: Accuracy Tracking)
-    DB_HOST: str = os.getenv('DB_HOST', 'localhost')
-    DB_PORT: int = int(os.getenv('DB_PORT', '5432'))
-    DB_NAME: str = os.getenv('DB_NAME', 'ev_gamepad')
-    DB_USER: str = os.getenv('DB_USER', 'postgres')
-    DB_PASSWORD: str = os.getenv('DB_PASSWORD', '')
-    DB_MIN_POOL_SIZE: int = int(os.getenv('DB_MIN_POOL_SIZE', '2'))
-    DB_MAX_POOL_SIZE: int = int(os.getenv('DB_MAX_POOL_SIZE', '10'))
+    # Using unified POSTGRES_* config defined above
+
 
     # KOL Updates MVP (Phase 6)
     KOL_WEBHOOK_API_KEY: str = os.getenv('KOL_WEBHOOK_API_KEY', '')

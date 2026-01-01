@@ -1,17 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSocket } from '@/context/SocketContext';
 
-interface Position {
+export interface Position {
   symbol: string;
   entry_price: number;
-  current_price: number;
+  current_price?: number;
   position_size: number;
   stop_loss?: number;
   timeframe: string;
 }
 
-interface PortfolioAnalysisResult {
-  success: boolean;
+export interface PortfolioAnalysisResult {
   portfolio_health: {
     score: number;
     status: string;
@@ -21,23 +20,29 @@ interface PortfolioAnalysisResult {
   };
   position_analysis: Array<{
     symbol: string;
+    entry_price: number;
+    current_price: number;
+    position_size: number;
+    stop_loss: number;
+    pnl_pct: number;
+    pnl_amount: number;
+    r_multiple: number;
+    distance_to_stop_pct: number;
     risk_status: string;
     recommendation: string;
     technical_signal: string;
-    r_multiple: number;
-    pnl_pct: number;
-    distance_to_stop_pct: number;
+    technical_confidence: number;
   }>;
   ai_advice: {
-    summary: string;
-    overall_risk: string;
-    priority_actions: string[];
-    reasoning: string;
-    confidence: number;
-    model: string;
-    cached: boolean;
+    overall_assessment: string;
+    capital_preservation_tips: string[];
+    risk_warnings: string[];
+    opportunities: string[];
+    model_used: string;
+    language: string;
   };
   cached: boolean;
+  computed_at: string;
 }
 
 export const usePortfolioAnalysis = () => {
@@ -51,9 +56,10 @@ export const usePortfolioAnalysis = () => {
 
     // Listen for analysis result
     socket.on('advisor:portfolio_result', (data: { success: boolean; data?: PortfolioAnalysisResult; message?: string }) => {
-      console.log('Portfolio analysis result:', data);
+      console.log('[usePortfolioAnalysis] Result:', data);
       if (data.success && data.data) {
         setResult(data.data);
+        setError(null);
       } else {
         setError(data.message || 'Analysis failed');
       }
@@ -61,8 +67,8 @@ export const usePortfolioAnalysis = () => {
     });
 
     // Listen for errors
-    socket.on('advisor:error', (data: { message?: string }) => {
-      console.error('Portfolio analysis error:', data);
+    socket.on('advisor:error', (data: { message?: string; error_code?: string }) => {
+      console.error('[usePortfolioAnalysis] Error:', data);
       setError(data.message || 'Unknown error');
       setIsAnalyzing(false);
     });
@@ -73,33 +79,69 @@ export const usePortfolioAnalysis = () => {
     };
   }, [socket]);
 
-  const analyzePortfolio = (
-    positions: Position[],
-    accountBalance: number,
-    riskProfile: string = 'conservative',
-    language: string = 'vi'
-  ) => {
-    if (!socket || !isConnected) {
-      setError('Socket not connected');
-      return;
-    }
+  const analyzePortfolio = useCallback(
+    (
+      positions: Position[],
+      accountBalance: number,
+      riskProfile: string = 'moderate',
+      language: string = 'en'
+    ): Promise<PortfolioAnalysisResult> => {
+      return new Promise((resolve, reject) => {
+        if (!socket || !isConnected) {
+          reject(new Error('Socket not connected'));
+          return;
+        }
 
-    setIsAnalyzing(true);
-    setError(null);
+        setIsAnalyzing(true);
+        setError(null);
+        setResult(null);
+
+        const handleResult = (data: { success: boolean; data?: PortfolioAnalysisResult }) => {
+          socket.off('advisor:portfolio_result', handleResult);
+          socket.off('advisor:error', handleError);
+
+          if (data.success && data.data) {
+            setResult(data.data);
+            resolve(data.data);
+          } else {
+            const errorMsg = 'Portfolio analysis failed';
+            setError(errorMsg);
+            reject(new Error(errorMsg));
+          }
+          setIsAnalyzing(false);
+        };
+
+        const handleError = (data: { message?: string }) => {
+          socket.off('advisor:portfolio_result', handleResult);
+          socket.off('advisor:error', handleError);
+          const errorMsg = data.message || 'Unknown error';
+          setError(errorMsg);
+          reject(new Error(errorMsg));
+          setIsAnalyzing(false);
+        };
+
+        socket.once('advisor:portfolio_result', handleResult);
+        socket.once('advisor:error', handleError);
+
+        socket.emit('advisor_portfolio_analysis', {
+          positions,
+          account_balance: accountBalance,
+          risk_profile: riskProfile,
+          language
+        });
+      });
+    },
+    [socket, isConnected]
+  );
+
+  const clearResult = useCallback(() => {
     setResult(null);
-
-    socket.emit('advisor:portfolio_analysis', {
-      positions,
-      account_balance: accountBalance,
-      risk_profile: riskProfile,
-      language
-    });
-  };
-
-  const clearResult = () => {
-    setResult(null);
     setError(null);
-  };
+  }, []);
+
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
 
   return {
     result,
@@ -107,6 +149,7 @@ export const usePortfolioAnalysis = () => {
     error,
     analyzePortfolio,
     clearResult,
+    clearError,
     isConnected
   };
 };
