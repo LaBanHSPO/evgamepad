@@ -120,9 +120,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"MT5 integration service initialization failed: {e}")
         logger.warning("MT5 trading features will be unavailable")
-    # Initialize PostgreSQL pool (Phase 5.2)
-    if config.ENABLE_ACCURACY_TRACKING:
-        db_pool_manager = DatabasePoolManager(
+    db_pool_manager = DatabasePoolManager(
             host=config.POSTGRES_HOST,
             port=config.POSTGRES_PORT,
             database=config.POSTGRES_DB,
@@ -130,40 +128,38 @@ async def lifespan(app: FastAPI):
             password=config.POSTGRES_PASSWORD,
             min_size=config.POSTGRES_MIN_POOL_SIZE,
             max_size=config.POSTGRES_MAX_POOL_SIZE
+    )
+    if await db_pool_manager.connect():
+        logger.info("PostgreSQL pool initialized for accuracy tracking")
+
+        # Initialize accuracy tracker
+        accuracy_tracker = AccuracyTracker(db_pool_manager.get_pool())
+        logger.info("Accuracy tracker initialized")
+
+        # Initialize MT5 history parser
+        mt5_history_parser = MT5HistoryParser(
+            mt5_manager,
+            accuracy_tracker,
+            db_pool_manager.get_pool()
         )
-        if await db_pool_manager.connect():
-            logger.info("PostgreSQL pool initialized for accuracy tracking")
+        logger.info("MT5 history parser initialized")
 
-            # Initialize accuracy tracker
-            accuracy_tracker = AccuracyTracker(db_pool_manager.get_pool())
-            logger.info("Accuracy tracker initialized")
+        # Start background MT5 sync task
+        async def mt5_sync_loop():
+            """Background task to sync MT5 closed positions every 5 minutes."""
+            while True:
+                try:
+                    await asyncio.sleep(300)  # 5 minutes
+                    result = await mt5_history_parser.sync_closed_positions(days_back=7)
+                    logger.info(f"MT5 sync completed: {result}")
+                except Exception as e:
+                    logger.exception(f"MT5 sync failed: {e}")
 
-            # Initialize MT5 history parser
-            mt5_history_parser = MT5HistoryParser(
-                mt5_manager,
-                accuracy_tracker,
-                db_pool_manager.get_pool()
-            )
-            logger.info("MT5 history parser initialized")
-
-            # Start background MT5 sync task
-            async def mt5_sync_loop():
-                """Background task to sync MT5 closed positions every 5 minutes."""
-                while True:
-                    try:
-                        await asyncio.sleep(300)  # 5 minutes
-                        result = await mt5_history_parser.sync_closed_positions(days_back=7)
-                        logger.info(f"MT5 sync completed: {result}")
-                    except Exception as e:
-                        logger.exception(f"MT5 sync failed: {e}")
-
-            mt5_sync_task = asyncio.create_task(mt5_sync_loop())
-            logger.info("MT5 sync background task started (5-minute interval)")
-        else:
-            logger.warning("PostgreSQL connection failed - accuracy tracking disabled")
-            db_pool_manager = None
+        mt5_sync_task = asyncio.create_task(mt5_sync_loop())
+        logger.info("MT5 sync background task started (5-minute interval)")
     else:
-        logger.info("Accuracy tracking disabled (ENABLE_ACCURACY_TRACKING=false)")
+        logger.warning("PostgreSQL connection failed - accuracy tracking disabled")
+        db_pool_manager = None
 
     # Initialize KOL Processor (Phase 6: KOL Updates MVP)
     if db_pool_manager:
