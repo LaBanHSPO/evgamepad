@@ -30,11 +30,11 @@ export const useAudioKeyboard = (): void => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Prevent shortcuts when typing in inputs
+      // Prevent shortcuts when typing in inputs/textareas
       const target = e.target as HTMLElement;
       if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
         target.isContentEditable
       ) {
         return;
@@ -44,7 +44,7 @@ export const useAudioKeyboard = (): void => {
       if (e.key === 'm' || e.key === 'M') {
         e.preventDefault();
         toggleMute();
-        console.log('[AudioKeyboard] Mute toggled');
+        return;
       }
 
       // Ctrl+↑ - Volume Up
@@ -52,7 +52,7 @@ export const useAudioKeyboard = (): void => {
         e.preventDefault();
         const newVolume = Math.min(volumes.master + 0.1, 1);
         setVolume('master', newVolume);
-        console.log(`[AudioKeyboard] Volume up: ${Math.round(newVolume * 100)}%`);
+        return;
       }
 
       // Ctrl+↓ - Volume Down
@@ -60,7 +60,7 @@ export const useAudioKeyboard = (): void => {
         e.preventDefault();
         const newVolume = Math.max(volumes.master - 0.1, 0);
         setVolume('master', newVolume);
-        console.log(`[AudioKeyboard] Volume down: ${Math.round(newVolume * 100)}%`);
+        return;
       }
 
       // P - Play/Pause Music
@@ -69,15 +69,14 @@ export const useAudioKeyboard = (): void => {
 
         if (isPlaying) {
           pauseTrack();
-          console.log('[AudioKeyboard] Music paused');
         } else {
           // Resume last track or play default
           const trackToPlay = currentTrack || availableTracks[0]?.id;
           if (trackToPlay) {
             playTrack(trackToPlay);
-            console.log(`[AudioKeyboard] Music playing: ${trackToPlay}`);
           }
         }
+        return;
       }
     };
 

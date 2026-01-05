@@ -1,7 +1,7 @@
 # EV GamePad - System Architecture
 
 **Last Updated:** 2026-01-05
-**Version:** Phase 1 (Audio System) + Phase 3 (SFX Event System) + Phase 5.4 (Advisor Features)
+**Version:** Phase 1 (Audio System) + Phase 3 (SFX Event System) + Phase 4 (Keyboard Shortcuts) + Phase 5.4 (Advisor Features)
 
 ---
 
@@ -12,6 +12,7 @@
 3. [Audio System Architecture](#audio-system-architecture)
    - [Phase 1: Core Audio Infrastructure](#phase-1-core-audio-infrastructure)
    - [Phase 3: SFX Event System](#phase-3-sfx-event-system)
+   - [Phase 4: Keyboard Shortcuts](#phase-4-keyboard-shortcuts)
 4. [Advisor System Architecture](#advisor-system-architecture)
 5. [Data Flow](#data-flow)
 6. [Integration Points](#integration-points)
@@ -536,6 +537,207 @@ SFX Event Trigger
 - Custom SFX library uploads
 - Advanced audio effects (equalizer, reverb)
 - Multi-window audio sync
+
+---
+
+### Phase 4: Keyboard Shortcuts
+
+**Overview**
+
+Adds global keyboard shortcuts for rapid audio control without UI interaction. Enables hands-free volume and playback management during trading sessions.
+
+#### 1. useAudioKeyboard Hook (`src/hooks/useAudioKeyboard.ts`)
+
+**Shortcut Bindings:**
+
+| Shortcut | Action | Behavior |
+|----------|--------|----------|
+| M | Toggle Mute | Mutes/unmutes all audio globally |
+| P | Play/Pause | Starts or resumes last track; pauses if playing |
+| Ctrl+↑ | Volume Up | Increases master volume by 10% (capped at 100%) |
+| Ctrl+↓ | Volume Down | Decreases master volume by 10% (floor at 0%) |
+
+**Implementation Details:**
+
+```typescript
+// Global keyboard event listener
+const handleKeyDown = (e: KeyboardEvent) => {
+  // Prevent shortcuts when typing in form inputs
+  const target = e.target as HTMLElement;
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target.isContentEditable
+  ) {
+    return;  // Form input has focus, don't trigger shortcuts
+  }
+
+  // M - Toggle Mute
+  if (e.key === 'm' || e.key === 'M') {
+    e.preventDefault();
+    toggleMute();
+  }
+
+  // P - Play/Pause
+  if (e.key === 'p' || e.key === 'P') {
+    e.preventDefault();
+    if (isPlaying) {
+      pauseTrack();
+    } else {
+      playTrack(currentTrack || availableTracks[0]?.id);
+    }
+  }
+
+  // Ctrl+↑ - Volume Up (+10%)
+  if (e.ctrlKey && e.key === 'ArrowUp') {
+    e.preventDefault();
+    const newVolume = Math.min(volumes.master + 0.1, 1);
+    setVolume('master', newVolume);
+  }
+
+  // Ctrl+↓ - Volume Down (-10%)
+  if (e.ctrlKey && e.key === 'ArrowDown') {
+    e.preventDefault();
+    const newVolume = Math.max(volumes.master - 0.1, 0);
+    setVolume('master', newVolume);
+  }
+};
+
+// Register listener on component mount
+window.addEventListener('keydown', handleKeyDown);
+
+// Cleanup on unmount
+return () => window.removeEventListener('keydown', handleKeyDown);
+```
+
+**Key Safety Features:**
+
+1. **Form Input Protection:** Shortcuts disabled when focus is on `<input>`, `<textarea>`, or contentEditable elements
+2. **Case Insensitive:** Both 'm'/'M' and 'p'/'P' work
+3. **Gamepad Safe:** No conflicts with gamepad controls (keyboard only)
+4. **Smooth Volume Steps:** 10% increments prevent jarring changes
+
+#### 2. Hook Registration
+
+**App.tsx Integration:**
+
+```typescript
+import { useAudioKeyboard } from '@/hooks/useAudioKeyboard';
+
+export const App = () => {
+  // Register keyboard shortcuts
+  useAudioKeyboard();
+
+  return (
+    <div>
+      {/* App content */}
+    </div>
+  );
+};
+```
+
+**Timing:** Keyboard shortcuts activate after AudioProvider mounts and audio context is initialized.
+
+#### 3. UI Hints
+
+**AudioSettingsModal Keyboard Shortcut Display:**
+
+Modal includes dedicated "Keyboard Shortcuts" section showing all bindings:
+- Visual kbd-style badges for visual clarity
+- 2-column grid layout for compact display
+- Located at bottom of settings panel for quick reference
+
+#### 4. Interaction Flow
+
+```
+User Presses Key
+     │
+     ▼
+keydown Event Handler
+     │
+     ├─► Check focus: Is input/textarea focused?
+     │   ├─ YES: Skip (return early)
+     │   └─ NO: Continue
+     │
+     ├─► Match key binding
+     │   ├─ M: toggleMute()
+     │   ├─ P: playTrack() or pauseTrack()
+     │   ├─ Ctrl+↑: setVolume('master', +0.1)
+     │   └─ Ctrl+↓: setVolume('master', -0.1)
+     │
+     ▼
+Update AudioContext State
+     │
+     ▼
+Persist to localStorage (via context)
+     │
+     ▼
+AudioManager applies changes immediately
+```
+
+#### 5. Volume Increment Logic
+
+**Master Volume Calculation:**
+
+```
+Current Volume: 0.5 (50%)
+Ctrl+↑ pressed: 0.5 + 0.1 = 0.6 (60%)
+  ↓ (cap at 1.0)
+Max reached: 0.9 + 0.1 = 1.0 (100%)
+
+Ctrl+↓ pressed: 0.6 - 0.1 = 0.5 (50%)
+  ↓ (floor at 0.0)
+Min reached: 0.1 - 0.1 = 0.0 (0%)
+```
+
+#### 6. Focus Management
+
+**Form Input Detection:**
+
+```typescript
+const target = e.target as HTMLElement;
+
+// Skip shortcuts if:
+if (target instanceof HTMLInputElement) {
+  return;  // Text input focused
+}
+
+if (target instanceof HTMLTextAreaElement) {
+  return;  // Textarea focused
+}
+
+if (target.isContentEditable) {
+  return;  // Editable div/span focused
+}
+
+// Proceed with shortcut handling
+```
+
+**Effect:** Users can safely type in settings forms without accidentally triggering shortcuts.
+
+#### 7. Dependencies
+
+Hook imports:
+- `useAudioPlayer()` - Audio state and control functions
+- React's `useEffect` - Event listener lifecycle management
+
+#### 8. Phase 4 Scope
+
+**What's Included:**
+- Global keyboard event listener (window-level)
+- Four keyboard bindings (M, P, Ctrl+↑, Ctrl+↓)
+- Form input safety checks
+- Volume increment clamping (0-1 range)
+- Audio context state updates
+- localStorage persistence via context
+- UI hints in AudioSettingsModal
+
+**What's NOT Included (Phase 5+):**
+- Customizable key bindings
+- Keyboard preference panel
+- Alternative shortcuts (e.g., arrow keys for volume)
+- Command palette for shortcuts
+- Gamepad shortcut integration
 
 ---
 
