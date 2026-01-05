@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSocket } from '@/context/SocketContext';
+import { sfxEmitter } from '@/services/sfx-event-emitter';
 
 interface Position {
   symbol: string;
@@ -54,6 +55,24 @@ export const usePortfolioAnalysis = () => {
       console.log('Portfolio analysis result:', data);
       if (data.success && data.data) {
         setResult(data.data);
+
+        // Trigger market alert SFX based on portfolio health status
+        const status = data.data.portfolio_health?.status?.toUpperCase();
+        if (status === 'DANGER' || status === 'CRITICAL') {
+          sfxEmitter.emit({
+            type: 'market:alert:high',
+            metadata: {
+              severity: 'high'
+            }
+          });
+        } else if (status === 'WARNING' || status === 'CAUTION') {
+          sfxEmitter.emit({
+            type: 'market:alert:medium',
+            metadata: {
+              severity: 'medium'
+            }
+          });
+        }
       } else {
         setError(data.message || 'Analysis failed');
       }

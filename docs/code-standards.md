@@ -1,7 +1,7 @@
 # EV GamePad - Code Standards & Guidelines
 
-**Last Updated:** 2025-12-30
-**Version:** Phase 04 (Portfolio Analysis)
+**Last Updated:** 2026-01-01
+**Version:** Phase 1 (Audio System) + Phase 5.4 (Advisor Features)
 
 ---
 
@@ -368,6 +368,441 @@ if self.redis_client:
 
 return success_response(result)
 ```
+
+---
+
+## Audio System Patterns
+
+### Phase 3: SFX Event Emitter
+
+**Threshold-based SFX triggering:**
+
+```typescript
+import { sfxEmitter } from '@/services/sfx-event-emitter';
+
+// Trade event with amount threshold
+const handleTrade = (orderData: OrderResult) => {
+  const tradeType = orderData.order?.type === 0 ? 'trade:buy' : 'trade:sell';
+  sfxEmitter.emit({
+    type: tradeType,
+    metadata: {
+      amount: orderData.order?.volume || 0,
+      symbol: orderData.order?.symbol
+    }
+  });
+  // SFX only plays if amount >= minTradeAmount threshold
+  // Debounced with 500ms cooldown
+};
+
+// Market alert with severity filtering
+const handlePortfolioAlert = (portfolioStatus: string) => {
+  if (portfolioStatus === 'DANGER') {
+    sfxEmitter.emit({
+      type: 'market:alert:high',
+      metadata: { severity: 'high' }
+    });
+  } else if (portfolioStatus === 'CAUTION') {
+    sfxEmitter.emit({
+      type: 'market:alert:medium',
+      metadata: { severity: 'medium' }
+    });
+  }
+};
+
+// Achievement always plays
+const handleAchievement = (badge: string) => {
+  sfxEmitter.emit({
+    type: 'achievement:unlock',
+    metadata: { badge }
+  });
+};
+```
+
+**Emitter Features:**
+- Threshold filtering: Only plays if conditions met
+- Debouncing: 500ms cooldown per SFX type
+- Metadata support: Context for event (amount, severity, symbol)
+- Mute state: Respects global mute in AudioManager
+
+**SFX Event Type Safety:**
+
+```typescript
+import { SFXEvent, SFXType } from '@/types/audio';
+
+// Type-safe event emission
+const event: SFXEvent = {
+  type: 'trade:buy' as SFXType,
+  metadata: {
+    amount: 0.5,
+    symbol: 'XAU/USD'
+  }
+};
+sfxEmitter.emit(event);
+```
+
+### Phase 3: React Audio Context
+
+**Hook-based audio control:**
+
+```typescript
+import { useAudio } from '@/context/AudioContext';
+
+export const MyAudioComponent = () => {
+  const {
+    isInitialized,
+    currentTrack,
+    isPlaying,
+    isMuted,
+    volumes,
+    playTrack,
+    pauseTrack,
+    setVolume,
+    toggleMute,
+    playSFX,
+    setSfxThresholds,
+    saveSettings
+  } = useAudio();
+
+  // Initialize on demand (requires user gesture)
+  const handleInit = async () => {
+    if (!isInitialized) {
+      await initialize();
+    }
+  };
+
+  // Control music
+  const handlePlayTrack = async (trackId: string) => {
+    await playTrack(trackId);
+  };
+
+  // Update volume (auto-persists)
+  const handleVolumeChange = (channel: VolumeChannel, value: number) => {
+    setVolume(channel, value);
+  };
+
+  // Update SFX filtering
+  const handleThresholds = (thresholds: SFXThresholds) => {
+    setSfxThresholds(thresholds);
+    saveSettings();  // Explicit persistence after threshold change
+  };
+
+  return (
+    <div>
+      {/* UI elements */}
+    </div>
+  );
+};
+```
+
+**Context Benefits:**
+- Centralized audio state
+- Automatic localStorage persistence
+- Auto-resume music on app reload
+- Type-safe volume control
+- Easy component access via hook
+
+### Phase 3: AudioSettingsModal Component
+
+**Settings UI pattern:**
+
+```typescript
+import { AudioSettingsModal } from '@/components/AudioSettingsModal';
+import { useState } from 'react';
+
+export const App = () => {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  return (
+    <>
+      <button onClick={() => setSettingsOpen(true)}>Settings</button>
+      <AudioSettingsModal
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+      />
+    </>
+  );
+};
+```
+
+**Modal Features:**
+- Music track selector (dropdown from available tracks)
+- Volume sliders (0-1 range):
+  - Master: affects all audio
+  - Music: music playback level
+  - SFX: sound effect level
+- Mute toggle (global)
+- SFX Thresholds:
+  - Minimum trade amount (numeric, prevents small trades from playing SFX)
+  - Alert severity (all/high, filters market alerts)
+- Apply/Cancel: local state allows discarding changes
+- Auto-persistence: saveSettings() on apply
+
+**Modal State Management Pattern:**
+
+```typescript
+// Local state for "apply/cancel" workflow
+const [localMasterVolume, setLocalMasterVolume] = useState(volumes.master);
+
+// Sync when modal opens
+useEffect(() => {
+  if (open) {
+    setLocalMasterVolume(volumes.master);
+    // ... sync other settings
+  }
+}, [open]);
+
+// Apply changes to context
+const handleApply = () => {
+  setVolume('master', localMasterVolume);
+  saveSettings();
+  onOpenChange(false);
+};
+
+// Cancel discards local changes
+const handleCancel = () => {
+  onOpenChange(false);
+};
+```
+
+### Phase 1: AudioManager Singleton Usage
+
+**Initialization (requires user gesture):**
+
+```typescript
+// Initialize on first user interaction
+const handleInitAudio = async () => {
+  try {
+    await audioManager.initialize();
+    console.log('Audio ready');
+  } catch (error) {
+    console.error('Audio init failed:', error);
+  }
+};
+
+// In component
+useEffect(() => {
+  document.addEventListener('click', handleInitAudio, { once: true });
+  return () => document.removeEventListener('click', handleInitAudio);
+}, []);
+```
+
+**Music Playback:**
+
+```typescript
+// Load and play a track
+const playTrack = async (trackId: string) => {
+  try {
+    await audioManager.loadMusicTrack(trackId);
+    audioManager.playMusic();
+  } catch (error) {
+    console.error('Playback failed:', error);
+  }
+};
+
+// Pause and resume
+audioManager.pauseMusic();
+audioManager.playMusic();  // Resumes from saved position
+
+// Stop (resets position)
+audioManager.stopMusic();
+```
+
+**SFX Triggering:**
+
+```typescript
+// Play simple SFX
+audioManager.playSFX('trade:buy');
+
+// Play with custom volume
+audioManager.playSFX('market:alert:high', { volume: 0.8 });
+
+// SFX is automatically debounced (500ms cooldown per type)
+// Mute state is respected (no SFX plays when isMuted=true)
+```
+
+**Volume Control:**
+
+```typescript
+// Channels: 'master' | 'music' | 'sfx'
+audioManager.setVolume('master', 0.8);   // 80% overall
+audioManager.setVolume('music', 0.7);    // 70% music relative to master
+audioManager.setVolume('sfx', 0.9);      // 90% SFX relative to master
+
+// Final levels: music = 0.8 × 0.7 = 0.56, sfx = 0.8 × 0.9 = 0.72
+
+// Mute/unmute (global)
+audioManager.toggleMute();
+
+// Persist settings to localStorage
+audioManager.saveSettings();
+```
+
+**Settings Management:**
+
+```typescript
+// Get current settings snapshot
+const settings = audioManager.getSettings();
+console.log(settings.masterVolume);      // 0-1
+console.log(settings.currentTrackId);    // 'focus-ambient' or null
+console.log(settings.isMuted);           // boolean
+console.log(settings.playbackPosition);  // seconds
+
+// Reload settings from localStorage
+audioManager.loadSettings();
+```
+
+**Cleanup (on unmount):**
+
+```typescript
+// Component cleanup
+useEffect(() => {
+  return () => {
+    if (audioManager.isInitialized()) {
+      audioManager.pauseMusic();
+      audioManager.saveSettings();  // Persist before cleanup
+    }
+  };
+}, []);
+
+// App shutdown
+audioManager.dispose();  // Free Tone.js resources
+```
+
+### Audio Storage Utilities
+
+**Update specific setting:**
+
+```typescript
+import { updateAudioSetting, loadAudioSettings, saveAudioSettings } from '@/utils/audio-storage';
+
+// Option 1: Granular update (recommended)
+updateAudioSetting('masterVolume', 0.75);
+updateAudioSetting('isMuted', true);
+
+// Option 2: Load, modify, save (for multiple changes)
+const settings = loadAudioSettings();
+settings.masterVolume = 0.75;
+settings.musicVolume = 0.6;
+saveAudioSettings(settings);
+```
+
+**Error handling:**
+
+```typescript
+// All audio-storage functions handle errors gracefully
+try {
+  updateAudioSetting('masterVolume', 0.5);
+  // Silently logs error to console if localStorage fails
+  // Returns undefined on error
+} catch (error) {
+  console.error('Storage error:', error);
+  // Application continues with default settings
+}
+```
+
+### Audio Type System
+
+**Type-safe audio operations:**
+
+```typescript
+import {
+  AudioSettings,
+  MusicTrack,
+  SFXType,
+  SFXOptions,
+  VolumeChannel,
+  MUSIC_TRACKS
+} from '@/types/audio';
+
+// SFX type safety
+const sfxType: SFXType = 'trade:buy';  // ✓ Valid
+// const invalid: SFXType = 'foo:bar';  // ✗ TypeScript error
+
+// Volume channels
+const channels: VolumeChannel[] = ['master', 'music', 'sfx'];
+
+// Available tracks
+console.log(MUSIC_TRACKS);  // Pre-configured track list
+// [
+//   { id: 'focus-ambient', name: 'Focus Ambient', ... },
+//   { id: 'energy-upbeat', name: 'Energy Upbeat', ... },
+//   ...
+// ]
+```
+
+### Common Patterns
+
+**Pattern: Initialize on demand**
+
+```typescript
+export const useAudioInitialize = () => {
+  const [isReady, setIsReady] = useState(false);
+
+  const initialize = useCallback(async () => {
+    if (audioManager.isInitialized()) {
+      setIsReady(true);
+      return;
+    }
+
+    try {
+      await audioManager.initialize();
+      setIsReady(true);
+    } catch (error) {
+      console.error('Audio init failed:', error);
+    }
+  }, []);
+
+  return { isReady, initialize };
+};
+```
+
+**Pattern: Sync audio state with localStorage**
+
+```typescript
+// Persist settings after any change
+const syncSettings = useCallback(() => {
+  audioManager.saveSettings();
+  console.log('[Audio] Settings synced to localStorage');
+}, []);
+
+// On volume change
+const handleVolumeChange = (channel: VolumeChannel, value: number) => {
+  audioManager.setVolume(channel, value);
+  syncSettings();
+};
+```
+
+**Pattern: Cleanup on component unmount**
+
+```typescript
+useEffect(() => {
+  return () => {
+    // Always save state before unmounting
+    if (audioManager.isInitialized()) {
+      audioManager.saveSettings();
+    }
+  };
+}, []);
+```
+
+### Known Limitations
+
+**Phase 1 (still applicable):**
+1. **Browser autoplay policy:** Must initialize in response to user gesture
+2. **No advanced effects:** No fade-in/out, crossfade, or dynamic volume yet
+
+**Phase 3 (addressed from Phase 1):**
+- ✓ UI controls added (AudioSettingsModal)
+- ✓ Event triggers implemented (trade, portfolio analysis)
+- ✓ React Context added
+- ✓ localStorage persistence
+
+**Phase 3 Limitations (Phase 4+):**
+1. **No keyboard shortcuts:** Will be added in Phase 4
+2. **No backend integration:** SFX triggered client-side only
+3. **No streaming audio:** All audio files must be pre-downloaded
+4. **No audio effects:** No equalizer, reverb, or compression
+5. **Single-threaded debouncing:** Per-type cooldown, not global
 
 ---
 
@@ -953,6 +1388,7 @@ Before submitting a PR:
 - `socket.io-client` - WebSocket
 - `tailwindcss` - Styling
 - `lucide-react` - Icons
+- `tone` - Audio playback (v15.1.22) - Phase 1 Audio System
 
 ---
 
@@ -1051,5 +1487,5 @@ socket.on('reconnect_failed', () => {
 
 ---
 
-**Last Updated:** 2025-12-31 (Phase 5.4)
-**Maintained By:** Backend & Frontend Teams
+**Last Updated:** 2026-01-05 (Phase 1 + Phase 3 Audio System + Phase 5.4)
+**Maintained By:** Audio Team (Phase 1 & 3) & Backend & Frontend Teams (Advisor)

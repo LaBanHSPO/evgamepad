@@ -2,6 +2,30 @@ import { useState, useEffect, useCallback } from "react";
 import { TrendingUp, TrendingDown, Zap, Shield, Target } from "lucide-react";
 import { useSocket } from "@/context/SocketContext";
 import { toast } from "sonner";
+import { sfxEmitter } from "@/services/sfx-event-emitter";
+
+/**
+ * Order result from Socket.IO
+ */
+interface OrderResult {
+  success: boolean;
+  order?: {
+    ticket?: string | number;
+    symbol?: string;
+    price?: number;
+    volume?: number;
+    type?: number; // 0 = buy, 1 = sell
+  };
+  error?: string;
+}
+
+/**
+ * Socket.IO error response
+ */
+interface SocketError {
+  message?: string;
+  error?: string;
+}
 
 const pairs = [
   // { symbol: "BTC/USD", price: "97,842.50", change: "+2.34%" },
@@ -21,13 +45,24 @@ export const GamepadQuickTrade = () => {
 
   const { socket, isConnected } = useSocket();
 
-  const handleTradeResponse = useCallback((data: any) => {
+  const handleTradeResponse = useCallback((data: OrderResult) => {
     setIsProcessing(false);
     console.log("Order response:", data);
     if (data.success) {
       toast.success(`Order Executed: ${data.order?.ticket || "Success"}`, {
         description: `${data.order?.symbol} @ ${data.order?.price}`,
         duration: 3000,
+      });
+
+      // Trigger SFX for successful trade
+      const tradeAmount = data.order?.volume || 0;
+      const tradeType = data.order?.type === 0 ? 'trade:buy' : 'trade:sell';
+      sfxEmitter.emit({
+        type: tradeType,
+        metadata: {
+          amount: tradeAmount,
+          symbol: data.order?.symbol
+        }
       });
     } else {
       toast.error("Order Failed", {
@@ -37,7 +72,7 @@ export const GamepadQuickTrade = () => {
     }
   }, []);
 
-  const handleError = useCallback((err: any) => {
+  const handleError = useCallback((err: SocketError) => {
     setIsProcessing(false);
     const msg = err?.message || err?.error || "Unknown error";
     toast.error("Trade Error", { description: msg });

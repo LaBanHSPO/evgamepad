@@ -10,27 +10,40 @@ import NotFound from "./pages/NotFound";
 
 import { GlobalGamepadHandler } from "@/components/GlobalGamepadHandler";
 import { SocketProvider } from "@/context/SocketContext";
+import { AudioProvider } from "@/context/AudioContext";
+import { useAudioKeyboard } from "@/hooks/useAudioKeyboard";
 
 const queryClient = new QueryClient();
 
+const AppContent = () => {
+  // Register global audio keyboard shortcuts
+  useAudioKeyboard();
+
+  return (
+    <BrowserRouter>
+      <GlobalGamepadHandler />
+      <Routes>
+        <Route path="/plan" element={<Plan />} />
+        <Route path="/action" element={<Action />} />
+        <Route path="/" element={<Portfolio />} />
+        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </BrowserRouter>
+  );
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <SocketProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <GlobalGamepadHandler />
-          <Routes>
-            <Route path="/plan" element={<Plan />} />
-            <Route path="/action" element={<Action />} />
-            <Route path="/" element={<Portfolio />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </SocketProvider>
+    <AudioProvider>
+      <SocketProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <AppContent />
+        </TooltipProvider>
+      </SocketProvider>
+    </AudioProvider>
   </QueryClientProvider>
 );
 

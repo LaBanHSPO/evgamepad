@@ -1,0 +1,46 @@
+{
+  "tracks": [
+    {
+      "id": "focus-ambient",
+      "name": "Focus Ambient",
+      "description": "Calm, minimal distraction",
+      "filePath": "/audio/music/focus-ambient.mp3",
+      "duration": 180,
+      "license": "CC-BY",
+      "artist": "TBD",
+      "source": "TBD"
+    },
+    {
+      "id": "energy-upbeat",
+      "name": "Energy Upbeat",
+      "description": "High-tempo trading",
+      "filePath": "/audio/music/energy-upbeat.mp3",
+      "duration": 180,
+      "license": "CC-BY",
+      "artist": "TBD",
+      "source": "TBD"
+    },
+    {
+      "id": "strategy-chill",
+      "name": "Strategy Chill",
+      "description": "Mid-tempo analytical",
+      "filePath": "/audio/music/strategy-chill.mp3",
+      "duration": 180,
+      "license": "CC-BY",
+      "artist": "TBD",
+      "source": "TBD"
+    },
+    {
+      "id": "night-lofi",
+      "name": "Night Lofi",
+      "description": "Low-energy late sessions",
+      "filePath": "/audio/music/night-lofi.mp3",
+      "duration": 180,
+      "license": "CC-BY",
+      "artist": "TBD",
+      "source": "TBD"
+    }
+  ],
+  "version": "1.0.0",
+  "lastUpdated": "2026-01-01"
+}
