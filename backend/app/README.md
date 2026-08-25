@@ -1,2 +1,0 @@
-- uv pip install -r requirements.txt --python .\.venv311  
-- uv run --python .venv311 python -m app.main

@@ -1,0 +1,259 @@
+---
+title: "Phase 1: Repo, protocol, Docker config"
+status: todo
+phase: 1
+priority: P1
+effort: 11h
+dependencies: []
+---
+
+# Phase 1: Repo, protocol, Docker config
+
+## Overview
+
+Scaffold the monorepo and freeze contracts: JSON WebSocket envelope, Zod catalog, cTrader-only config, Docker Compose skeleton. No paper engine. No MT5 types. `ev-exec` is a stub that cannot place until phase 2.
+
+Protocol v1 is frozen **here**, so the journal layer's channel and messages (phases 7-11) are
+declared in this phase even though nothing implements them yet. Adding them later would be a v2
+migration; adding them now costs a few Zod schemas.
+
+## Context Links
+
+- [plan.md](./plan.md)
+- [cTrader Docker research](./research/researcher-05-ctrader-docker.md)
+- https://help.ctrader.com/open-api/proxies-endpoints/
+- https://help.ctrader.com/open-api/account-authentication/
+
+## Requirements
+
+- Functional: pnpm workspace `apps/web`, `apps/gateway`, `apps/exec` (Python), `packages/protocol`, `packages/exec`, `packages/method`
+<!-- Updated: Validation Session 2 - packages/exec was created but undeclared -->
+- Functional: protocol v1 `{v,t,seq,ts,ch,cid,p}`; 64KiB max; ULID `cid`; channels `quotes|orders|session|ai|voice`
+<!-- Updated: Validation Session 4 - journal layer adds exactly one channel; telemetry/tilt/grades/score ride `session` -->
+- Functional: `hello` + `lastSeq`; `resync` / `snap`; one WS per token
+- Functional: `intent.*` carries `clutch: true`; heartbeat clutch is dead-man only
+- Functional: config `broker.adapter: ctrader` only; `mode: demo`; IANA timezone required
+- Functional: Docker Compose file exists (services defined, exec unpublished)
+- Non-functional: boot-fail on `mode: live`, live Open API host, `on_hot_path: true`, `timezone: local`, non-loopback listen in non-dev, `tradingview.auto_trade: true`
+- Non-functional: boot-fail on `voice.stt.mode` outside `{local, off}`, `voice.bindings` resolving to LT/RT/A/B/X/Y, `tilt.gate_close: true`, or `score.weights` not summing to 1.0. These are **structural guarantees** that voice and tilt can never reach the order path, and that the score cannot be silently mis-weighted
+<!-- Updated: Validation Session 4 - journal layer safety invariants enforced by config, not convention -->
+- Non-functional: secrets via env only (`CT_CLIENT_ID`, `CT_CLIENT_SECRET`, `CT_ACCESS_TOKEN`, `CT_REFRESH_TOKEN`, `CT_ACCOUNT_ID`, `EV_WS_TOKEN`, `XAI_API_KEY`, `TV_WEBHOOK_SECRET`)
+
+## Architecture
+
+Envelope and message catalog unchanged from the game protocol. Exec sidecar protocol stays TCP JSON on `127.0.0.1:9101` **inside the compose network**; the only implementation is cTrader.
+
+### Client → VPS
+
+`hello`, `ping`, `sub`, `resync`, `snap`, `intent.open|close|modify|cancel|panic`, `session.lock|unlock`, `ai.ask`
+
+Journal layer (phases 7-11): `pad.telemetry`, `voice.begin`, `voice.cancel`, `journal.memo.link`, `grade.answer`, `playbook.select`
+
+`ai.ask`: `{cid, kind: 'research'|'plan'|'advise'|'news'|'coach', sym, tf}`  
+`intent.open`: `{cid, sym, side, type:'market', lots, sl?, tp?, clutch: true, armedAt}`  
+`pad.telemetry`: 1 Hz **batch**, never per-frame — `{ts, from, to, sym, lots, reason?, clutchMs, armMs, clutchCycles, armFlips, btnRateHz, lotStepsSince, ttfMs}` plus an idle heartbeat
+
+### VPS → client
+
+`welcome`, `pong`, `quote`, `candle`, `order.ack|reject|upd`, `pos.snap`, `pnl`, `session`, `risk`, `sentinel.tick`, `news.item`, `signal.item`, `ai.advice`, `error`, `maint`
+
+Journal layer (phases 7-11): `voice.transcript {voiceId, cid?, ok, text?, reason?, durMs, sttMs}`, `voice.state {busy, queued}`, `tilt {score, band, top[], cooldownUntil?}`, `grade {cid, playbookId, required_pass, required_total, clean, results[]}`, `playbook.list`, `score.session {axes, total, na[], weightsVersion}`
+
+### HTTP surfaces (declared here, implemented in phases 7-11)
+
+`POST /api/voice/memo` (multipart, returns `202 {voiceId}`), `GET /api/voice/:id/audio`, `GET /api/replay/:cid`, `GET /api/replay/index`, `GET|POST /api/playbooks*`, `GET /api/score/session/:id`
+
+Audio and tape ride **HTTP, never the WS**. Base64 in a 64 KiB envelope is ~16 s of audio per frame
+plus chunking and reordering, on the socket whose entire job is prioritising order acks. This follows
+the same reasoning as phase 6's `GET /api/deck/*`.
+
+Quotes come from **cTrader spots**, not a random walk.
+
+### Config sketch
+
+```yaml
+mode: demo                    # demo only; live = exit
+timezone: "Asia/Ho_Chi_Minh"
+broker:
+  adapter: ctrader            # only value
+  host: "demo.ctraderapi.com"
+  port: 5035
+  proto: protobuf
+  exec_addr: "ev-exec:9101"   # compose DNS
+  account_id_env: CT_ACCOUNT_ID
+  token_env: CT_ACCESS_TOKEN
+  refresh_env: CT_REFRESH_TOKEN
+  client_id_env: CT_CLIENT_ID
+  client_secret_env: CT_CLIENT_SECRET
+symbols:
+  - name: XAUUSD
+    max_spread: 0.80
+    max_lots: 0.10
+    default_lots: 0.01
+    lot_step: 0.01
+  - name: EURUSD
+    max_lots: 0.50
+    default_lots: 0.10
+    lot_step: 0.01
+  - name: GBPUSD
+    max_lots: 0.50
+    default_lots: 0.10
+    lot_step: 0.01
+  - name: USDJPY
+    max_lots: 0.50
+    default_lots: 0.10
+    lot_step: 0.01
+session:
+  days: [sun, mon, tue, wed, thu, fri]
+  start: "18:00"
+  end: "23:30"
+risk:
+  max_positions: 1
+  max_daily_loss_usd: 200
+  min_seconds_between_orders: 2
+  panic_flatten_on_disconnect: false
+  r_unit_usd: 20              # R when no SL at entry; see phase 2 for the single R definition
+  default_stop:               # per-symbol, price units
+    XAUUSD: 2.00
+    EURUSD: 0.0010
+    GBPUSD: 0.0012
+    USDJPY: 0.15
+gateway:
+  listen: "127.0.0.1:8444"
+  static_dir: "apps/web/dist"   # gateway serves the HUD itself
+  ws_path: "/ws"                # same origin as the HUD
+  public_origin: "https://YOUR_DOMAIN"
+  token_env: EV_WS_TOKEN
+  heartbeat_s: 1
+  heartbeat_dead_s: 3
+  max_frame_bytes: 65536
+voice:                         # phase 8
+  enabled: true
+  stt:
+    mode: local                # local | off  — anything else exits; there is no cloud path
+    model: small.en            # boot benchmark may downgrade: small -> base -> tiny -> disabled
+    lang: en
+  bindings: [LB+RB, "key:V"]   # exits if this resolves to LT/RT/A/B/X/Y
+  hold_stream: true            # keeps the tab recording indicator lit; false costs 200-400ms/press
+  max_seconds: 60
+  max_bytes: 262144
+  max_uploads_per_hour: 60
+  stt_timeout_s: 60
+  audio_retention_days: 365    # transcripts kept indefinitely
+  tts: off                     # off | browser
+tape:                          # phase 2 records, phase 10 replays
+  dt_s: 1                      # 1 Hz bid+ask OHLC
+  ring_minutes: 90
+  pre_roll_s: 300
+  post_roll_s: 300
+  retention_days: 730
+tilt:                          # phase 9
+  enabled: true
+  gate_close: false            # true exits: tilt may never gate a close or a panic
+  warm: 0.35
+  hot: 0.60
+  scorched: 0.80
+  confirm_hold_ms: 750         # friction 1, applied to opens only
+  cooldown_s: 300              # friction 2, opens only, fails open on reconnect
+score:                         # phase 11
+  trades_max: 6
+  band_width: 1
+  decline_credit_max: 15
+  weights:                     # must sum to 1.0 or the process exits
+    adherence: 0.30
+    selectivity: 0.25
+    risk_discipline: 0.20
+    preparation: 0.15
+    review: 0.10
+playbook:                      # phase 7
+  seed_volman: true
+  allow_custom: true
+# copilot / method / signals / gamepad: same as previous plan (SpaceXAI, Volman M5, FF calendar, TV webhook)
+```
+
+`risk` rules are **enforced**; `playbook` rules are **graded** and never block a fire. Both come from
+one registry at `packages/method/src/rules.ts` (phase 7) so they cannot drift apart.
+
+Volume in cTrader is **not lots**. `ev-exec` converts HUD lots → protocol volume from `ProtoOASymbol` at connect. If `name` is missing on the demo, refuse that symbol.
+
+## Related Code Files
+
+- Create: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`, `.env.example`
+- Create: `compose.yaml` (gateway, exec, volumes; no host bind except 127.0.0.1:8444)
+- Create: `apps/gateway/Dockerfile` (node; also serves `apps/web/dist`; adds `ffmpeg`, `whisper-cli`, and a baked `ggml-tiny.en` floor for phase 8)
+- Create: `apps/exec/Dockerfile` (python slim + `tini`, for the Twisted SIGTERM path in phase 2)
+- Create: `apps/web/Dockerfile` (build stage emitting `dist` into the gateway image)
+<!-- Updated: Validation Session 2 - no phase created Dockerfiles -->
+- Create: `packages/protocol/src/index.ts`
+- Create: `deploy/fetch-models.sh` (checksum-verified `small.en` download into the journal volume)
+- Create: `packages/exec/src/sidecar-protocol.ts`
+- Create: `apps/exec/src/main.py` (stub: healthz TCP, `place` → `not_wired`)
+- Create: `apps/gateway/src/main.ts` (healthz `{ok:true}` loopback)
+- Create: `apps/web` Vite+Svelte stub
+- Create: `config/default.yaml`
+- Create: `README.md`
+
+## Implementation Steps
+
+1. Workspace + Vitest + protocol Zod round-trips.
+2. Sidecar protocol types (`health`, `snapshot`, `account`, `positions`, `place`, `close`, `modify`, `cancel`, fill stream).
+3. Config loader: refuse live host (`live.ctraderapi.com`), `mode: live`, bad timezone, public bind, `auto_trade`.
+4. Dockerfiles: gateway (node), exec (python slim + `tini`), web build stage.
+5. `compose.yaml` with real `build:` contexts; `ev-exec` has **no** `ports:`.
+6. Gateway healthz. Web stub pad-connect.
+7. Journal-layer schemas in the Zod catalog (`voice` channel + the message types above) and the new
+   config blocks with their boot-fails. Nothing implements them yet — this is the protocol freeze,
+   and it is why they land in phase 1 rather than phase 7.
+
+## Todo
+
+- [ ] Workspace + protocol tests
+- [ ] Sidecar protocol
+- [ ] Config boot-fails (live, local TZ, auto_trade, 0.0.0.0)
+- [ ] Dockerfiles (gateway, exec, web build stage)
+- [ ] compose.yaml skeleton with real build contexts
+- [ ] Journal-layer messages + `voice` channel in the frozen catalog
+- [ ] Journal-layer config blocks (`voice`, `tape`, `tilt`, `score`, `playbook`, `risk.r_unit_usd`)
+- [ ] Boot-fails: stt mode, voice bindings, `tilt.gate_close`, score weights
+- [ ] `ffmpeg` + `whisper-cli` + baked tiny.en in the gateway image; `deploy/fetch-models.sh`
+- [ ] README: cTrader ID -> IC Markets demo -> Open API app -> manual token paste
+
+## Success Criteria
+
+- [ ] `pnpm test` protocol round-trips
+- [ ] `mode: live` or `host: live.ctraderapi.com` exits non-zero
+- [ ] `docker compose build` succeeds for gateway and exec
+- [ ] `docker compose config` validates with real `build:` contexts, not placeholders
+- [ ] `voice.stt.mode: cloud`, `voice.bindings: [RT]`, `tilt.gate_close: true`, and score weights
+      summing to 0.95 each exit non-zero
+- [ ] `whisper-cli --help` and `ffmpeg -version` succeed inside the built gateway image
+
+## Risk Assessment
+
+- **Wrong volume scale on gold** — signal: 0.01 lot sends a huge ounce count. Response: convert only after `SymbolById` (light symbols carry no volume spec); fixture test.
+- **OAuth token expired overnight** — signal: account auth fail. Response: refresh token on volume (phase 2).
+- **Journal-layer protocol added late becomes a v2 migration** — signal: phase 7 needs a message the
+  frozen catalog lacks. Response: the channel, the new message types, and the HTTP surfaces are
+  declared in this phase; only their implementations are deferred.
+- **Gateway image bloats with models** — signal: a multi-hundred-MB image. Response: bake only the
+  ~75 MB `tiny.en` floor; `small.en` lands in the journal volume via `deploy/fetch-models.sh`.
+- **No token to refresh** — signal: `CT_REFRESH_TOKEN` empty. Response: initial consent is manual and documented in the README; exec boot-fails with a pointer to it rather than half-starting.
+
+## Security Considerations
+
+- No secrets in yaml or images. `.env` gitignored.
+- Exec container not published to the internet.
+
+### README: cTrader credentials (one-time, manual)
+
+1. Create a cTrader ID.
+2. Open an **IC Markets** cTrader **demo** account under it.
+3. Register an Open API application at connect.spotware.com; wait for approval.
+4. Run the consent flow in a browser with the `trading` scope against the app's redirect URI.
+5. Paste `CT_CLIENT_ID`, `CT_CLIENT_SECRET`, `CT_ACCESS_TOKEN`, `CT_REFRESH_TOKEN`, `CT_ACCOUNT_ID` into `.env`.
+
+No auth helper ships in v1 — `ev-exec` only refreshes what step 5 provided.
+
+## Next Steps
+
+Phase 2 implements Open API spots/orders against these types.
