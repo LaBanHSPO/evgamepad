@@ -4,7 +4,7 @@ status: todo
 phase: 8
 priority: P1
 effort: 14h
-dependencies: [1, 3, 4]
+dependencies: [1, 3, 4, 5]
 ---
 
 # Phase 8: Voice — capture, upload, whisper.cpp, coach TTS
@@ -27,6 +27,7 @@ Audio never leaves the box: capture in Chrome, transcribe locally, no cloud STT.
 - [Phase 1 — `voice` channel, HTTP surfaces, boot-fails, image packages](./phase-01-repo-protocol-docker-config.md)
 - [Phase 3 — pad FSM, desk tabs, Settings overlay](./phase-03-web-game-and-8bitdo-client-agent.md)
 - [Phase 4 — `ai.ask`, copilot loops, `speak` field](./phase-04-ai-desk-sentinel-news-volman.md)
+- [Phase 5 — target VPS probe and verified model files](./phase-05-ubuntu-docker-deploy.md)
 - https://github.com/ggml-org/whisper.cpp
 
 ## Requirements
@@ -37,7 +38,7 @@ Audio never leaves the box: capture in Chrome, transcribe locally, no cloud STT.
   mapping probe: `audio/webm;codecs=opus` -> `audio/webm` -> `audio/mp4` -> `''` (UA default).
   All fail -> PTT disabled, HUD reads "mic unsupported". No WAV-encoder polyfill in v1
 - Functional: `getUserMedia({audio:{channelCount:1, echoCancellation:true, noiseSuppression:true, autoGainControl:true}})`
-  behind an explicit **"enable mic"** button in the Settings overlay (Menu), then held for the
+  behind an explicit **"enable mic"** button in Settings reached through GameOverlay, then held for the
   session. `voice.hold_stream: false` releases between presses for anyone who dislikes the persistent
   tab recording indicator, at the cost of 200-400 ms acquisition per press
 - Functional: one `MediaRecorder` per press, `audioBitsPerSecond: 24000`, mono, one blob on `stop`.
@@ -58,8 +59,8 @@ Audio never leaves the box: capture in Chrome, transcribe locally, no cloud STT.
   emits no order-FSM transition of its own. Enterable only from order-FSM `IDLE` or `LOCKED`.
   Entering `CLUTCH` while recording performs a **graceful stop-and-submit**, never a discard, and
   blocks new PTT until back to `IDLE`
-- Functional: routing needs **zero new bindings** — the transcript goes wherever the active desk tab
-  points, which is on screen before you speak:
+- Functional: routing needs **zero new bindings** — GameOverlay owns desk-tab selection, and the
+  transcript goes wherever the active tab points, which is on screen before you speak:
 
   | active desk tab | transcript becomes |
   |---|---|
@@ -147,7 +148,8 @@ ev-gateway
 - Create: `apps/gateway/src/voice/stt.ts` (ffmpeg + whisper spawn, queue of 1, timeout, tier ladder)
 - Create: `apps/gateway/src/voice/stt.test.ts` (timeout path, nonzero exit, audio survives)
 - Create: `apps/gateway/src/voice/bench.ts` (boot benchmark + tier selection + log line)
-- Create: `deploy/fetch-models.sh` (checksum-verified model download into the volume)
+- Create: `apps/gateway/src/db/migrations/006-voice.sql`
+- Modify: `deploy/fetch-models.sh` (consume/verify the phase 5 model candidate)
 - Modify: `apps/gateway/src/journal.ts` (`voice_memo` writes)
 - Modify: `apps/web/src/hud/CopilotDesk.svelte` (5th tab; routing by active tab)
 - Modify: `apps/web/src/pad/fsm.ts` (bumper fire-on-release when the chord did not engage)
@@ -156,7 +158,7 @@ ev-gateway
 
 ## Implementation Steps
 
-1. Mime probe + Settings mic enable; log the winner.
+1. Apply `006-voice.sql`; add the MIME probe and Settings mic enable through GameOverlay; log the winner.
 2. PTT chord in `ptt.ts` with the bumper fire-on-release change; unit tests first — the invariant
    that PTT emits no order transition is the test that matters.
 3. Upload route with caps, 202, and the download fallback.
@@ -169,7 +171,7 @@ ev-gateway
 
 ## Todo
 
-- [ ] Mime probe + mic enable in Settings
+- [ ] `006-voice.sql` + mime probe + mic enable in Settings
 - [ ] LB+RB chord PTT; bumpers fire on release
 - [ ] PTT provably cannot emit an order transition
 - [ ] `POST /api/voice/memo` 202 + caps + fallback

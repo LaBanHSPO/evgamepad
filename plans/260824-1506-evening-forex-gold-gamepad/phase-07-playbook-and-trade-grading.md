@@ -4,7 +4,7 @@ status: todo
 phase: 7
 priority: P1
 effort: 12h
-dependencies: [2, 3]
+dependencies: [2, 3, 4]
 ---
 
 # Phase 7: Playbook, rule registry, and trade grading
@@ -24,7 +24,7 @@ trade blocker.
 
 - [plan.md](./plan.md)
 - [Phase 2 — risk rules are exported, not private](./phase-02-ctrader-exec-and-socket-gateway.md)
-- [Phase 3 — confirm overlay, Menu + D-pad playbook cycle](./phase-03-web-game-and-8bitdo-client-agent.md)
+- [Phase 3 — confirm overlay and safe GameOverlay navigation](./phase-03-web-game-and-8bitdo-client-agent.md)
 - [Phase 4 — Volman M5 detectors emit setup tags](./phase-04-ai-desk-sentinel-news-volman.md)
 - [Phase 6 — adherence reuses one rule set](./phase-06-performance-and-psychology-deck.md)
 
@@ -36,7 +36,8 @@ trade blocker.
   `{ code, label, scope: 'risk' | 'playbook', kind: 'auto' | 'manual', evaluate(ctx) -> { ok, actual, expected } }`
 - Functional: phase 2 `risk.ts` imports the `scope: 'risk'` subset and **enforces** it — a failing
   risk rule rejects the intent server-side, exactly as it does today
-- Functional: grading and the phase 6 deck import the whole registry and **score** it
+- Functional: grading imports the whole registry and **scores** it; the phase 11 deck extension
+  consumes these grades. Phase 6's already-delivered risk adherence remains unchanged
 - Non-functional: a `scope: 'playbook'` rule **never** rejects an intent. Assert it in a test —
   this is the failure mode that would silently turn the journal into a trade blocker
 - Non-functional: phase 2 keeps enforcing what it enforces today; this phase changes where the
@@ -50,8 +51,9 @@ trade blocker.
   `code` references a registry entry, `params` parameterises it, `required` rules gate `clean`
 - Functional: seed playbooks from the phase 4 Volman detectors (range box, break, pullback test,
   false break, block break) so the player starts with a real book, not an empty one
-- Functional: playbooks are editable at `/playbooks` (same origin) and selectable on the pad via
-  `Menu + D-pad U/D`; the active playbook is part of session state
+- Functional: playbooks are editable at `/playbooks` (same origin) and selectable from the phase 3
+  GameOverlay's Playbook destination; D-pad selects and A applies. The active playbook is part of
+  session state. No `Menu + D-pad` shortcut exists outside the overlay
 - Functional: retiring a playbook sets `retired_at` and hides it from selection; historical grades
   keep resolving, so the deck never loses a month
 
@@ -100,8 +102,9 @@ BUY 0.10 XAUUSD @ 2345.12
 - Create: `apps/gateway/src/grading/grade.test.ts` (unplanned fallback, unknown manual answers, low-N)
 - Create: `apps/gateway/src/grading/routes.ts` (`GET|POST /api/playbooks`, `POST /api/playbooks/:id/retire`)
 - Create: `apps/gateway/src/grading/seed.ts` (Volman starter playbooks)
+- Create: `apps/gateway/src/db/migrations/005-playbooks.sql`
 - Create: `apps/web/src/playbook/PlaybookEditor.svelte`
-- Create: `apps/web/src/playbook/PlaybookPicker.svelte` (pad-driven, `Menu + D-pad U/D`)
+- Create: `apps/web/src/playbook/PlaybookPicker.svelte` (pad-driven inside GameOverlay)
 - Create: `apps/web/src/playbook/PostTradeChecklist.svelte` (3-tap, skippable)
 - Modify: `apps/gateway/src/risk.ts` (import the registry instead of inlining rules)
 - Modify: `apps/web/src/hud/ConfirmOverlay.svelte` (render the live grade)
@@ -114,10 +117,10 @@ BUY 0.10 XAUUSD @ 2345.12
 1. Extract the registry from phase 2's `risk.ts`; make `risk.ts` import it. Existing risk tests must
    pass untouched — that is the proof the extraction was behaviour-preserving.
 2. Add `scope: 'playbook'` rules and the assertion test that they cannot reject an intent.
-3. Schema + seed the Volman starter playbooks.
+3. Apply `005-playbooks.sql` + seed the Volman starter playbooks.
 4. `grade.ts` pure evaluation; fixture tests including `__unplanned__`.
 5. Wire ARM/FIRE grading into the gateway; push `grade` on `session`.
-6. Confirm overlay renders the grade; picker on `Menu + D-pad U/D`.
+6. Confirm overlay renders the grade; GameOverlay Playbook destination owns selection.
 7. Post-trade checklist on close, skippable, `unknown` on skip.
 8. `/playbooks` editor, same origin, escaped player text.
 
@@ -125,11 +128,11 @@ BUY 0.10 XAUUSD @ 2345.12
 
 - [ ] Rule registry extracted; risk.ts imports it; existing tests green
 - [ ] Playbook rules provably cannot reject an intent
-- [ ] Schema + Volman starter seed
+- [ ] `005-playbooks.sql` + Volman starter seed
 - [ ] Grading pure functions + fixtures
 - [ ] `grade` at ARM and FIRE
 - [ ] Confirm overlay shows the grade before commit
-- [ ] Pad playbook picker
+- [ ] GameOverlay playbook picker; no competing Menu shortcut
 - [ ] Post-trade checklist, skip = unknown
 - [ ] `/playbooks` editor
 

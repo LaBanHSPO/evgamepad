@@ -4,7 +4,7 @@ status: todo
 phase: 11
 priority: P1
 effort: 8h
-dependencies: [4, 6, 7, 9]
+dependencies: [4, 6, 7, 8, 9, 10]
 ---
 
 # Phase 11: Process Score and radar deck
@@ -28,7 +28,9 @@ No streaks. No levels. No cross-session accumulator exists anywhere in the schem
 - [Phase 4 — sentinel publishes numeric opportunity quality](./phase-04-ai-desk-sentinel-news-volman.md)
 - [Phase 6 — process panel, pure metric functions, low-N discipline](./phase-06-performance-and-psychology-deck.md)
 - [Phase 7 — grades supply Adherence](./phase-07-playbook-and-trade-grading.md)
+- [Phase 8 — memo evidence](./phase-08-voice-capture-whisper-and-coach.md)
 - [Phase 9 — tilt is a retrospective here, never a score input](./phase-09-tilt-telemetry-and-adaptive-friction.md)
+- [Phase 10 — replay-open evidence](./phase-10-trade-replay.md)
 - Steenbarger: markets do not offer equal opportunity every night. **Cite, do not paste.**
 
 ## Requirements
@@ -48,6 +50,10 @@ No streaks. No levels. No cross-session accumulator exists anywhere in the schem
 - Non-functional: win rate, profit factor, P/L and R **are not axes**. Every input is process-side
 - Non-functional: **tilt is not an input** (phase 9 decision). It renders on this deck as a session
   retrospective only
+- Functional: memo sub-items are evidence only when `voice.enabled` and capture was available. If
+  voice is disabled or the browser has no usable mic, drop those sub-items and renormalise the axis;
+  do not punish a supported degradation mode. If voice was available and the player skipped it,
+  the sub-item remains a genuine miss
 
 ### Selectivity — the mechanism that makes standing down pay
 
@@ -76,7 +82,9 @@ Selectivity   = min(100, Selectivity0 + declineCredit)
 - Functional: dropped axes render on the radar as a dashed **"n/a — no trades"** ring, never as a
   zero spoke
 - Functional: on a zero-trade evening, Review's trade-dependent sub-items are replaced by
-  trade-independent ones (post check-in, >=1 memo tonight, >=1 past trade replayed)
+  trade-independent ones (post check-in, >=1 memo tonight, and >=1 eligible past trade replayed).
+  If no past trade exists yet, drop the replay item and renormalise rather than making a first
+  session fail an impossible requirement
 
 ### Persistence and auditability
 
@@ -156,6 +164,7 @@ The displayed total is the axis-weighted sum rounded half-up to an integer. Stor
 - Create: `apps/gateway/src/score/session.ts` (pure axes, vacuous-axis renormalisation)
 - Create: `apps/gateway/src/score/session.test.ts` (the four worked examples above, to the point)
 - Create: `apps/gateway/src/score/routes.ts` (`GET /api/score/session/:id`, `GET /api/score/month`)
+- Create: `apps/gateway/src/db/migrations/008-score.sql`
 - Create: `apps/web/src/deck/ScoreRadar.svelte` (5 spokes, dashed n/a ring)
 - Create: `apps/web/src/deck/PlaybookStats.svelte`
 - Create: `apps/web/src/deck/TiltRetro.svelte`
@@ -172,7 +181,7 @@ The displayed total is the axis-weighted sum rounded half-up to an integer. Stor
 2. Vacuous-axis drop and renormalisation; assert the dead-tape evening scores >= the active one.
 3. Selectivity against the phase 4 numeric OQ; fall back to three buckets (dead/normal/rich ->
    expected 1/3/5) if the sentinel's components resist normalisation.
-4. `session_score` written at session close, storing inputs; recompute-on-read for old rows when
+4. Apply `008-score.sql`; write `session_score` at session close, storing inputs; recompute-on-read for old rows when
    `weights_version` differs.
 5. Radar component with the dashed n/a ring.
 6. Per-playbook table and tilt retrospective on the ProcessPanel.
@@ -183,7 +192,7 @@ The displayed total is the axis-weighted sum rounded half-up to an integer. Stor
 - [ ] Pure axes + the four worked examples as tests
 - [ ] Vacuous axes drop and renormalise
 - [ ] Selectivity from numeric OQ, bucket fallback
-- [ ] `session_score` stores inputs, not just the total
+- [ ] `008-score.sql`; `session_score` stores inputs, not just the total
 - [ ] Radar with dashed n/a ring
 - [ ] Per-playbook stats table
 - [ ] Tilt retrospective (not an input)
@@ -227,5 +236,6 @@ The displayed total is the axis-weighted sum rounded half-up to an integer. Stor
 
 ## Next Steps
 
-Play the months. This is the number the game was actually asking for — and the one evening it rates
-highest is the one where you correctly did nothing.
+Phase 12 turns this score and its evidence into the daily journal cockpit. This is the number the
+game was actually asking for — and the one evening it rates highest is the one where you correctly
+did nothing.

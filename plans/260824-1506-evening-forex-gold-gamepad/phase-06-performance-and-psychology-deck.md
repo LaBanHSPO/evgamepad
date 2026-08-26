@@ -3,7 +3,7 @@ title: "Phase 6: Performance and psychology deck"
 status: todo
 phase: 6
 priority: P1
-effort: 17h
+effort: 14h
 dependencies: [2, 3, 5]
 ---
 
@@ -46,21 +46,17 @@ evening in a dead tape is a good evening, and the deck must say so.
 - Functional: **opportunity quality** of the evening from the phase 4 sentinel (spread state, range expansion, event density) so a flat night in a dead tape reads as **discipline, not failure**
 - Functional: **this month vs last month** on adherence, declined-rate, and check-in average — the primary "am I improving?" answer
 - Functional: **check-in** — 1-5 self rating at session open and close, two pad taps, skippable; plotted against adherence, not against P/L
-- Functional: the **Process Score radar** (phase 11) lives on this panel — five process-only axes,
-  vacuous axes dropped and renormalised rather than scored zero. The game layer's home is the deck,
-  never the HUD; there is deliberately no live score to watch mid-session
-- Functional: **per-playbook stats** (phase 7): n, adherence, expectancy in R, average MFE/MAE,
-  average efficiency. Process figures here by default; outcome figures stay behind the tab click
-- Functional: **tilt retrospective** (phase 9): bands over the session and their top drivers,
-  correlated against adherence, never against P/L. Tilt is a retrospective here and is **not** an
-  input to the score
+- Functional: reserve extension slots on the ProcessPanel for the phase 11 radar/per-playbook table
+  and tilt retrospective, but render them only after those phases exist. This phase closes with its
+  own process trends and outcome metrics; no future-phase surface is an acceptance dependency
 - Non-functional: no streaks, no leaderboard, no badge that punishes standing down
 <!-- Updated: Validation Session 4 - journal layer surfaces land on the process panel -->
 
 ### Outcome panel (second tab, deliberate click)
 
 - Functional: month-over-month **return %**, **profit factor**, **average R**, **win rate**, **max drawdown**, and **Sharpe** from the session return series
-- Functional: per-setup breakdown by Volman `setup_tag`, and per-playbook breakdown by `playbook_id` (phase 7)
+- Functional: per-setup breakdown by the available Volman `setup_tag`. Per-playbook breakdown is an
+  explicit phase 11 extension after phase 7 supplies graded playbook evidence
 - Functional: Sharpe shows sample size and renders a **"not enough sessions yet"** state below `deck.min_sessions_for_sharpe` (default 30). ~20 sessions/month means the first two months of Sharpe are noise and the deck must say so rather than print a confident number
 - Non-functional: outcome numbers never appear on the process panel, and never in a notification
 - Non-functional: every panel carries the demo / entertainment / not-advice line
@@ -70,6 +66,9 @@ evening in a dead tape is a good evening, and the deck must say so.
 - Functional: deck at `/deck` in the same web app, same origin, served by the gateway (phase 5 decision)
 - Functional: plain HTTP `GET /api/deck/*` JSON — this is not realtime and does not belong on the game socket
 - Functional: copilot gains one read-only tool `get_progress`; it may coach the **process**, and still cannot place, close, or write
+- Functional: migration `004-deck.sql` owns only deck-specific indices/views or cached aggregates.
+  Core trade/equity tables come from phase 2 and `session_process` comes from phase 3; they are not
+  recreated here
 
 ## Architecture
 
@@ -91,15 +90,13 @@ deck; the copilot may only narrate numbers the deck already produced.
 
 ## Related Code Files
 
-- Create: `apps/gateway/src/deck/schema.sql` (three tables + indices)
+- Create: `apps/gateway/src/db/migrations/004-deck.sql` (deck-specific indices/views only)
 - Create: `apps/gateway/src/deck/metrics.ts` (adherence, R, profit factor, drawdown, Sharpe)
 - Create: `apps/gateway/src/deck/metrics.test.ts` (fixture months; Sharpe low-N guard)
 - Create: `apps/gateway/src/deck/routes.ts` (`GET /api/deck/summary|process|outcome`)
 - Create: `apps/web/src/deck/Deck.svelte` (tabs, process default)
 - Create: `apps/web/src/deck/ProcessPanel.svelte`
 - Create: `apps/web/src/deck/OutcomePanel.svelte`
-- Create: `apps/web/src/deck/CheckIn.svelte` (pad-driven 1-5)
-- Modify: `apps/gateway/src/journal.ts` (write the three tables)
 - Modify: `apps/gateway/src/copilot/tools.ts` (add `get_progress`, read-only; phase 11 extends it with the score axes)
 - Modify: `apps/gateway/src/copilot/prompt.ts` (process-over-outcome coaching stance)
 - Modify: `apps/web/src/App.svelte` (route `/deck`)
@@ -108,8 +105,8 @@ deck; the copilot may only narrate numbers the deck already produced.
 
 ## Implementation Steps
 
-1. Schema + journal writes: equity snapshot at session open/close from the cTrader
-   account; `trade_closed` row on every close; `session_process` on check-in.
+1. Apply `004-deck.sql`, then consume phase 2 equity/trade rows and phase 3 process/check-in rows.
+   Do not recreate or take ownership of those tables.
 2. `metrics.ts` pure functions with fixture months — including a two-session month that
    must render the low-N Sharpe state rather than a number.
 3. Adherence evaluation: reuse the phase 2 risk rules as the rule set so the deck scores
@@ -119,35 +116,30 @@ deck; the copilot may only narrate numbers the deck already produced.
    adherence, this-month-vs-last-month deltas.
 6. OutcomePanel behind a tab click: return %, Sharpe (+ sample size), profit factor,
    average R, drawdown, per-setup table.
-7. Check-in overlay driven by the pad; skippable; never blocks the evening starting.
+7. Render the phase 3 check-in rows in the trends; do not create a second capture flow.
 8. Copilot `get_progress` + prompt stance; assert in tests it still has no write or order tool.
 
 ## Todo
 
-- [ ] Three tables + journal writes
+- [ ] `004-deck.sql` indices/views over phase 2/3-owned rows
 - [ ] metrics.ts + fixture tests incl. low-N Sharpe
 - [ ] Adherence reuses phase 2 risk rules
 - [ ] `/api/deck/*` routes
 - [ ] ProcessPanel (default) with month-over-month deltas
 - [ ] OutcomePanel behind a click
-- [ ] Pad check-in + one-line note
+- [ ] Phase 3 check-in + one-line note rendered without duplicate capture
 - [ ] Copilot `get_progress`, still no order tools
-- [ ] Process Score radar on the process panel (phase 11)
-- [ ] Per-playbook stats table (phase 7)
-- [ ] Tilt retrospective, not a score input (phase 9)
 - [ ] README: what the deck refuses to show
 
 ## Success Criteria
 
 - [ ] Opening `/deck` lands on the **process** panel; no dollar figure is visible until a tab is clicked
 - [ ] A month with fewer than `min_sessions_for_sharpe` sessions renders "not enough sessions yet", not a Sharpe number
-- [ ] An evening with zero trades in a dead tape scores **well** on the deck (high declined-rate, low opportunity quality, adherence intact)
+- [ ] An evening with zero trades in a dead tape is framed as disciplined, not missing data
 - [ ] This-month-vs-last-month deltas render for adherence, declined-rate, check-in average, return %, and average R
 - [ ] `session_equity` figures reconcile against the cTrader account, not against summed fills
 - [ ] Copilot can narrate the deck and still has no `place`/`close`/write tool
 - [ ] Every panel shows the demo / entertainment / not-advice line
-- [ ] The radar renders dropped axes as a dashed "n/a — no trades" ring, never a zero spoke
-- [ ] Tilt appears as a retrospective and nowhere in the score inputs
 
 ## Risk Assessment
 
@@ -165,4 +157,5 @@ deck; the copilot may only narrate numbers the deck already produced.
 
 ## Next Steps
 
-Play the months. The deck is the scoreboard that was actually asked for.
+Phase 7 adds playbook evidence; phases 9 and 11 later extend this surface with tilt retrospective,
+per-playbook statistics, and the Process Score radar without reopening phase 6 acceptance.

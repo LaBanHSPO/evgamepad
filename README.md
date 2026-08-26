@@ -12,6 +12,9 @@ rebuilds them for a gamepad: a **playbook** grades every fire against its own ru
 commit, a **voice memo** captures why you took it because you cannot type while trading, a **replay**
 scrubs the trade back through the tape with the sticks, a **tilt-meter** reads your state from the pad
 itself, and a **process-weighted score** rates the evening on decisions rather than money.
+The same app now covers the full daily loop: readiness and analysis before the session, position
+sizing and planned protection, heatmap/history and mistake review afterward, then reports, exports,
+backup, restore, and deliberate deletion.
 
 > **The end goal is confidence and enjoyment — improving decision quality, not the money.**
 > Demo only. Not advice. Entertainment, not alpha.
@@ -31,10 +34,16 @@ itself, and a **process-weighted score** rates the evening on decisions rather t
 | D-pad | Symbol / lot size |
 | `LB` / `RB` | Timeframe |
 | `LB + RB` (hold) | Push-to-talk voice memo |
-| `Menu` + D-pad U/D | Cycle active playbook |
 | `X` | Close |
 | `Y` | Flatten (panic) |
 | `View` | Lock / unlock |
+| `Menu` | Open / close the safe GameOverlay; opening cancels ARM and locks new opens |
+
+Inside GameOverlay, D-pad selects a destination, `LB/RB` changes desk tabs, `A` enters/applies a
+safe preference, `B` goes back, and `Menu` exits. Playbook, Journal, System, Reports, and Settings
+all use this one navigation contract. Navigation/apply cannot emit open/modify. An SL/TP edit only
+stages a modify preview; `LT+RT` is still required before it reaches cTrader. Dedicated close and
+panic controls remain available as safety exits.
 
 Pad link is the **2.4G dongle** (wired USB is the fallback). Bluetooth on the Ultimate 2 needs
 macOS 26+, so it is out on this machine.
@@ -57,11 +66,13 @@ macOS 26+, so it is out on this machine.
     demo.ctraderapi.com     cTrader demo account (IC Markets)
 ```
 
-- **Hot path:** pad → intent `{clutch, armedAt}` → WSS → cid reserve → risk → `ProtoOANewOrderReq` →
-  execution event → ack → rumble.
+- **Hot path:** pad → intent `{clutch, armedAt, relativeSl?, relativeTp?}` → WSS → cid reserve → risk
+  → MARKET `ProtoOANewOrderReq` → execution event → ack → rumble. Existing-position protection is
+  changed with `ProtoOAAmendPositionSLTPReq` after another LT+RT confirmation.
 - **Cold path:** sentinel 1–5 s, copilot 1–30 s, TradingView webhook → `signal.item` only.
-- **Journal path** (colder still, never on the socket): voice memo → `POST /api/voice/memo` →
-  whisper → `voice.transcript`. Tape freeze at close + post-roll. Score computed at session close.
+- **Journal path** (colder still, never on the order socket): readiness/analysis + plan snapshot →
+  trade facts/events → voice/transcript + tape freeze → settled Process Score → daily
+  review/heatmap/history → report/export/backup.
 
 Spotware, not the VPS, is the matching engine. Docker on Ubuntu does not buy Equinix-to-broker
 nanoseconds; it buys always-on execution without Windows.
@@ -104,6 +115,9 @@ enforced by the gateway; `playbook` rules are graded and can never block a fire.
 | **Tilt detection** | Pad telemetry at 1 Hz (clutch cycles, arm flips, button rate, lot steps) → tilt band → adaptive friction on opens. Never a score input. |
 | **Trade replay** | Scrub the frozen tape with the sticks; entry, exit, MFE/MAE, and the memo audio. Cannot place an order. |
 | **Process Score** | Five process-only axes (adherence, selectivity, risk discipline, preparation, review). Standing down scores *well*. |
+| **Daily journal cockpit** | DST-aware session clocks, five-item readiness, analysis, position sizing, process heatmap, day drill-down, latest ten, filterable history, and trade detail. |
+| **Execution learning** | Actual vs Plan, planned/impulsive quality groups, before/during/after scores, mistake taxonomy/trends, and personal principles. |
+| **Reports & data** | Process-first browser PDF, streamed CSV/JSON, manifested backup/restore, and explicit delete-all. |
 
 No streaks, no levels, no badges, no leaderboards, and nothing that accumulates across sessions —
 every mechanic that would create pressure to trade a dead tape is deliberately absent.
@@ -125,34 +139,41 @@ every mechanic that would create pressure to trade a dead tape is deliberately a
 | Coach TTS | Browser `speechSynthesis`, default off |
 | Deck priority | Process first; money sits behind a deliberate tab click |
 | TradingView VIP | Second-screen cockpit + Pine webhook signals; never auto-trade |
+| Product scope | One focused IC Markets cTrader demo account |
+| Orders | MARKET with relative SL/TP; absolute SL/TP amend; full close/panic; no pending/partial |
+| Navigation | Menu opens one safe GameOverlay; broker-changing applies still require LT+RT |
+| Journal | Full daily cockpit and deterministic execution-quality analysis |
+| Data ownership | Browser PDF, CSV/JSON, backup/restore/delete; no history import |
+| UI boundary | Desktop Chrome, dark-only; no mobile/light mode |
+| Database | Phase-owned migrations `001`–`010` |
 
 ## Phases
 
-Build order: amendments to phases 1–6 land first so the protocol, journal schema, and pad telemetry
-capture everything from day one; then 1→6 to a playable game; then 7→11.
+Recommended delivery order is sequential. Phase files declare minimum direct dependencies, but the
+acceptance gates follow migration, navigation, and evidence contracts from `1` through `14`.
 
 ```text
-1 ─ 2 ─ 3 ─┬─ 4 ─ 5 ─ 6 ───────┐
-           ├─ 7 ─┬─ 9 ─────────┼─ 11
-           │     └─ 10         │
-           └─ 8 ───────────────┘
+1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14
 ```
 
 | # | Phase | Effort | Status |
 |---|-------|--------|--------|
-| 1 | [Repo, protocol, Docker config](./plans/260824-1506-evening-forex-gold-gamepad/phase-01-repo-protocol-docker-config.md) | 11h | Pending |
-| 2 | [cTrader exec and socket gateway](./plans/260824-1506-evening-forex-gold-gamepad/phase-02-ctrader-exec-and-socket-gateway.md) | 17h | Pending |
-| 3 | [Web game and 8BitDo client agent](./plans/260824-1506-evening-forex-gold-gamepad/phase-03-web-game-and-8bitdo-client-agent.md) | 16h | Pending |
+| 1 | [Repo, protocol, Docker config](./plans/260824-1506-evening-forex-gold-gamepad/phase-01-repo-protocol-docker-config.md) | 12h | Pending |
+| 2 | [cTrader exec and socket gateway](./plans/260824-1506-evening-forex-gold-gamepad/phase-02-ctrader-exec-and-socket-gateway.md) | 22h | Pending |
+| 3 | [Web game and 8BitDo client agent](./plans/260824-1506-evening-forex-gold-gamepad/phase-03-web-game-and-8bitdo-client-agent.md) | 18h | Pending |
 | 4 | [AI desk: sentinel, news, Volman, advise](./plans/260824-1506-evening-forex-gold-gamepad/phase-04-ai-desk-sentinel-news-volman.md) | 18h | Pending |
 | 5 | [Ubuntu Docker deploy](./plans/260824-1506-evening-forex-gold-gamepad/phase-05-ubuntu-docker-deploy.md) | 7h | Pending |
-| 6 | [Performance and psychology deck](./plans/260824-1506-evening-forex-gold-gamepad/phase-06-performance-and-psychology-deck.md) | 17h | Pending |
+| 6 | [Performance and psychology deck](./plans/260824-1506-evening-forex-gold-gamepad/phase-06-performance-and-psychology-deck.md) | 14h | Pending |
 | 7 | [Playbook, rule registry, trade grading](./plans/260824-1506-evening-forex-gold-gamepad/phase-07-playbook-and-trade-grading.md) | 12h | Pending |
 | 8 | [Voice: capture, whisper.cpp, coach](./plans/260824-1506-evening-forex-gold-gamepad/phase-08-voice-capture-whisper-and-coach.md) | 14h | Pending |
 | 9 | [Tilt telemetry and adaptive friction](./plans/260824-1506-evening-forex-gold-gamepad/phase-09-tilt-telemetry-and-adaptive-friction.md) | 10h | Pending |
 | 10 | [Trade replay](./plans/260824-1506-evening-forex-gold-gamepad/phase-10-trade-replay.md) | 12h | Pending |
 | 11 | [Process Score and radar deck](./plans/260824-1506-evening-forex-gold-gamepad/phase-11-process-score-and-radar-deck.md) | 8h | Pending |
+| 12 | [Daily journal cockpit and preparation](./plans/260824-1506-evening-forex-gold-gamepad/phase-12-daily-journal-cockpit-and-preparation.md) | 24h | Pending |
+| 13 | [Reports, settings, and data portability](./plans/260824-1506-evening-forex-gold-gamepad/phase-13-reports-settings-and-data-portability.md) | 18h | Pending |
+| 14 | [End-to-end session journey and release gate](./plans/260824-1506-evening-forex-gold-gamepad/phase-14-end-to-end-session-journey-and-release-gate.md) | 14h | Pending |
 
-Total: 142h ≈ 18 days.
+Total: 203h ≈ 26 working days.
 
 ## Planned repo layout
 
@@ -167,6 +188,7 @@ packages/
   method/      Rule registry (risk + playbook), Volman method profile
 config/        default.yaml
 deploy/        fetch-models.sh, compose glue
+docs/          release checklist and verified operating decisions
 plans/         Plan of record, phase files, research, journals
 ```
 
@@ -189,8 +211,9 @@ Nothing is implemented yet — phase 1 scaffolds the workspace. Once it lands th
 5. Paste `CT_CLIENT_ID`, `CT_CLIENT_SECRET`, `CT_ACCESS_TOKEN`, `CT_REFRESH_TOKEN`, `CT_ACCOUNT_ID`
    into `.env`. `ev-exec` only refreshes what you provided here, and boot-fails if it is missing.
 
-Other secrets: `EV_WS_TOKEN`, `XAI_API_KEY`, `TV_WEBHOOK_SECRET`. Secrets go in env only; `.env` is
-gitignored and never baked into an image.
+Other secrets: `EV_WS_TOKEN`, `XAI_API_KEY`, `TV_WEBHOOK_SECRET`. Initial secrets go through env;
+refreshed cTrader tokens use the protected app volume with mode `0600`. Neither is committed, baked
+into an image, exported, or included in backups.
 
 **Run**
 
@@ -206,7 +229,8 @@ from the same origin.
 
 ## Non-goals
 
-Paper simulator. MT5. Wine. Live money. Multiplayer / SaaS / copy-trading. Native HID helper.
+Paper simulator. MT5/broker-history import. Pending orders or partial closes. Multiple accounts or
+markets. Mobile delivery or light mode. Wine. Live money. Multiplayer / SaaS / copy-trading. Native HID helper.
 Auto-trading AI, including TradingView `auto_trade`. Scraping Supercharts. Guaranteed profit.
 Leaderboards, streaks, levels, badges, or any deck mechanic that punishes standing down. Edgewonk's
 what-if trade simulator. Cloud speech-to-text. Voice or AI on the order path. Voice as navigation.

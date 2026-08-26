@@ -3,7 +3,7 @@ title: "Phase 1: Repo, protocol, Docker config"
 status: todo
 phase: 1
 priority: P1
-effort: 11h
+effort: 12h
 dependencies: []
 ---
 
@@ -13,7 +13,7 @@ dependencies: []
 
 Scaffold the monorepo and freeze contracts: JSON WebSocket envelope, Zod catalog, cTrader-only config, Docker Compose skeleton. No paper engine. No MT5 types. `ev-exec` is a stub that cannot place until phase 2.
 
-Protocol v1 is frozen **here**, so the journal layer's channel and messages (phases 7-11) are
+Protocol v1 is frozen **here**, so the journal layer's channel and messages (phases 7-14) are
 declared in this phase even though nothing implements them yet. Adding them later would be a v2
 migration; adding them now costs a few Zod schemas.
 
@@ -37,7 +37,13 @@ migration; adding them now costs a few Zod schemas.
 - Non-functional: boot-fail on `mode: live`, live Open API host, `on_hot_path: true`, `timezone: local`, non-loopback listen in non-dev, `tradingview.auto_trade: true`
 - Non-functional: boot-fail on `voice.stt.mode` outside `{local, off}`, `voice.bindings` resolving to LT/RT/A/B/X/Y, `tilt.gate_close: true`, or `score.weights` not summing to 1.0. These are **structural guarantees** that voice and tilt can never reach the order path, and that the score cannot be silently mis-weighted
 <!-- Updated: Validation Session 4 - journal layer safety invariants enforced by config, not convention -->
-- Non-functional: secrets via env only (`CT_CLIENT_ID`, `CT_CLIENT_SECRET`, `CT_ACCESS_TOKEN`, `CT_REFRESH_TOKEN`, `CT_ACCOUNT_ID`, `EV_WS_TOKEN`, `XAI_API_KEY`, `TV_WEBHOOK_SECRET`)
+- Non-functional: initial secrets arrive via env only (`CT_CLIENT_ID`, `CT_CLIENT_SECRET`,
+  `CT_ACCESS_TOKEN`, `CT_REFRESH_TOKEN`, `CT_ACCOUNT_ID`, `EV_WS_TOKEN`, `XAI_API_KEY`,
+  `TV_WEBHOOK_SECRET`). Refreshed cTrader tokens are persisted only in the protected app volume,
+  mode `0600`, never in git, logs, the browser, or a backup archive
+- Non-functional: migration runner applies every versioned migration exactly once and records each
+  applied migration id; later phases own their tables instead of pretending the final schema exists
+  on day one
 
 ## Architecture
 
@@ -45,12 +51,17 @@ Envelope and message catalog unchanged from the game protocol. Exec sidecar prot
 
 ### Client → VPS
 
-`hello`, `ping`, `sub`, `resync`, `snap`, `intent.open|close|modify|cancel|panic`, `session.lock|unlock`, `ai.ask`
+`hello`, `ping`, `sub`, `resync`, `snap`, `intent.open|close|modify|panic`, `session.lock|unlock`, `ai.ask`
 
 Journal layer (phases 7-11): `pad.telemetry`, `voice.begin`, `voice.cancel`, `journal.memo.link`, `grade.answer`, `playbook.select`
 
 `ai.ask`: `{cid, kind: 'research'|'plan'|'advise'|'news'|'coach', sym, tf}`  
-`intent.open`: `{cid, sym, side, type:'market', lots, sl?, tp?, clutch: true, armedAt}`  
+`intent.open`: `{cid, sym, side, type:'market', lots, relativeSl?, relativeTp?, clutch: true, armedAt}`.
+Relative protection is expressed in cTrader's 1/100000 distance units; MARKET orders do not carry
+absolute `stopLoss` or `takeProfit`.
+`intent.modify`: `{cid, positionId, sl?, tp?, clutch: true, armedAt}` for absolute protection on an
+existing position; it is a broker-changing action and uses the same clutch+confirm gate as an open.
+`intent.close` closes the full position. Pending orders and partial closes are outside v1.
 `pad.telemetry`: 1 Hz **batch**, never per-frame — `{ts, from, to, sym, lots, reason?, clutchMs, armMs, clutchCycles, armFlips, btnRateHz, lotStepsSince, ttfMs}` plus an idle heartbeat
 
 ### VPS → client
@@ -59,9 +70,12 @@ Journal layer (phases 7-11): `pad.telemetry`, `voice.begin`, `voice.cancel`, `jo
 
 Journal layer (phases 7-11): `voice.transcript {voiceId, cid?, ok, text?, reason?, durMs, sttMs}`, `voice.state {busy, queued}`, `tilt {score, band, top[], cooldownUntil?}`, `grade {cid, playbookId, required_pass, required_total, clean, results[]}`, `playbook.list`, `score.session {axes, total, na[], weightsVersion}`
 
-### HTTP surfaces (declared here, implemented in phases 7-11)
+### HTTP surfaces (declared here, implemented in phases 6-13)
 
-`POST /api/voice/memo` (multipart, returns `202 {voiceId}`), `GET /api/voice/:id/audio`, `GET /api/replay/:cid`, `GET /api/replay/index`, `GET|POST /api/playbooks*`, `GET /api/score/session/:id`
+`POST /api/voice/memo` (multipart, returns `202 {voiceId}`), `GET /api/voice/:id/audio`,
+`GET /api/replay/:cid`, `GET /api/replay/index`, `GET|POST /api/playbooks*`,
+`GET /api/score/session/:id`, `/api/deck/*`, `/api/journal/*`, `/api/settings/*`,
+`/api/reports/*`, `/api/export/*`, and `/api/data/*`.
 
 Audio and tape ride **HTTP, never the WS**. Base64 in a 64 KiB envelope is ~16 s of audio per frame
 plus chunking and reordering, on the socket whose entire job is prioritising order acks. This follows
@@ -127,6 +141,9 @@ gateway:
   heartbeat_s: 1
   heartbeat_dead_s: 3
   max_frame_bytes: 65536
+ui:
+  theme: dark                 # the only supported theme in v1
+  desktop_only: true
 voice:                         # phase 8
   enabled: true
   stt:
@@ -185,6 +202,8 @@ Volume in cTrader is **not lots**. `ev-exec` converts HUD lots → protocol volu
 - Create: `apps/web/Dockerfile` (build stage emitting `dist` into the gateway image)
 <!-- Updated: Validation Session 2 - no phase created Dockerfiles -->
 - Create: `packages/protocol/src/index.ts`
+- Create: `apps/gateway/src/db/migrate.ts` (ordered, transactional runner; bootstraps the
+  `schema_migration` ledger and records every id)
 - Create: `deploy/fetch-models.sh` (checksum-verified `small.en` download into the journal volume)
 - Create: `packages/exec/src/sidecar-protocol.ts`
 - Create: `apps/exec/src/main.py` (stub: healthz TCP, `place` → `not_wired`)
@@ -196,12 +215,14 @@ Volume in cTrader is **not lots**. `ev-exec` converts HUD lots → protocol volu
 ## Implementation Steps
 
 1. Workspace + Vitest + protocol Zod round-trips.
-2. Sidecar protocol types (`health`, `snapshot`, `account`, `positions`, `place`, `close`, `modify`, `cancel`, fill stream).
+2. Sidecar protocol types (`health`, `snapshot`, `account`, `positions`, `place`, `close`,
+   `amendPositionSlTp`, fill stream). There is no pending-order cancel or partial-close contract.
 3. Config loader: refuse live host (`live.ctraderapi.com`), `mode: live`, bad timezone, public bind, `auto_trade`.
 4. Dockerfiles: gateway (node), exec (python slim + `tini`), web build stage.
 5. `compose.yaml` with real `build:` contexts; `ev-exec` has **no** `ports:`.
 6. Gateway healthz. Web stub pad-connect.
-7. Journal-layer schemas in the Zod catalog (`voice` channel + the message types above) and the new
+7. Add the migration runner and prove ordered, transactional, idempotent application on a fresh DB.
+8. Journal-layer schemas in the Zod catalog (`voice` channel + the message types above) and the new
    config blocks with their boot-fails. Nothing implements them yet — this is the protocol freeze,
    and it is why they land in phase 1 rather than phase 7.
 
@@ -209,10 +230,11 @@ Volume in cTrader is **not lots**. `ev-exec` converts HUD lots → protocol volu
 
 - [ ] Workspace + protocol tests
 - [ ] Sidecar protocol
+- [ ] Versioned migration runner with per-id tracking
 - [ ] Config boot-fails (live, local TZ, auto_trade, 0.0.0.0)
 - [ ] Dockerfiles (gateway, exec, web build stage)
 - [ ] compose.yaml skeleton with real build contexts
-- [ ] Journal-layer messages + `voice` channel in the frozen catalog
+- [ ] Journal-layer messages + `voice` channel in the frozen catalog for phases 7–14
 - [ ] Journal-layer config blocks (`voice`, `tape`, `tilt`, `score`, `playbook`, `risk.r_unit_usd`)
 - [ ] Boot-fails: stt mode, voice bindings, `tilt.gate_close`, score weights
 - [ ] `ffmpeg` + `whisper-cli` + baked tiny.en in the gateway image; `deploy/fetch-models.sh`
@@ -224,6 +246,8 @@ Volume in cTrader is **not lots**. `ev-exec` converts HUD lots → protocol volu
 - [ ] `mode: live` or `host: live.ctraderapi.com` exits non-zero
 - [ ] `docker compose build` succeeds for gateway and exec
 - [ ] `docker compose config` validates with real `build:` contexts, not placeholders
+- [ ] Fresh DB applies an ordered migration fixture once; a second run is a no-op and a failed
+      migration rolls back without being marked applied
 - [ ] `voice.stt.mode: cloud`, `voice.bindings: [RT]`, `tilt.gate_close: true`, and score weights
       summing to 0.95 each exit non-zero
 - [ ] `whisper-cli --help` and `ffmpeg -version` succeed inside the built gateway image
@@ -232,7 +256,7 @@ Volume in cTrader is **not lots**. `ev-exec` converts HUD lots → protocol volu
 
 - **Wrong volume scale on gold** — signal: 0.01 lot sends a huge ounce count. Response: convert only after `SymbolById` (light symbols carry no volume spec); fixture test.
 - **OAuth token expired overnight** — signal: account auth fail. Response: refresh token on volume (phase 2).
-- **Journal-layer protocol added late becomes a v2 migration** — signal: phase 7 needs a message the
+- **Journal-layer protocol added late becomes a v2 migration** — signal: a later phase needs a message the
   frozen catalog lacks. Response: the channel, the new message types, and the HTTP surfaces are
   declared in this phase; only their implementations are deferred.
 - **Gateway image bloats with models** — signal: a multi-hundred-MB image. Response: bake only the

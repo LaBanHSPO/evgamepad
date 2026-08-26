@@ -27,8 +27,12 @@ Put **docker compose** on the existing Ubuntu VPS. Existing TLS on 443 reverse-p
 - Functional: gateway serves `apps/web/dist` at `/` and the game socket at `/ws`; the existing 443 vhost proxies both to `127.0.0.1:8444`. One origin, one Origin-allowlist entry
 <!-- Updated: Validation Session 2 - no phase served the built SPA; copilot is not a service -->
 - Functional: volumes for sqlite journal + OAuth refresh token + voice audio archive + whisper models
-- Functional: **record the CPU probe** into `deploy/README.md` — `nproc`, `lscpu | grep -E 'Model name|avx2'`, `free -m`, `df -h`. Phase 8's model tier and the decision to keep whisper as a gateway subprocess both hang on it. Expected: 4+ vCPU / 4 GB+, which selects `small.en`
-- Functional: run `deploy/fetch-models.sh` once on the box so `small.en` lands in the journal volume; the baked `tiny.en` floor means voice still works if this fails
+- Functional: **record the CPU probe** into `deploy/README.md` — `nproc`,
+  `lscpu | grep -E 'Model name|avx2'`, `free -m`, `df -h`. Phase 8 consumes this evidence; this deploy
+  phase does not select an STT tier or claim voice works
+- Functional: run `deploy/fetch-models.sh` once so the checksum-verified `small.en` candidate lands
+  in the journal volume; verify both that file and the baked `tiny.en` floor are present. Phase 8
+  owns the runtime benchmark, tier selection, and fallback behaviour
 <!-- Updated: Validation Session 4 - phase 8 needs the model on the box and the probe recorded -->
 - Functional: `restart: unless-stopped`; healthchecks
 - Functional: live host / live account still cannot start
@@ -61,8 +65,8 @@ Firewall: 443 + SSH. Drop 8444 from WAN (loopback bind).
 2. Build `apps/web`; bake `dist` into the gateway image. Fill `public_origin`. Add proxy location; do not steal 443.
 3. Copy env (never commit). `compose up`. Confirm spots from home Chrome.
 4. Reboot VPS; stack returns; cTrader session re-auths; open position still matches `Reconcile`.
-5. CPU probe recorded in `deploy/README.md`; `deploy/fetch-models.sh` run once; confirm the gateway
-   logs the selected whisper tier at boot rather than degrading silently.
+5. CPU probe recorded in `deploy/README.md`; `deploy/fetch-models.sh` run once; verify model files
+   and checksums. Do not require a whisper benchmark or transcript before phase 8.
 6. Runbook: evening start (compose ps, Chrome, pad dongle, TV on other screen, webhook URL).
 
 ## Todo
@@ -71,8 +75,8 @@ Firewall: 443 + SSH. Drop 8444 from WAN (loopback bind).
 - [ ] Loopback publish only
 - [ ] Reverse proxy snippet
 - [ ] Reboot restore + Reconcile
-- [ ] CPU probe recorded; whisper tier logged at boot
-- [ ] `deploy/fetch-models.sh` run once; models in the volume
+- [ ] CPU probe recorded for phase 8
+- [ ] `deploy/fetch-models.sh` run once; checksum-verified model candidate in the volume
 - [ ] Runbook README
 
 ## Success Criteria
@@ -83,9 +87,9 @@ Firewall: 443 + SSH. Drop 8444 from WAN (loopback bind).
 - [ ] `ss -lntp` shows 8444 on 127.0.0.1 only
 - [ ] Live credentials cannot start the stack
 - [ ] Deploy README has no secrets
-- [ ] `deploy/README.md` records `nproc` / AVX2 / RAM / disk, and the gateway boot log names the
-      selected whisper tier
-- [ ] Deleting the model volume still leaves voice working on the baked `tiny.en` floor
+- [ ] `deploy/README.md` records `nproc` / AVX2 / RAM / disk
+- [ ] The image contains the baked `tiny.en` floor and the volume contains a checksum-verified
+      `small.en` candidate; runtime selection remains a phase 8 gate
 
 ## Risk Assessment
 

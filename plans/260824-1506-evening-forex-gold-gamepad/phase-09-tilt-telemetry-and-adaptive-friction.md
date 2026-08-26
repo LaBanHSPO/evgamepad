@@ -124,6 +124,7 @@ voice AnalyserNode + transcript (opt.)   ─┘          |
 - Create: `apps/gateway/src/tilt/score.ts` (pure composition, renormalisation, bands)
 - Create: `apps/gateway/src/tilt/score.test.ts` (weights sum; missing components renormalise; tilt=1.0 never blocks close/panic)
 - Create: `apps/gateway/src/tilt/baseline.ts` (rolling 30-session medians per player)
+- Create: `apps/gateway/src/db/migrations/007-tilt.sql`
 - Create: `apps/web/src/hud/TiltPip.svelte` (band colour + top-driver sentence)
 - Create: `apps/web/src/voice/arousal.ts` (AnalyserNode RMS; optional, phase 8)
 - Modify: `apps/gateway/src/risk.ts` (open-only friction gate reusing the dead-man predicate)
@@ -136,7 +137,8 @@ voice AnalyserNode + transcript (opt.)   ─┘          |
 
 ## Implementation Steps
 
-1. `score.ts` pure functions and fixtures first, including the renormalisation cases.
+1. Apply `007-tilt.sql`; implement `score.ts` pure functions and fixtures, including the
+   renormalisation cases.
 2. Baselines from the journal; guard the cold-start month (fewer than 5 sessions -> behavioural
    components only, voice weight redistributed).
 3. `tilt_sample` rows at 1 Hz plus `tilt_at_entry` frozen onto every fire.
@@ -148,7 +150,7 @@ voice AnalyserNode + transcript (opt.)   ─┘          |
 
 ## Todo
 
-- [ ] Pure tilt composition + renormalisation fixtures
+- [ ] `007-tilt.sql` + pure tilt composition + renormalisation fixtures
 - [ ] Own-baseline rolling medians + cold-start guard
 - [ ] `pad.telemetry` consumption at 1 Hz
 - [ ] HUD pip + top-driver sentence

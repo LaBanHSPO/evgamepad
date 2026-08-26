@@ -3,7 +3,7 @@ title: "Phase 3: Web game and 8BitDo client agent"
 status: todo
 phase: 3
 priority: P1
-effort: 16h
+effort: 18h
 dependencies: [2]
 ---
 
@@ -24,7 +24,8 @@ Ship the evening game: Chrome HUD + **client agent** that turns 8BitDo Ultimate 
 
 - Functional: detect pad (`mapping === "standard"`), wake on first button (spec privacy gesture)
 - Functional: rAF poll `navigator.getGamepads()` — never cache the Gamepad object
-- Functional: clutch + arm + confirm FSM; analog sticks **never** submit orders
+- Functional: clutch + arm + confirm FSM; analog sticks **never** submit orders. RS X/Y adjusts
+  relative SL/TP in the preview only and shows the resulting R/target; it never sends an amendment
 - Functional: **Default LT hold (hysteresis 0.80/0.50) + RT rising-edge**. L4/R4 only after a first-run probe proves those indices change. Empty `mapping` + 8BitDo `id` still accepted.
 - Functional: buy / sell / close / panic-flatten; lot step; D-pad cycles **XAUUSD / EURUSD / GBPUSD / USDJPY**; timeframe; session lock
 <!-- Updated: Validation Session 1 - four-symbol basket -->
@@ -35,14 +36,28 @@ Ship the evening game: Chrome HUD + **client agent** that turns 8BitDo Ultimate 
 - Functional: HUD **Flatten** button (keyboard/click) that does not need the pad; close/panic bypass dead-man
 - Functional: **process cues in the HUD** — live adherence badge (named setup present, outside T-15, lot at cap, inside window), a **stood-down counter** that reads as a win, and the sentinel's opportunity-quality state so a dead tape looks like a dead tape
 - Functional: **open P/L is shown in R (risk units) by default**, dollars behind a toggle. Steenbarger's point: watching the money mid-trade is what pulls attention off the process
-- Functional: **session check-in** — 1-5 self rating on session open and close, two pad taps, skippable, written to the phase 6 journal; never blocks the evening starting
+- Functional: **session check-in** — 1-5 self rating on session open and close, two pad taps,
+  skippable, written to the phase 3-owned `session_process` row for phase 6 to read; never blocks the
+  evening starting
 - Functional: the FSM emits **telemetry on every transition**, batched at 1 Hz on the `session` channel as `pad.telemetry` (never per-frame): `clutchMs`, `armMs`, `clutchCycles`, `armFlips`, `btnRateHz`, `lotStepsSince`, `ttfMs`, plus a 1 Hz idle heartbeat. Cheap to design in now, expensive to retrofit — phase 9 has no other source
 - Functional: **push-to-talk on the `LB + RB` chord** (phase 8). Both bumpers down inside a 120 ms window suppresses both timeframe actions and enters PTT; a single-bumper timeframe change therefore fires **on release** when the other bumper was never down during the press. Both are non-order inputs, so a chord misfire costs a chart zoom, never a position. Keyboard `V` hold is an equal-status fallback
 - Functional: PTT is a **parallel** state machine that emits no order-FSM transition of its own, is enterable only from `IDLE` or `LOCKED`, and on entering `CLUTCH` performs a graceful stop-and-submit rather than a discard
-- Functional: **playbook cycle on `Menu + D-pad U/D`** and a 5th `[Memo]` tab in the copilot desk. The **active desk tab decides** whether a transcript becomes a journal memo or an `ai.ask` — so voice needs zero extra bindings and the destination is visible before the player speaks
-- Functional: the ARM confirm overlay shows the **live playbook grade** (phase 7): `BUY 0.10 XAUUSD @ 2345.12 / [M5 second-chance break] 4/5 rules OK · ✗ price > 1.5 ATR from EMA20`. Seeing the grade before committing is the point of the feature
+- Functional: `Menu` opens/closes a full-screen **GameOverlay**. Opening it cancels any ARM and hard
+  locks new opens. D-pad selects a destination, LB/RB changes desk tabs, A enters or applies a
+  non-broker preference, B goes back, and Menu exits. Playbook, Journal, System, Reports, Settings,
+  and the five desk tabs are reached through this one navigation contract
+- Functional: overlay navigation and apply actions cannot emit `intent.open` or `intent.modify`.
+  Applying a broker-changing SL/TP edit only stages an `ARMED modify` preview; the actual
+  `intent.modify` still requires LT+RT after the player returns to the game. Dedicated full-close,
+  HUD Flatten, and panic controls remain available as safety exits
+- Functional: the 5th `[Memo]` desk tab exists as a disabled `voice unavailable until phase 8`
+  placeholder. Phase 3 owns the LB+RB chord/control event and fire-on-release arbitration only; it
+  does not acquire a microphone, record, upload, or produce a transcript
+- Functional: the ARM confirm overlay reserves the live grade surface but renders
+  `grading unavailable` until phase 7. Phase 3 acceptance does not depend on playbooks existing
 - Functional: the fire predicate takes **`confirmHoldMs` as a parameter** so phase 9's friction is a config value rather than a rewrite; the FSM gains no new states and `fsm.test.ts` stays valid
-- Functional: mic acquisition and the `MediaRecorder` mime probe live in the Settings overlay (Menu), behind an explicit "enable mic" button; a **tilt pip** sits in the HUD
+- Functional: Settings is reached through GameOverlay. Mic acquisition and MIME probing belong to
+  phase 8; until then the mic control is disabled. A tilt-pip placeholder sits in the HUD
 - Functional: the stood-down counter is generalised to emit `stand_down` with its live condition list, so phase 11's Selectivity axis reuses this counter instead of adding a second one
 <!-- Updated: Validation Session 4 - journal layer capture, PTT chord, playbook grade in the overlay -->
 <!-- Updated: Validation Session 3 - process cues in HUD; end goal is confidence, not P/L -->
@@ -87,11 +102,10 @@ Fire = two hands: clutch held **and** confirm rising edge **and** an armed side.
 | D-pad L/R | Cycle symbol highlight; A **without clutch** applies symbol |
 | LB / RB | Timeframe down / up (fires **on release**; see the chord below) |
 | LB + RB hold | Push-to-talk — journal memo, or ask the coach when an AI desk tab is active |
-| Menu + D-pad U/D | Cycle the active playbook |
 | LS | Pan chart |
 | RS X/Y | Preview SL / TP only |
 | View | Session lock / unlock |
-| Menu | Settings overlay |
+| Menu | Open / close the safe GameOverlay; opening cancels ARM and locks new opens |
 | L3+R3 hold 1.5s | Panic flatten + lock (backup chord) |
 
 **Optional extras (only if probe sees L4/R4 change)**
@@ -112,7 +126,7 @@ is not the supported path. Chrome, focused window.
 
 ### HUD (evening game)
 
-Dark, high contrast, 2–3 colors (bid/ask/flat). Big last price, **P/L in R (dollars one toggle away)**, one primary symbol, one lot, one position strip, clutch meter, adherence badge, stood-down counter, tilt pip, confirm overlay (`BUY 0.10 XAUUSD @ 2345.12` + the live playbook grade), sentinel strip stub, copilot desk stub (5 tabs incl. `[Memo]`), session countdown.
+Dark, high contrast, 2–3 colors (bid/ask/flat). Big last price, **P/L in R (dollars one toggle away)**, one primary symbol, one lot, one position strip, clutch meter, adherence badge, stood-down counter, tilt pip, confirm overlay (`BUY 0.10 XAUUSD @ 2345.12` + relative SL/TP + R + a grading placeholder), sentinel strip stub, copilot desk stub (5 tabs incl. disabled `[Memo]`), session countdown.
 
 The **Process Score lives on the deck, not the HUD** (phase 11) — there is deliberately no live score
 to watch mid-session.
@@ -131,12 +145,16 @@ Not a DOM-dense Bloomberg clone.
 - Create: `apps/web/src/hud/PositionStrip.svelte`
 - Create: `apps/web/src/hud/SessionBar.svelte`
 - Create: `apps/web/src/hud/AdherenceBadge.svelte` (adherence + stood-down counter)
+- Create: `apps/web/src/session/CheckIn.svelte` (pad-driven pre/post 1–5 check-in)
 - Create: `apps/web/src/hud/SentinelBar.svelte` (stub until phase 4)
 - Create: `apps/web/src/hud/CopilotDesk.svelte` (tabs stub until phase 4)
+- Create: `apps/web/src/game-overlay/GameOverlay.svelte` (single safe navigation surface)
 - Create: `apps/web/src/App.svelte`
 - Create: `apps/web/src/pad/telemetry.ts` (transition fields + 1 Hz batching)
 - Create: `apps/web/src/pad/fsm.test.ts`
 - Create: `apps/web/src/pad/chord.test.ts` (LB+RB vs single bumper; fire-on-release)
+- Create: `apps/web/src/game-overlay/GameOverlay.test.ts` (focus/navigation; never emits open/modify)
+- Create: `apps/gateway/src/db/migrations/002-client-session.sql` (`pad_event`, `session_process`)
 - Modify: `README.md` (dongle pairing + wired fallback, map, “tab must stay focused”)
 
 ## Implementation Steps
@@ -147,12 +165,17 @@ Not a DOM-dense Bloomberg clone.
 4. Chart: LWC `series.update` from `candle` + last from `quote`.
 5. HUD numbers via `textContent` / signals sampled 15 Hz, not per tick store updates.
 6. Telemetry fields on every transition; 1 Hz batch on `session`.
-7. `LB + RB` chord with bumper fire-on-release; unit-test that PTT emits no order transition.
+7. `LB + RB` chord with bumper fire-on-release; connect it to a no-op voice adapter and unit-test
+   that the control event emits no order transition. MediaRecorder begins in phase 8.
 8. `confirmHoldMs` threaded through the fire predicate as a parameter (default 0 = rising edge).
-9. Confirm overlay renders the phase 7 grade; `Menu + D-pad U/D` playbook picker.
-6. Confirm overlay + rumble on arm/fill/reject.
-7. Settings: lot, symbol list, clutch deadzone, rumble on/off.
-8. Manual matrix: 8BitDo via **2.4G dongle** on Mac Chrome — connect, trade, unplug, hide tab. Repeat wired as the fallback path.
+9. GameOverlay navigation and lock semantics; five desk-tab shells, disabled Memo, Settings and
+   Playbook destinations. Navigation/apply cannot emit open/modify; emergency exits remain usable.
+10. Confirm overlay + rumble on arm/fill/reject; grade placeholder and relative SL/TP/R preview.
+11. Settings: lot, symbol list, clutch deadzone, rumble on/off. SL/TP apply stages a modify action
+    and returns to the LT+RT confirmation flow.
+12. Apply `002-client-session.sql` and write check-in/telemetry rows.
+13. Manual matrix: 8BitDo via **2.4G dongle** on Mac Chrome — connect, trade, overlay, unplug, hide
+    tab. Repeat wired as the fallback path.
 
 ## Todo
 
@@ -165,8 +188,12 @@ Not a DOM-dense Bloomberg clone.
 - [ ] Pad telemetry fields + 1 Hz batch
 - [ ] LB+RB chord PTT; bumpers fire on release; PTT emits no order transition
 - [ ] `confirmHoldMs` as a fire-predicate parameter
-- [ ] Playbook picker + `[Memo]` desk tab + grade in the confirm overlay
-- [ ] Mic enable + mime probe in Settings; tilt pip
+- [ ] GameOverlay navigation + new-open lock + no-open/no-modify test; emergency exits preserved
+- [ ] Playbook destination + five-tab shell + disabled `[Memo]` placeholder
+- [ ] Grade placeholder + relative SL/TP/R preview
+- [ ] SL/TP apply stages modify; LT+RT remains mandatory
+- [ ] `002-client-session.sql` + check-in/telemetry writes
+- [ ] Disabled mic control until phase 8; tilt pip placeholder
 - [ ] README dongle pairing + wired fallback + map
 - [ ] Manual 8BitDo pass
 
@@ -178,12 +205,15 @@ Not a DOM-dense Bloomberg clone.
 - [ ] Symbol/lot/timeframe work without accidental fills
 - [ ] Default HUD shows P/L in R; dollars require one deliberate toggle
 - [ ] Cancelling an arm during a stand-down condition increments the stood-down counter
+- [ ] Pre/post check-in is skippable, writes `session_process`, and never blocks session start/close
 - [ ] Works with standard 17-button pad (LT/RT); extras optional
 - [ ] Unplug still allows HUD Flatten; FIRE timeout does not double-send
-- [ ] Tapping `LB` alone still changes timeframe and starts no recording; `LB + RB` starts one
-- [ ] PTT cannot be entered from `CLUTCH` or `ARMED`, and entering `CLUTCH` mid-recording submits
-      the memo without cancelling the arm
-- [ ] The confirm overlay names the active playbook and its rule count before the fire
+- [ ] Tapping `LB` alone changes timeframe; `LB + RB` emits only the phase-8 voice control event and
+      phase 3 never requests microphone permission
+- [ ] Opening Menu cancels ARM and locks new opens; navigation/apply emits no open/modify while full
+      close and panic remain available
+- [ ] An SL/TP edit returns as an armed modify preview and cannot reach the broker without LT+RT
+- [ ] Before phase 7, the confirm overlay says `grading unavailable` without blocking a fire
 - [ ] `fsm.test.ts` passes unchanged after `confirmHoldMs` is introduced
 
 ## Risk Assessment
@@ -208,4 +238,5 @@ Not a DOM-dense Bloomberg clone.
 
 ## Next Steps
 
-Phase 4 fills SentinelBar, NewsRail, and CopilotDesk (Plan / Research / News / Advise) plus the Volman overlay. Stubs in this phase may render empty.
+Phase 4 fills SentinelBar, NewsRail, and the four AI tabs in CopilotDesk; the fifth Memo tab remains
+disabled until phase 8. Stubs in this phase may render empty.
