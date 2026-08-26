@@ -50,21 +50,23 @@ macOS 26+, so it is out on this machine.
 
 ## Architecture
 
-```text
-  8BitDo Ultimate 2 --2.4G--> Mac Chrome (focused)
-                                pad FSM + HUD + copilot desk
-                                |
-                           WSS TLS  existing :443
-                                |
-  Ubuntu VPS  docker compose
-    ev-gateway   127.0.0.1:8444   risk, cid UNIQUE, journal, HUD build at /, socket at /ws
-       ├─ copilot child process   (no order tools)
-       └─ whisper.cpp child       (batch, nice + taskset, concurrency 1, no order tools)
-    ev-exec      Python OpenApiPy
-         |  Protobuf TCP 5035  (no published container port)
-         v
-    demo.ctraderapi.com     cTrader demo account (IC Markets)
-```
+![How the Evening Forex Gold Gamepad works](./docs/how-the-app-works.svg)
+
+[Open the standalone diagram](./docs/how-the-app-works.html).
+
+For a new member, the system has one important boundary: the **gateway is the only component that
+can approve a demo order**. The controller and Chrome app prepare intent, the Python execution
+sidecar translates an approved command into cTrader Open API messages, and Spotware remains the
+actual matching engine.
+
+Read the diagram as three paths:
+
+1. **Order hot path:** controller → focused Chrome app → gateway risk checks → execution sidecar →
+   cTrader demo.
+2. **Broker return path:** market data, fills, positions, and acknowledgements travel back through
+   the same trusted services to update the HUD and rumble the controller.
+3. **Learning path:** AI coaching, voice transcription, journal writes, replay, and scoring run
+   beside the order path. They can enrich or record a session, but cannot place an order.
 
 - **Hot path:** pad → intent `{clutch, armedAt, relativeSl?, relativeTp?}` → WSS → cid reserve → risk
   → MARKET `ProtoOANewOrderReq` → execution event → ack → rumble. Existing-position protection is

@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="how-the-app-works-title how-the-app-works-desc">
+      <title id="how-the-app-works-title">How the Evening Forex Gold Gamepad works</title>
+      <desc id="how-the-app-works-desc">Architecture overview showing controller input moving through the Chrome app, safety gateway, execution sidecar, and cTrader demo account, while AI, voice, and journal storage remain outside the order path.</desc>
+      <defs>
+        <style>@import url(&apos;https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap&apos;);</style>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#9aa7b5"/>
+        </marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#f4b860"/>
+        </marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#60a5fa"/>
+        </marker>
+      </defs>
+
+      <rect width="1280" height="720" fill="#0b1017"/>
+
+      <!-- Header -->
+      <text x="40" y="32" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">NEW MEMBER MAP · DESKTOP DARK</text>
+      <text x="40" y="72" fill="#e6edf3" font-size="28" font-family="'Instrument Serif', serif">How the app works</text>
+      <text x="40" y="96" fill="#9aa7b5" font-size="12" font-family="'Geist', sans-serif">Fast demo execution in one lane; coaching, voice, and review stay safely outside it.</text>
+
+      <!-- Zones -->
+      <rect x="40" y="116" width="440" height="232" rx="8" fill="rgba(230,237,243,0.02)" stroke="rgba(230,237,243,0.14)" stroke-width="0.8"/>
+      <rect x="52" y="120" width="80" height="16" rx="4" fill="#0b1017"/>
+      <text x="92" y="132" fill="#748292" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">HOME DESK</text>
+
+      <rect x="504" y="116" width="484" height="424" rx="8" fill="rgba(230,237,243,0.02)" stroke="rgba(230,237,243,0.14)" stroke-width="0.8"/>
+      <rect x="516" y="120" width="96" height="16" rx="4" fill="#0b1017"/>
+      <text x="564" y="132" fill="#748292" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">UBUNTU VPS</text>
+
+      <rect x="1016" y="116" width="224" height="232" rx="8" fill="rgba(230,237,243,0.02)" stroke="rgba(230,237,243,0.14)" stroke-width="0.8"/>
+      <rect x="1028" y="120" width="112" height="16" rx="4" fill="#0b1017"/>
+      <text x="1084" y="132" fill="#748292" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">SPOTWARE DEMO</text>
+
+      <!-- Primary hot-path connectors -->
+      <line x1="216" y1="228" x2="264" y2="228" stroke="#60a5fa" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+      <rect x="220" y="204" width="40" height="12" rx="4" fill="#0b1017"/>
+      <text x="240" y="212" fill="#60a5fa" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">INPUT</text>
+
+      <line x1="464" y1="228" x2="536" y2="228" stroke="#60a5fa" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+      <rect x="480" y="204" width="40" height="12" rx="4" fill="#0b1017"/>
+      <text x="500" y="212" fill="#60a5fa" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">WSS</text>
+
+      <line x1="736" y1="228" x2="776" y2="228" stroke="#f4b860" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+      <rect x="740" y="204" width="32" height="12" rx="4" fill="#0b1017"/>
+      <text x="756" y="212" fill="#f4b860" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">ALLOW</text>
+
+      <line x1="976" y1="228" x2="1032" y2="228" stroke="#60a5fa" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+      <rect x="980" y="204" width="48" height="12" rx="4" fill="#0b1017"/>
+      <text x="1004" y="212" fill="#60a5fa" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">OPEN API</text>
+
+      <!-- Return path: broker events travel back through the same trusted services -->
+      <line x1="1032" y1="276" x2="976" y2="276" stroke="#9aa7b5" stroke-width="1" stroke-dasharray="4,4" marker-end="url(#arrow)"/>
+      <rect x="980" y="252" width="48" height="12" rx="4" fill="#0b1017"/>
+      <text x="1004" y="260" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">EVENTS</text>
+
+      <line x1="776" y1="276" x2="736" y2="276" stroke="#9aa7b5" stroke-width="1" stroke-dasharray="4,4" marker-end="url(#arrow)"/>
+      <rect x="740" y="252" width="32" height="12" rx="4" fill="#0b1017"/>
+      <text x="756" y="260" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">ACK</text>
+
+      <line x1="536" y1="276" x2="464" y2="276" stroke="#9aa7b5" stroke-width="1" stroke-dasharray="4,4" marker-end="url(#arrow)"/>
+      <rect x="476" y="252" width="48" height="12" rx="4" fill="#0b1017"/>
+      <text x="500" y="260" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">UPDATE</text>
+
+      <!-- Supporting paths -->
+      <line x1="600" y1="308" x2="600" y2="388" stroke="#9aa7b5" stroke-width="1" stroke-dasharray="4,4" marker-end="url(#arrow)"/>
+      <rect x="612" y="340" width="72" height="12" rx="4" fill="#0b1017"/>
+      <text x="648" y="348" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">OFF-PATH</text>
+
+      <path d="M 680 308 V 340 Q 680 348 688 348 H 868 Q 876 348 876 356 V 388" fill="none" stroke="#9aa7b5" stroke-width="1" marker-end="url(#arrow)"/>
+      <rect x="744" y="324" width="64" height="12" rx="4" fill="#0b1017"/>
+      <text x="776" y="332" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">RECORD</text>
+
+      <!-- Nodes: arrows are intentionally painted first -->
+      <rect x="56" y="172" width="160" height="120" rx="8" fill="#0b1017"/>
+      <rect x="56" y="172" width="160" height="120" rx="8" fill="rgba(154,167,181,0.10)" stroke="#748292" stroke-width="1"/>
+      <rect x="68" y="184" width="32" height="16" rx="4" fill="transparent" stroke="rgba(154,167,181,0.45)" stroke-width="0.8"/>
+      <text x="84" y="196" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">PAD</text>
+      <text x="136" y="224" fill="#e6edf3" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">8BitDo Controller</text>
+      <text x="136" y="244" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">clutch · arm · confirm</text>
+      <text x="136" y="264" fill="#748292" font-size="8" font-family="'Geist', sans-serif" text-anchor="middle">Never sends broker orders itself</text>
+
+      <rect x="264" y="172" width="200" height="136" rx="8" fill="#0b1017"/>
+      <rect x="264" y="172" width="200" height="136" rx="8" fill="#141b24" stroke="#e6edf3" stroke-width="1"/>
+      <rect x="276" y="184" width="32" height="16" rx="4" fill="transparent" stroke="rgba(230,237,243,0.40)" stroke-width="0.8"/>
+      <text x="292" y="196" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">APP</text>
+      <text x="364" y="224" fill="#e6edf3" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Desktop Chrome App</text>
+      <text x="364" y="244" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">HUD · gamepad FSM · journal</text>
+      <text x="364" y="264" fill="#748292" font-size="8" font-family="'Geist', sans-serif" text-anchor="middle">Prepares intent and shows feedback</text>
+      <text x="364" y="284" fill="#748292" font-size="8" font-family="'Geist', sans-serif" text-anchor="middle">Focused tab, desktop dark only</text>
+
+      <rect x="536" y="172" width="200" height="136" rx="8" fill="#0b1017"/>
+      <rect x="536" y="172" width="200" height="136" rx="8" fill="rgba(244,184,96,0.12)" stroke="#f4b860" stroke-width="1.2"/>
+      <rect x="548" y="184" width="32" height="16" rx="4" fill="transparent" stroke="rgba(244,184,96,0.55)" stroke-width="0.8"/>
+      <text x="564" y="196" fill="#f4b860" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">API</text>
+      <text x="636" y="224" fill="#e6edf3" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Safety Gateway</text>
+      <text x="636" y="244" fill="#f4b860" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">risk · cid · journal · WSS</text>
+      <text x="636" y="264" fill="#9aa7b5" font-size="8" font-family="'Geist', sans-serif" text-anchor="middle">Only component allowed to approve</text>
+      <text x="636" y="284" fill="#9aa7b5" font-size="8" font-family="'Geist', sans-serif" text-anchor="middle">a demo order for execution</text>
+
+      <rect x="776" y="172" width="200" height="120" rx="8" fill="#0b1017"/>
+      <rect x="776" y="172" width="200" height="120" rx="8" fill="#141b24" stroke="#e6edf3" stroke-width="1"/>
+      <rect x="788" y="184" width="40" height="16" rx="4" fill="transparent" stroke="rgba(230,237,243,0.40)" stroke-width="0.8"/>
+      <text x="808" y="196" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">EXEC</text>
+      <text x="876" y="224" fill="#e6edf3" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Execution Sidecar</text>
+      <text x="876" y="244" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">Python · OpenApiPy</text>
+      <text x="876" y="264" fill="#748292" font-size="8" font-family="'Geist', sans-serif" text-anchor="middle">Translates validated commands</text>
+
+      <rect x="1032" y="172" width="200" height="120" rx="8" fill="#0b1017"/>
+      <rect x="1032" y="172" width="200" height="120" rx="8" fill="rgba(230,237,243,0.03)" stroke="rgba(230,237,243,0.30)" stroke-width="1"/>
+      <rect x="1044" y="184" width="48" height="16" rx="4" fill="transparent" stroke="rgba(230,237,243,0.30)" stroke-width="0.8"/>
+      <text x="1068" y="196" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">DEMO</text>
+      <text x="1132" y="224" fill="#e6edf3" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">cTrader Demo</text>
+      <text x="1132" y="244" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">Spotware matching engine</text>
+      <text x="1132" y="264" fill="#748292" font-size="8" font-family="'Geist', sans-serif" text-anchor="middle">Market data, fills, positions</text>
+
+      <rect x="536" y="388" width="200" height="120" rx="8" fill="#0b1017"/>
+      <rect x="536" y="388" width="200" height="120" rx="8" fill="rgba(230,237,243,0.02)" stroke="rgba(230,237,243,0.24)" stroke-width="1" stroke-dasharray="4,4"/>
+      <rect x="548" y="400" width="48" height="16" rx="4" fill="transparent" stroke="rgba(230,237,243,0.28)" stroke-width="0.8"/>
+      <text x="572" y="412" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">ASYNC</text>
+      <text x="636" y="440" fill="#e6edf3" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">AI &amp; Voice Workers</text>
+      <text x="636" y="460" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">copilot · sentinel · whisper</text>
+      <text x="636" y="480" fill="#748292" font-size="8" font-family="'Geist', sans-serif" text-anchor="middle">Coach and transcribe; no order tools</text>
+
+      <rect x="776" y="388" width="200" height="120" rx="8" fill="#0b1017"/>
+      <rect x="776" y="388" width="200" height="120" rx="8" fill="rgba(230,237,243,0.05)" stroke="#9aa7b5" stroke-width="1"/>
+      <rect x="788" y="400" width="40" height="16" rx="4" fill="transparent" stroke="rgba(154,167,181,0.45)" stroke-width="0.8"/>
+      <text x="808" y="412" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">DATA</text>
+      <text x="876" y="440" fill="#e6edf3" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Trading Journal</text>
+      <text x="876" y="460" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">trades · memos · replay · score</text>
+      <text x="876" y="480" fill="#748292" font-size="8" font-family="'Geist', sans-serif" text-anchor="middle">Reviewable record owned by the trader</text>
+
+      <!-- Editorial takeaway -->
+      <text x="1040" y="412" fill="#f4b860" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">SAFETY BOUNDARY</text>
+      <text x="1040" y="444" fill="#e6edf3" font-size="16" font-family="'Instrument Serif', serif" font-style="italic">AI advises.</text>
+      <text x="1040" y="468" fill="#e6edf3" font-size="16" font-family="'Instrument Serif', serif" font-style="italic">Only the gateway approves.</text>
+      <text x="1040" y="496" fill="#9aa7b5" font-size="8" font-family="'Geist', sans-serif">Live endpoints and accounts fail at boot.</text>
+
+      <!-- Legend -->
+      <line x1="40" y1="620" x2="1240" y2="620" stroke="rgba(230,237,243,0.14)" stroke-width="0.8"/>
+      <text x="40" y="644" fill="#748292" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">LEGEND</text>
+      <line x1="132" y1="640" x2="176" y2="640" stroke="#60a5fa" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+      <text x="192" y="644" fill="#9aa7b5" font-size="8" font-family="'Geist', sans-serif">order hot path</text>
+      <line x1="332" y1="640" x2="376" y2="640" stroke="#9aa7b5" stroke-width="1" stroke-dasharray="4,4" marker-end="url(#arrow)"/>
+      <text x="392" y="644" fill="#9aa7b5" font-size="8" font-family="'Geist', sans-serif">events / async work</text>
+      <rect x="572" y="632" width="20" height="16" rx="4" fill="rgba(244,184,96,0.12)" stroke="#f4b860" stroke-width="1"/>
+      <text x="608" y="644" fill="#9aa7b5" font-size="8" font-family="'Geist', sans-serif">enforcement point</text>
+      <rect x="760" y="632" width="20" height="16" rx="4" fill="rgba(230,237,243,0.02)" stroke="rgba(230,237,243,0.24)" stroke-width="1" stroke-dasharray="4,4"/>
+      <text x="796" y="644" fill="#9aa7b5" font-size="8" font-family="'Geist', sans-serif">cannot place orders</text>
+      <text x="1240" y="680" fill="#748292" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">DEMO ONLY · PROCESS OVER OUTCOME</text>
+    </svg>
