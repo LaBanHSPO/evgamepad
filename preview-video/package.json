@@ -1,0 +1,22 @@
+{
+  "name": "evening-forex-gold-gamepad-preview",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "preview": "remotion studio --no-open",
+    "render": "remotion render src/index.ts EveningForexGoldGamepadPreview out/evening-forex-gold-gamepad-preview.mp4 --codec=h264 --crf=18",
+    "still": "remotion still src/index.ts EveningForexGoldGamepadPreview out/preview-frame.png --frame=450"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.506",
+    "@remotion/transitions": "4.0.506",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "remotion": "4.0.506"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "typescript": "5.9.3"
+  }
+}
