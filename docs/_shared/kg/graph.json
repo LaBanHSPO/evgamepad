@@ -1,0 +1,473 @@
+{
+  "meta": {
+    "schema_version": 1,
+    "extractor_version": "1.0.0",
+    "generated_at": "1970-01-01T00:00:00.000Z",
+    "root": "docs",
+    "node_count": 10,
+    "edge_count": 26,
+    "coverage": {
+      "docs_total": 7,
+      "docs_parsed": 7,
+      "unparsed_docs": [],
+      "unresolved_refs": [],
+      "uncataloged_content": [],
+      "partial_parse_docs": [
+        {
+          "path": "docs/_shared/definitions.md",
+          "reason": "parseGlossary trích được 0 item — format lệch?"
+        }
+      ],
+      "notes": [
+        ".claude/state/atlassian/sync-state.yaml vắng — bỏ qua nguồn Jira/Confluence canonical",
+        "docs/_shared/definitions.md: shape parseGlossary trích được 0 item — format lệch?"
+      ]
+    }
+  },
+  "nodes": [
+    {
+      "key": "docs/_shared/definitions.md",
+      "type": "doc",
+      "subtype": null,
+      "feature": null,
+      "title": "Definitions",
+      "status": "draft",
+      "updated": "2026-08-28",
+      "source": {
+        "file": "docs/_shared/definitions.md",
+        "line": 8
+      },
+      "props": {
+        "doc_type": "definitions",
+        "authors": [
+          "@LaBanHSPO"
+        ],
+        "last_activity": "2026-08-28"
+      }
+    },
+    {
+      "key": "docs/_shared/operating-environment.md",
+      "type": "doc",
+      "subtype": null,
+      "feature": null,
+      "title": "Operating Environment",
+      "status": "draft",
+      "updated": "2026-08-28",
+      "source": {
+        "file": "docs/_shared/operating-environment.md",
+        "line": 8
+      },
+      "props": {
+        "doc_type": "operating-environment",
+        "authors": [
+          "@LaBanHSPO"
+        ],
+        "last_activity": "2026-08-28"
+      }
+    },
+    {
+      "key": "docs/_shared/project-profile.md",
+      "type": "doc",
+      "subtype": null,
+      "feature": null,
+      "title": "Project Profile",
+      "status": "draft",
+      "updated": "2026-08-28",
+      "source": {
+        "file": "docs/_shared/project-profile.md",
+        "line": 8
+      },
+      "props": {
+        "doc_type": "project-profile",
+        "authors": [
+          "@LaBanHSPO"
+        ],
+        "last_activity": "2026-08-28"
+      }
+    },
+    {
+      "key": "docs/_shared/system-overview.md",
+      "type": "doc",
+      "subtype": null,
+      "feature": null,
+      "title": "System Overview",
+      "status": "draft",
+      "updated": "2026-08-28",
+      "source": {
+        "file": "docs/_shared/system-overview.md",
+        "line": 8
+      },
+      "props": {
+        "doc_type": "system-overview",
+        "authors": [
+          "@LaBanHSPO"
+        ],
+        "last_activity": "2026-08-28"
+      }
+    },
+    {
+      "key": "docs/ai-desk/ai-desk-urd.md",
+      "type": "doc",
+      "subtype": null,
+      "feature": "ai-desk",
+      "title": "ai-desk — User Requirements Document",
+      "status": "in-review",
+      "updated": "2026-08-28",
+      "source": {
+        "file": "docs/ai-desk/ai-desk-urd.md",
+        "line": 9
+      },
+      "props": {
+        "doc_type": "urd",
+        "authors": [
+          "@LaBanHSPO"
+        ],
+        "last_activity": "2026-08-28"
+      }
+    },
+    {
+      "key": "docs/order-execution/order-execution-urd.md",
+      "type": "doc",
+      "subtype": null,
+      "feature": "order-execution",
+      "title": "order-execution — User Requirements Document",
+      "status": "in-review",
+      "updated": "2026-08-28",
+      "source": {
+        "file": "docs/order-execution/order-execution-urd.md",
+        "line": 9
+      },
+      "props": {
+        "doc_type": "urd",
+        "authors": [
+          "@LaBanHSPO"
+        ],
+        "last_activity": "2026-08-28"
+      }
+    },
+    {
+      "key": "docs/playbook-grading/playbook-grading-urd.md",
+      "type": "doc",
+      "subtype": null,
+      "feature": "playbook-grading",
+      "title": "playbook-grading — User Requirements Document",
+      "status": "draft",
+      "updated": "2026-08-28",
+      "source": {
+        "file": "docs/playbook-grading/playbook-grading-urd.md",
+        "line": 9
+      },
+      "props": {
+        "doc_type": "urd",
+        "authors": [
+          "@LaBanHSPO"
+        ],
+        "last_activity": "2026-08-28"
+      }
+    },
+    {
+      "key": "feature:ai-desk",
+      "type": "feature",
+      "subtype": null,
+      "feature": "ai-desk",
+      "title": "ai-desk",
+      "status": null,
+      "updated": null,
+      "source": {
+        "file": "docs/ai-desk/ai-desk-urd.md",
+        "line": 1
+      },
+      "props": {}
+    },
+    {
+      "key": "feature:order-execution",
+      "type": "feature",
+      "subtype": null,
+      "feature": "order-execution",
+      "title": "order-execution",
+      "status": null,
+      "updated": null,
+      "source": {
+        "file": "docs/order-execution/order-execution-urd.md",
+        "line": 1
+      },
+      "props": {}
+    },
+    {
+      "key": "feature:playbook-grading",
+      "type": "feature",
+      "subtype": null,
+      "feature": "playbook-grading",
+      "title": "playbook-grading",
+      "status": null,
+      "updated": null,
+      "source": {
+        "file": "docs/playbook-grading/playbook-grading-urd.md",
+        "line": 1
+      },
+      "props": {}
+    }
+  ],
+  "edges": [
+    {
+      "from": "docs/_shared/definitions.md",
+      "to": "docs/_shared/[[project-profile]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/_shared/definitions.md",
+        "line": 5
+      }
+    },
+    {
+      "from": "docs/_shared/definitions.md",
+      "to": "docs/_shared/[[system-overview]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/_shared/definitions.md",
+        "line": 5
+      }
+    },
+    {
+      "from": "docs/_shared/operating-environment.md",
+      "to": "docs/_shared/[[system-overview]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/_shared/operating-environment.md",
+        "line": 5
+      }
+    },
+    {
+      "from": "docs/_shared/system-overview.md",
+      "to": "docs/_shared/[[definitions]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/_shared/system-overview.md",
+        "line": 5
+      }
+    },
+    {
+      "from": "docs/_shared/system-overview.md",
+      "to": "docs/_shared/[[operating-environment]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/_shared/system-overview.md",
+        "line": 5
+      }
+    },
+    {
+      "from": "docs/_shared/system-overview.md",
+      "to": "docs/_shared/[[project-profile]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/_shared/system-overview.md",
+        "line": 5
+      }
+    },
+    {
+      "from": "docs/ai-desk/ai-desk-urd.md",
+      "to": "docs/ai-desk/[[definitions]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/ai-desk/ai-desk-urd.md",
+        "line": 6
+      }
+    },
+    {
+      "from": "docs/ai-desk/ai-desk-urd.md",
+      "to": "docs/ai-desk/[[operating-environment]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/ai-desk/ai-desk-urd.md",
+        "line": 6
+      }
+    },
+    {
+      "from": "docs/ai-desk/ai-desk-urd.md",
+      "to": "docs/ai-desk/[[order-execution-urd]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/ai-desk/ai-desk-urd.md",
+        "line": 6
+      }
+    },
+    {
+      "from": "docs/ai-desk/ai-desk-urd.md",
+      "to": "docs/ai-desk/[[playbook-grading-urd]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/ai-desk/ai-desk-urd.md",
+        "line": 6
+      }
+    },
+    {
+      "from": "docs/ai-desk/ai-desk-urd.md",
+      "to": "docs/ai-desk/[[project-profile]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/ai-desk/ai-desk-urd.md",
+        "line": 6
+      }
+    },
+    {
+      "from": "docs/ai-desk/ai-desk-urd.md",
+      "to": "docs/ai-desk/[[system-overview]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/ai-desk/ai-desk-urd.md",
+        "line": 6
+      }
+    },
+    {
+      "from": "docs/order-execution/order-execution-urd.md",
+      "to": "docs/order-execution/[[ai-desk-urd]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/order-execution/order-execution-urd.md",
+        "line": 6
+      }
+    },
+    {
+      "from": "docs/order-execution/order-execution-urd.md",
+      "to": "docs/order-execution/[[definitions]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/order-execution/order-execution-urd.md",
+        "line": 6
+      }
+    },
+    {
+      "from": "docs/order-execution/order-execution-urd.md",
+      "to": "docs/order-execution/[[operating-environment]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/order-execution/order-execution-urd.md",
+        "line": 6
+      }
+    },
+    {
+      "from": "docs/order-execution/order-execution-urd.md",
+      "to": "docs/order-execution/[[playbook-grading-urd]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/order-execution/order-execution-urd.md",
+        "line": 6
+      }
+    },
+    {
+      "from": "docs/order-execution/order-execution-urd.md",
+      "to": "docs/order-execution/[[project-profile]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/order-execution/order-execution-urd.md",
+        "line": 6
+      }
+    },
+    {
+      "from": "docs/order-execution/order-execution-urd.md",
+      "to": "docs/order-execution/[[system-overview]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/order-execution/order-execution-urd.md",
+        "line": 6
+      }
+    },
+    {
+      "from": "docs/playbook-grading/playbook-grading-urd.md",
+      "to": "docs/playbook-grading/[[docs/_shared/definitions.md]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/playbook-grading/playbook-grading-urd.md",
+        "line": 6
+      }
+    },
+    {
+      "from": "docs/playbook-grading/playbook-grading-urd.md",
+      "to": "docs/playbook-grading/[[docs/_shared/operating-environment.md]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/playbook-grading/playbook-grading-urd.md",
+        "line": 6
+      }
+    },
+    {
+      "from": "docs/playbook-grading/playbook-grading-urd.md",
+      "to": "docs/playbook-grading/[[docs/_shared/project-profile.md]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/playbook-grading/playbook-grading-urd.md",
+        "line": 6
+      }
+    },
+    {
+      "from": "docs/playbook-grading/playbook-grading-urd.md",
+      "to": "docs/playbook-grading/[[docs/_shared/system-overview.md]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/playbook-grading/playbook-grading-urd.md",
+        "line": 6
+      }
+    },
+    {
+      "from": "docs/playbook-grading/playbook-grading-urd.md",
+      "to": "docs/playbook-grading/[[docs/order-execution/order-execution-urd.md]]",
+      "type": "REFERENCES",
+      "provenance": "declared",
+      "source": {
+        "file": "docs/playbook-grading/playbook-grading-urd.md",
+        "line": 6
+      }
+    },
+    {
+      "from": "feature:ai-desk",
+      "to": "docs/ai-desk/ai-desk-urd.md",
+      "type": "CONTAINS",
+      "provenance": "heuristic",
+      "source": {
+        "file": "docs/ai-desk/ai-desk-urd.md",
+        "line": 1
+      }
+    },
+    {
+      "from": "feature:order-execution",
+      "to": "docs/order-execution/order-execution-urd.md",
+      "type": "CONTAINS",
+      "provenance": "heuristic",
+      "source": {
+        "file": "docs/order-execution/order-execution-urd.md",
+        "line": 1
+      }
+    },
+    {
+      "from": "feature:playbook-grading",
+      "to": "docs/playbook-grading/playbook-grading-urd.md",
+      "type": "CONTAINS",
+      "provenance": "heuristic",
+      "source": {
+        "file": "docs/playbook-grading/playbook-grading-urd.md",
+        "line": 1
+      }
+    }
+  ]
+}
