@@ -15,8 +15,9 @@ links: ["[[project-profile]]", "[[operating-environment]]", "[[definitions]]"]
 
 > **Gateway là thành phần DUY NHẤT được phép duyệt một lệnh demo.**
 
-Tay cầm và ứng dụng Chrome chỉ **chuẩn bị ý định** (intent). Execution sidecar (Python) dịch một lệnh
-đã được duyệt thành thông điệp cTrader Open API. **Spotware — không phải VPS — mới là matching engine
+Tay cầm và ứng dụng Chrome chỉ **chuẩn bị ý định** (intent). Chính gateway (Python) dịch một lệnh
+đã được duyệt thành thông điệp cTrader Open API, qua kết nối `ctrader-open-api` của riêng nó — không
+còn dịch vụ trung gian nào giữa gateway và sàn. **Spotware — không phải VPS — mới là matching engine
 thật.** Mọi tài liệu tính năng phải giữ đúng ranh giới này: không tính năng nào được mô tả như thể
 client tự đặt được lệnh.
 
@@ -25,7 +26,7 @@ client tự đặt được lệnh.
 ### 1. Order hot path — đường đặt lệnh
 
 ```
-tay cầm → app Chrome đang focus → gateway (kiểm tra rủi ro) → execution sidecar → cTrader demo
+tay cầm → app Chrome đang focus → gateway (kiểm tra rủi ro + nói cTrader Open API) → cTrader demo
 ```
 
 Chi tiết: pad → intent `{clutch, armedAt, relativeSl?, relativeTp?}` → WSS → cid reserve → risk check

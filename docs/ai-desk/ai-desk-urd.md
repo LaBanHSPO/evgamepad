@@ -65,7 +65,7 @@ tốt; một buổi tối có lãi nhờ phá luật là một buổi tối tệ
 * **Điểm quy trình và tổng kết buổi** → feature `process-score`. URD này chỉ nhận việc **sinh ra** chỉ số chất lượng cơ hội; việc dùng nó để chấm điểm thuộc feature kia.
 * **Toàn bộ đường đặt lệnh** — vũ trang, bắn, đóng, hạn mức, khoá phiên → feature `order-execution`.
 * **Việc CHẶN một lệnh.** Bàn làm việc này khuyên "đứng ngoài" nhưng không bao giờ chặn. Ngưỡng cảnh báo tin thuộc **loại chỉ cảnh báo** trong `order-execution` `UN-004`, khác hẳn loại hạn mức được thi hành.
-* Nguồn tín hiệu trả phí, dịch vụ sao chép lệnh, hoặc luồng mạng xã hội không chọn lọc.
+* Nguồn tín hiệu **thương mại mua ngoài, không do người chơi chọn đích danh** — dịch vụ bán tín hiệu, sao chép lệnh, luồng mạng xã hội không chọn lọc. **Không bao gồm** tín hiệu từ người thầy do người chơi tự chọn: việc đó thuộc `mentor-signals`, kể cả nếu thầy có thu phí *(làm rõ 2026-08-29, `mentor-signals` OQ-2)*.
 
 ## 4. User Needs
 
@@ -233,7 +233,7 @@ game, và kiểm tra trên cTrader demo rằng **không** có vị thế nào ph
 | A-07 | Người chơi thực sự cần một tiếng nói phản biện — vấn đề tự huyễn hoặc là có thật với chính người chơi này | UN-009 và cả trục coaching mất cơ sở; feature thu về phần dữ liệu thuần | Chưa xác nhận — suy từ tài liệu kế hoạch, không phải từ người chơi | Xác nhận trực tiếp **trước khi viết SRS cho các vòng AI** |
 | A-08 | Việc thiếu một lăng kính phương pháp nhất quán là vấn đề thật của người chơi | UN-006 — **phần đắt nhất để xây** (bộ nhận diện hình mẫu) — dựa trên suy luận thay vì nhu cầu đã kiểm chứng | Chưa xác nhận — suy từ `phase-04` | Xin xác nhận trực tiếp **trước khi SRS khoá chi tiết bộ nhận diện** |
 | A-09 | Người chơi thật sự cần một thước đo chất lượng phiên để khỏi tự trách mình | UN-011 mất cơ sở; chỉ số chất lượng cơ hội chỉ còn phục vụ `process-score` | Chưa xác nhận — suy từ `phase-04` | Xin xác nhận trực tiếp **trước khi SRS khoá công thức** |
-| A-10 | Người chơi luôn mở được cTrader và lịch kinh tế bằng một đường độc lập để kiểm chứng | **Toàn bộ Independent verification của Mục 5 và USC-002/003 mất khả năng kiểm chứng** | Chưa xác nhận; căng với ràng buộc "giữ Chrome focus suốt phiên". Cùng vấn đề với `order-execution` A-07 / OQ-7 | Giải quyết chung với `order-execution` OQ-7 |
+| A-10 | Người chơi kiểm chứng bằng **điện thoại chạy cTrader mobile** — khác thiết bị, khác đường mạng, không đụng ràng buộc "giữ Chrome focus suốt phiên" | **Toàn bộ Independent verification của Mục 5 và USC-002/003 mất khả năng kiểm chứng** | **Confirmed 2026-08-29 (OQ-8)** — giải chung với `order-execution` OQ-7 và `mentor-signals` OQ-11 | Không còn việc phải làm |
 
 ## 9. User Success Criteria
 
@@ -259,7 +259,7 @@ game, và kiểm tra trên cTrader demo rằng **không** có vị thế nào ph
 * [ ] OQ-5: Giới hạn số câu hỏi tới AI trong một giờ là bao nhiêu? Người chơi cần biết trước con số này (Mục 7), nếu không sẽ bị chặn bất ngờ đúng lúc cần hỏi nhất.
 * [ ] OQ-6: **Ngưỡng chênh lệch giá mua-bán** thuộc về ai? `UN-001` và `UN-007` đều dựa vào nó, nhưng nó không nằm trong nhóm hạn mức tự đặt của `order-execution` UN-004, cũng không nằm ở Mục 7 của doc này. Người chơi tự đặt hay là giá trị cố định?
 * [ ] OQ-7: Ba nhu cầu nền `A-07`, `A-08`, `A-09` — tự huyễn hoặc, thiếu lăng kính nhất quán, thiếu thước đo chất lượng phiên — có đúng là vấn đề thật của người chơi không? Hai nhu cầu **đắt nhất để xây** (`UN-006` bộ nhận diện hình mẫu, `UN-011` chỉ số chất lượng cơ hội) đang đứng trên suy luận từ tài liệu kế hoạch, trong khi nhu cầu rẻ nhất và giá trị cao nhất (`UN-002`) đã được xác nhận trực tiếp.
-* [ ] OQ-8: Đường kiểm chứng độc lập là thiết bị nào, khi ràng buộc nền bắt giữ Chrome focus suốt phiên? Chung vấn đề với `order-execution` OQ-7 — nên giải một lần cho cả hai doc.
+* [x] OQ-8: Đường kiểm chứng độc lập là thiết bị nào? — **Resolved 2026-08-29:** **điện thoại chạy cTrader mobile** — cùng tài khoản demo, khác thiết bị và khác đường mạng nên độc lập thật, và không đụng ràng buộc giữ Chrome focus. Giải một lần cùng `order-execution` OQ-7. A-10 vì vậy đã được xác nhận.
 
 ---
 

@@ -60,7 +60,7 @@ không thực sự muốn, và luôn biết mình đang ở đâu"**.
 * **Tư vấn, tín hiệu, phân tích của AI desk** → feature `ai-desk`.
 * **Ghi âm lý do vào lệnh** → feature `voice-journal`.
 * **Chấm điểm lệnh theo luật playbook** → feature `playbook-grading`.
-* **Tua lại lệnh qua tape** → feature `trade-replay`.
+* **Màn tua lại lệnh qua tape** → feature `trade-replay`. *(Nhưng **việc đóng băng bối cảnh** quanh mỗi lệnh thuộc feature này — chốt 2026-08-29; xem `trade-replay` A-01.)*
 * **Báo cáo, xuất dữ liệu, sao lưu** → feature `reports-export`.
 * Giao dịch tiền thật, lệnh chờ (pending order), đóng một phần vị thế.
 
@@ -230,7 +230,7 @@ dừng ở bước 4 (không làm bước 5) thì mức trên sàn **không** đ
 | A-04 | Một phiên = một buổi tối, một phiên mỗi ngày; hạn mức lỗ gắn với **phiên**, không cộng dồn theo ngày lịch | Nếu chạy nhiều phiên trong một ngày, người chơi có thể lách hạn mức lỗ bằng cách mở phiên mới | **Đã xác nhận một phần** — OQ-1 chốt phiên kết thúc khi tự đóng hoặc hết khung giờ. Việc *không* cộng dồn theo ngày là 🔶 quyết định thay user | Chốt số phiên tối đa mỗi ngày, và có trần lỗ theo ngày hay không, khi viết SRS |
 | A-05 | Người chơi chấp nhận đánh đổi độ trễ đường truyền để lấy khả năng chạy liên tục | Nếu không, cả kiến trúc máy chủ từ xa bị đặt lại vấn đề | Observed: `README.md` nêu rõ đây là đánh đổi có chủ ý | Không cần hành động |
 | A-06 | Thao tác bằng chuột trên nhiều cửa sổ làm đứt nhịp quan sát, nên "không rời tay khỏi tay cầm" là nhu cầu thật | Phần *tiện lợi thuần* của UN-008 (chọn cặp / khối lượng / khung thời gian bằng pad) mất cơ sở và nên hạ xuống Medium | Chưa xác nhận — người chơi chưa nói trực tiếp | Hỏi người chơi trước khi chốt phạm vi bản đồ nút |
-| A-07 | Người chơi luôn mở được giao diện cTrader bằng một đường độc lập để kiểm chứng | **Toàn bộ Independent verification của Mục 5 và USC-003/USC-004 mất khả năng kiểm chứng** | Chưa xác nhận; căng với ràng buộc "giữ Chrome focus suốt phiên" ở Mục 7 | Xác nhận cách kiểm chứng (máy khác? điện thoại?) trước khi chốt USC |
+| A-07 | Người chơi kiểm chứng bằng **điện thoại chạy cTrader mobile** — khác thiết bị, khác đường mạng, không đụng ràng buộc "giữ Chrome focus suốt phiên" ở Mục 7 | **Toàn bộ Independent verification của Mục 5 và USC-003/USC-004 mất khả năng kiểm chứng** | **Confirmed 2026-08-29 (OQ-7)** — giải chung với `ai-desk` OQ-8 và `mentor-signals` OQ-11 | Không còn việc phải làm |
 
 ## 9. User Success Criteria
 
@@ -250,7 +250,7 @@ dừng ở bước 4 (không làm bước 5) thì mức trên sàn **không** đ
 * [x] OQ-4: Bộ đếm từ chối đặt lại theo chu kỳ nào? — **Resolved:** hiển thị theo phiên trên màn hình chính, tổng cộng dồn thuộc feature khác.
 * [ ] OQ-5: Một ngày chạy được tối đa mấy phiên, và có trần lỗ theo **ngày** đứng trên trần lỗ theo **phiên** không? Không có trần ngày thì mở phiên mới là cách lách hạn mức lỗ. Xem A-04.
 * [ ] OQ-6: Mở khoá phiên sau khi thoát khẩn cấp cần thao tác nặng tới đâu — một cú tap như nguồn `phase-03` mô tả, hay phải qua một bước có chủ ý hơn? Một tap thì trạng thái khoá gần như không có sức răn đe. Xem UN-011.
-* [ ] OQ-7: Người chơi kiểm chứng độc lập bằng thiết bị nào, khi Mục 7 yêu cầu giữ Chrome focus suốt phiên? Xem A-07.
+* [x] OQ-7: Người chơi kiểm chứng độc lập bằng thiết bị nào? — **Resolved 2026-08-29:** **điện thoại chạy cTrader mobile** — cùng tài khoản demo, khác thiết bị và khác đường mạng nên độc lập thật, và không đụng ràng buộc giữ Chrome focus. Đóng luôn `ai-desk` OQ-8 và `mentor-signals` OQ-11. A-07 vì vậy đã được xác nhận.
 
 ---
 

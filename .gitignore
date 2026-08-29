@@ -1,2 +1,4 @@
 .claude
 _templates/
+.helpsoft_env
+.siyuan_sync_state.json

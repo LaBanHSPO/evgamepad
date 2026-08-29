@@ -2,10 +2,11 @@
 
 ![Trading Game — discipline, process, improvement](./visual01.png)
 
-A desktop Chrome **web game** where an **8BitDo Ultimate 2 Wireless** trades forex and gold on a
-**cTrader demo account**. The pad talks WebSocket to a gateway on an Ubuntu VPS (Docker); the only
-broker adapter is the **cTrader Open API**. A near-realtime **AI desk** coaches from the sidelines and
-never touches the order path.
+A desktop Chrome **web game** — an installable, client-side **React PWA** — where an **8BitDo
+Ultimate 2 Wireless** trades forex and gold on a **cTrader demo account**. The pad talks WebSocket to
+a single **Python gateway** on an Ubuntu VPS (Docker) that speaks the **cTrader Open API** in-process
+through `ctrader-open-api`. There is no execution sidecar and no second service. A near-realtime
+**AI desk** coaches from the sidelines and never touches the order path.
 
 On top of the game sits a **trading journal** that takes the best of Edgewonk and TradeZella and
 rebuilds them for a gamepad: a **playbook** grades every fire against its own rules *before* you
@@ -55,14 +56,14 @@ macOS 26+, so it is out on this machine.
 [Open the standalone diagram](./docs/how-the-app-works.html).
 
 For a new member, the system has one important boundary: the **gateway is the only component that
-can approve a demo order**. The controller and Chrome app prepare intent, the Python execution
-sidecar translates an approved command into cTrader Open API messages, and Spotware remains the
-actual matching engine.
+can approve a demo order**. The controller and the PWA prepare intent; the Python gateway itself
+translates an approved command into cTrader Open API messages over its own `ctrader-open-api`
+connection, and Spotware remains the actual matching engine.
 
 Read the diagram as three paths:
 
-1. **Order hot path:** controller → focused Chrome app → gateway risk checks → execution sidecar →
-   cTrader demo.
+1. **Order hot path:** controller → focused Chrome tab → gateway risk checks → the gateway's own
+   cTrader Open API connection → cTrader demo.
 2. **Broker return path:** market data, fills, positions, and acknowledgements travel back through
    the same trusted services to update the HUD and rumble the controller.
 3. **Learning path:** AI coaching, voice transcription, journal writes, replay, and scoring run
@@ -128,15 +129,15 @@ every mechanic that would create pressure to trade a dead tape is deliberately a
 
 | Decision | Choice |
 |----------|--------|
-| Execution | cTrader Open API, `demo.ctraderapi.com:5035` (Protobuf) |
+| Execution | cTrader Open API in-process via `ctrader-open-api` (OpenApiPy), `demo.ctraderapi.com:5035` (Protobuf) |
 | Broker | IC Markets cTrader demo (plain, unsuffixed symbols) |
-| Host | Ubuntu VPS, Docker Compose, two services |
+| Host | Ubuntu VPS, Docker Compose, **one service** (`ev-gateway`) |
 | Live money | Refused — boot-fail on live host or `isLive` |
 | Symbols | XAUUSD, EURUSD, GBPUSD, USDJPY; max 0.10 lot gold |
 | Session | `Asia/Ho_Chi_Minh`, 18:00–23:30 |
 | Transport | WSS JSON `{v,t,seq,ts,ch,cid,p}` on `/ws`, same origin as the HUD |
 | Bind | Gateway `127.0.0.1:8444` behind existing VPS TLS on :443 |
-| Copilot | Node child forked by `ev-gateway`, not a third container |
+| Copilot | Python worker task inside `ev-gateway`, not a second container |
 | Speech-to-text | Browser capture → whisper.cpp child on the VPS |
 | Coach TTS | Browser `speechSynthesis`, default off |
 | Deck priority | Process first; money sits behind a deliberate tab click |
@@ -147,6 +148,8 @@ every mechanic that would create pressure to trade a dead tape is deliberately a
 | Journal | Full daily cockpit and deterministic execution-quality analysis |
 | Data ownership | Browser PDF, CSV/JSON, backup/restore/delete; no history import |
 | UI boundary | Desktop Chrome, dark-only; no mobile/light mode |
+| Web stack | Client-side **React PWA** (Vite + TanStack Router/Query). No SSR, no Node at runtime |
+| Backend stack | **Python** — one process owns WS, REST, risk, journal, static HUD, and the broker link |
 | Database | Phase-owned migrations `001`–`010` |
 
 ## Phases
@@ -181,17 +184,20 @@ Total: 203h ≈ 26 working days.
 
 ```text
 apps/
-  web/         Vite + Svelte HUD (built to dist, served by the gateway)
-  gateway/     Node — risk, cid, journal, WS, REST; forks copilot + whisper children
-  exec/        Python — cTrader Open API (OpenApiPy) over Protobuf TCP
-packages/
-  protocol/    Frozen v1 envelope + Zod message catalog
-  exec/        Sidecar protocol types
-  method/      Rule registry (risk + playbook), Volman method profile
-config/        default.yaml
-deploy/        fetch-models.sh, compose glue
-docs/          release checklist and verified operating decisions
-plans/         Plan of record, phase files, research, journals
+  web/            React PWA (Vite + TanStack Router/Query), built to dist/ and
+                  served by the gateway. Node is build-time only.
+  gateway/        Python — one process, one container:
+    protocol/     Frozen v1 envelope + Pydantic message catalog
+    broker/       cTrader Open API via ctrader-open-api (OpenApiPy/Twisted)
+    risk/         cid reserve, limits, dead-man, session lock
+    method/       Rule registry (risk + playbook), Volman method profile
+    copilot/      AI desk worker task (read-only tools, never on the hot path)
+    journal/      SQLite writes, tape, replay, score
+    api/          WS /ws, REST /api/*, static HUD
+config/           default.yaml
+deploy/           fetch-models.sh, compose glue
+docs/             release checklist and verified operating decisions
+plans/            Plan of record, phase files, research, journals
 ```
 
 ## Getting started
@@ -201,7 +207,8 @@ Nothing is implemented yet — phase 1 scaffolds the workspace. Once it lands th
 **Prerequisites**
 
 - Ubuntu VPS, 4+ vCPU / 4 GB+ RAM, Docker + Compose, existing TLS on :443
-- Node + pnpm, Chrome on the desktop, 8BitDo Ultimate 2 with its 2.4G dongle
+- Python 3.11+ with `uv`; Node + pnpm for the web build only
+- Chrome on the desktop, 8BitDo Ultimate 2 with its 2.4G dongle
 - A cTrader ID with an **IC Markets demo** account
 
 **cTrader credentials (one-time, manual — no auth helper ships in v1)**
@@ -211,7 +218,7 @@ Nothing is implemented yet — phase 1 scaffolds the workspace. Once it lands th
 3. Register an Open API application at `connect.spotware.com`; wait for approval.
 4. Run the consent flow in a browser with the `trading` scope against the app's redirect URI.
 5. Paste `CT_CLIENT_ID`, `CT_CLIENT_SECRET`, `CT_ACCESS_TOKEN`, `CT_REFRESH_TOKEN`, `CT_ACCOUNT_ID`
-   into `.env`. `ev-exec` only refreshes what you provided here, and boot-fails if it is missing.
+   into `.env`. The gateway only refreshes what you provided here, and boot-fails if it is missing.
 
 Other secrets: `EV_WS_TOKEN`, `XAI_API_KEY`, `TV_WEBHOOK_SECRET`. Initial secrets go through env;
 refreshed cTrader tokens use the protected app volume with mode `0600`. Neither is committed, baked
@@ -220,10 +227,12 @@ into an image, exported, or included in backups.
 **Run**
 
 ```bash
-pnpm install
-pnpm test                 # protocol round-trips
+uv sync                   # gateway deps, including ctrader-open-api
+uv run pytest             # protocol round-trips, risk rules, volume conversion
+pnpm -C apps/web install
+pnpm -C apps/web build    # emits apps/web/dist, baked into the gateway image
 docker compose build
-docker compose up -d      # gateway on 127.0.0.1:8444, exec unpublished
+docker compose up -d      # ev-gateway on 127.0.0.1:8444 — the only service
 ```
 
 Then open `https://YOUR_DOMAIN` in a focused Chrome tab, connect the pad, and the HUD and socket come
@@ -236,7 +245,8 @@ markets. Mobile delivery or light mode. Wine. Live money. Multiplayer / SaaS / c
 Auto-trading AI, including TradingView `auto_trade`. Scraping Supercharts. Guaranteed profit.
 Leaderboards, streaks, levels, badges, or any deck mechanic that punishes standing down. Edgewonk's
 what-if trade simulator. Cloud speech-to-text. Voice or AI on the order path. Voice as navigation.
-A third compose service.
+A second compose service. An execution sidecar or any cross-process broker hop. Server-side
+rendering, server functions, or Node at runtime.
 
 ## Open questions
 

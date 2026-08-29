@@ -58,7 +58,7 @@ links: ["[[project-profile]]", "[[system-overview]]"]
 | Thuật ngữ | Nghĩa |
 |---|---|
 | **Gateway** | Thành phần **duy nhất** được duyệt một lệnh demo. Chạy Docker trên Ubuntu VPS |
-| **Execution sidecar** | Dịch vụ Python dịch lệnh đã duyệt sang thông điệp cTrader Open API |
+| **Broker link** | Kết nối cTrader Open API **nằm bên trong gateway** (thư viện `ctrader-open-api`), dịch lệnh đã duyệt sang thông điệp Open API. Không phải một dịch vụ riêng |
 | **Hot path** | Đường đặt lệnh, ưu tiên độ trễ |
 | **Cold path** | Đường tín hiệu AI, 1–30 s, không bao giờ chặn một lệnh |
 | **Journal path** | Đường ghi nhật ký, chậm nhất, **không bao giờ đi trên order socket** |

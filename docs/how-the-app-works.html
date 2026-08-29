@@ -41,7 +41,7 @@
   <main>
     <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="how-the-app-works-title how-the-app-works-desc">
       <title id="how-the-app-works-title">How the Evening Forex Gold Gamepad works</title>
-      <desc id="how-the-app-works-desc">Architecture overview showing controller input moving through the Chrome app, safety gateway, execution sidecar, and cTrader demo account, while AI, voice, and journal storage remain outside the order path.</desc>
+      <desc id="how-the-app-works-desc">Architecture overview showing controller input moving through the Chrome PWA and the safety gateway, whose in-process broker link reaches the cTrader demo account, while AI, voice, and journal storage remain outside the order path.</desc>
       <defs>
         <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
           <polygon points="0 0, 8 3, 0 6" fill="#9aa7b5"/>
@@ -126,8 +126,8 @@
       <rect x="264" y="172" width="200" height="136" rx="8" fill="#141b24" stroke="#e6edf3" stroke-width="1"/>
       <rect x="276" y="184" width="32" height="16" rx="4" fill="transparent" stroke="rgba(230,237,243,0.40)" stroke-width="0.8"/>
       <text x="292" y="196" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">APP</text>
-      <text x="364" y="224" fill="#e6edf3" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Desktop Chrome App</text>
-      <text x="364" y="244" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">HUD · gamepad FSM · journal</text>
+      <text x="364" y="224" fill="#e6edf3" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Desktop Chrome PWA</text>
+      <text x="364" y="244" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">React · HUD · gamepad FSM</text>
       <text x="364" y="264" fill="#748292" font-size="8" font-family="'Geist', sans-serif" text-anchor="middle">Prepares intent and shows feedback</text>
       <text x="364" y="284" fill="#748292" font-size="8" font-family="'Geist', sans-serif" text-anchor="middle">Focused tab, desktop dark only</text>
 
@@ -136,17 +136,18 @@
       <rect x="548" y="184" width="32" height="16" rx="4" fill="transparent" stroke="rgba(244,184,96,0.55)" stroke-width="0.8"/>
       <text x="564" y="196" fill="#f4b860" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">API</text>
       <text x="636" y="224" fill="#e6edf3" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Safety Gateway</text>
-      <text x="636" y="244" fill="#f4b860" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">risk · cid · journal · WSS</text>
+      <text x="636" y="244" fill="#f4b860" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">Python · risk · cid · journal · WSS</text>
       <text x="636" y="264" fill="#9aa7b5" font-size="8" font-family="'Geist', sans-serif" text-anchor="middle">Only component allowed to approve</text>
       <text x="636" y="284" fill="#9aa7b5" font-size="8" font-family="'Geist', sans-serif" text-anchor="middle">a demo order for execution</text>
 
       <rect x="776" y="172" width="200" height="120" rx="8" fill="#0b1017"/>
-      <rect x="776" y="172" width="200" height="120" rx="8" fill="#141b24" stroke="#e6edf3" stroke-width="1"/>
-      <rect x="788" y="184" width="40" height="16" rx="4" fill="transparent" stroke="rgba(230,237,243,0.40)" stroke-width="0.8"/>
-      <text x="808" y="196" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">EXEC</text>
-      <text x="876" y="224" fill="#e6edf3" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Execution Sidecar</text>
-      <text x="876" y="244" fill="#9aa7b5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">Python · OpenApiPy</text>
-      <text x="876" y="264" fill="#748292" font-size="8" font-family="'Geist', sans-serif" text-anchor="middle">Translates validated commands</text>
+      <rect x="776" y="172" width="200" height="120" rx="8" fill="rgba(244,184,96,0.06)" stroke="#f4b860" stroke-width="1" stroke-dasharray="5,4"/>
+      <rect x="788" y="184" width="40" height="16" rx="4" fill="transparent" stroke="rgba(244,184,96,0.55)" stroke-width="0.8"/>
+      <text x="808" y="196" fill="#f4b860" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">LIB</text>
+      <text x="876" y="224" fill="#e6edf3" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Broker Link</text>
+      <text x="876" y="244" fill="#f4b860" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">ctrader-open-api · in-process</text>
+      <text x="876" y="264" fill="#748292" font-size="8" font-family="'Geist', sans-serif" text-anchor="middle">Runs inside the gateway process,</text>
+      <text x="876" y="278" fill="#748292" font-size="8" font-family="'Geist', sans-serif" text-anchor="middle">not a separate service</text>
 
       <rect x="1032" y="172" width="200" height="120" rx="8" fill="#0b1017"/>
       <rect x="1032" y="172" width="200" height="120" rx="8" fill="rgba(230,237,243,0.03)" stroke="rgba(230,237,243,0.30)" stroke-width="1"/>
