@@ -111,7 +111,7 @@ Selectivity   = min(100, Selectivity0 + declineCredit)
 
 ```
 trade_grade (7) ─┐
-risk rules (2)   ├─> score/session.ts (pure)  -> session_score row
+risk rules (2)   ├─> score/session.py (pure)  -> session_score row
 sentinel OQ (4)  │        drop vacuous axes, renormalise
 stood-down (3)   │
 checkins/memos  ─┘
@@ -161,23 +161,23 @@ The displayed total is the axis-weighted sum rounded half-up to an integer. Stor
 
 ## Related Code Files
 
-- Create: `apps/gateway/src/score/session.ts` (pure axes, vacuous-axis renormalisation)
-- Create: `apps/gateway/src/score/session.test.ts` (the four worked examples above, to the point)
-- Create: `apps/gateway/src/score/routes.ts` (`GET /api/score/session/:id`, `GET /api/score/month`)
-- Create: `apps/gateway/src/db/migrations/008-score.sql`
-- Create: `apps/web/src/deck/ScoreRadar.svelte` (5 spokes, dashed n/a ring)
-- Create: `apps/web/src/deck/PlaybookStats.svelte`
-- Create: `apps/web/src/deck/TiltRetro.svelte`
-- Modify: `apps/web/src/deck/ProcessPanel.svelte` (radar + tables)
-- Modify: `apps/gateway/src/journal.ts` (`session_score` writes)
-- Modify: `apps/gateway/src/copilot/tools.ts` (`get_progress` returns the axes)
-- Modify: `apps/gateway/src/deck/metrics.ts` (share pure helpers; do not duplicate)
+- Create: `apps/gateway/score/session.py` (pure axes, vacuous-axis renormalisation)
+- Create: `apps/gateway/score/test_session.py` (the four worked examples above, to the point)
+- Create: `apps/gateway/score/routes.py` (`GET /api/score/session/:id`, `GET /api/score/month`)
+- Create: `apps/gateway/db/migrations/008-score.sql`
+- Create: `apps/web/src/deck/ScoreRadar.tsx` (5 spokes, dashed n/a ring)
+- Create: `apps/web/src/deck/PlaybookStats.tsx`
+- Create: `apps/web/src/deck/TiltRetro.tsx`
+- Modify: `apps/web/src/deck/ProcessPanel.tsx` (radar + tables)
+- Modify: `apps/gateway/journal/writer.py` (`session_score` writes)
+- Modify: `apps/gateway/copilot/tools.py` (`get_progress` returns the axes)
+- Modify: `apps/gateway/deck/metrics.py` (share pure helpers; do not duplicate)
 - Modify: `config/default.yaml` (`score.weights`, `score.trades_max`, `score.band_width`)
 - Modify: `README.md` (what the score rewards and what it deliberately ignores)
 
 ## Implementation Steps
 
-1. `session.ts` pure axes, with the four worked examples as the first tests written.
+1. `session.py` pure axes, with the four worked examples as the first tests written.
 2. Vacuous-axis drop and renormalisation; assert the dead-tape evening scores >= the active one.
 3. Selectivity against the phase 4 numeric OQ; fall back to three buckets (dead/normal/rich ->
    expected 1/3/5) if the sentinel's components resist normalisation.

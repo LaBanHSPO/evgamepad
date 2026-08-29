@@ -143,15 +143,15 @@ ev-gateway
 - Create: `apps/web/src/voice/upload.ts` (multipart POST, retry, download fallback)
 - Create: `apps/web/src/voice/tts.ts` (speechSynthesis, sentence chunking, arm-mute)
 - Create: `apps/web/src/voice/ptt.test.ts` (chord vs single bumper; CLUTCH stop-and-submit; never emits an order transition)
-- Create: `apps/web/src/hud/MemoTab.svelte` (desk `[Memo]` tab, transcript list)
-- Create: `apps/gateway/src/voice/routes.ts` (`POST /api/voice/memo`, `GET /api/voice/:id/audio`)
-- Create: `apps/gateway/src/voice/stt.ts` (ffmpeg + whisper spawn, queue of 1, timeout, tier ladder)
-- Create: `apps/gateway/src/voice/stt.test.ts` (timeout path, nonzero exit, audio survives)
-- Create: `apps/gateway/src/voice/bench.ts` (boot benchmark + tier selection + log line)
-- Create: `apps/gateway/src/db/migrations/006-voice.sql`
+- Create: `apps/web/src/hud/MemoTab.tsx` (desk `[Memo]` tab, transcript list)
+- Create: `apps/gateway/voice/routes.py` (`POST /api/voice/memo`, `GET /api/voice/:id/audio`)
+- Create: `apps/gateway/voice/stt.py` (ffmpeg + whisper spawn, queue of 1, timeout, tier ladder)
+- Create: `apps/gateway/voice/test_stt.py` (timeout path, nonzero exit, audio survives)
+- Create: `apps/gateway/voice/bench.py` (boot benchmark + tier selection + log line)
+- Create: `apps/gateway/db/migrations/006-voice.sql`
 - Modify: `deploy/fetch-models.sh` (consume/verify the phase 5 model candidate)
-- Modify: `apps/gateway/src/journal.ts` (`voice_memo` writes)
-- Modify: `apps/web/src/hud/CopilotDesk.svelte` (5th tab; routing by active tab)
+- Modify: `apps/gateway/journal/writer.py` (`voice_memo` writes)
+- Modify: `apps/web/src/hud/CopilotDesk.tsx` (5th tab; routing by active tab)
 - Modify: `apps/web/src/pad/fsm.ts` (bumper fire-on-release when the chord did not engage)
 - Modify: `config/default.yaml` (`voice.*`)
 - Modify: `README.md` (enable mic, PTT gesture, what voice cannot do, model tiers)
@@ -198,7 +198,7 @@ ev-gateway
 
 - **whisper steals CPU from the order path** — signal: ack p99 rises under transcode. Response:
   `taskset` reserves core 0 via the kernel, not `nice` alone; concurrency 1; the load test above is
-  the gate. If it still regresses, drop a tier before reaching for a third service.
+  the gate. If it still regresses, drop a tier before reaching for a second service.
 - **`LB + RB` is uncomfortable to hold for 30 s** — signal: the player stops recording memos.
   Response: keyboard `V` is equal-status; L4/R4 paddles are the alternative if the phase 3 probe
   found them.

@@ -26,7 +26,7 @@ Two design rules make this a safety mechanism instead of a gimmick:
 ## Context Links
 
 - [plan.md](./plan.md)
-- [Phase 2 — dead-man locks opens only; one predicate in `risk.ts`](./phase-02-ctrader-exec-and-socket-gateway.md)
+- [Phase 2 — dead-man locks opens only; one predicate in `risk/rules.py`](./phase-02-ctrader-exec-and-socket-gateway.md)
 - [Phase 3 — FSM telemetry fields, `confirmHoldMs` parameter, tilt pip](./phase-03-web-game-and-8bitdo-client-agent.md)
 - [Phase 7 — grades supply the rule-break signal](./phase-07-playbook-and-trade-grading.md)
 - [Phase 8 — voice arousal (optional, 5%)](./phase-08-voice-capture-whisper-and-coach.md)
@@ -93,7 +93,7 @@ Two design rules make this a safety mechanism instead of a gimmick:
 
 - Functional: friction applies **only** to `intent.open`. `intent.close`, `intent.panic`, the HUD
   Flatten button and `session.lock` are never gated. Same predicate as the existing dead-man rule,
-  implemented **once** in `risk.ts`, not duplicated
+  implemented **once** in `risk/rules.py`, not duplicated
 - Non-functional: config **boot-fails on `tilt.gate_close: true`** (phase 1) — a structural
   guarantee, not a code convention
 - Functional: the client enforces the *UX* friction (hold-to-fire); the server enforces the *block*
@@ -111,40 +111,40 @@ Two design rules make this a safety mechanism instead of a gimmick:
 
 ```
 pad FSM  --1 Hz batch-->  pad.telemetry  ─┐
-journal (losses, lots, grades)           ├─> tilt/score.ts (pure)  -> tilt_sample rows
+journal (losses, lots, grades)           ├─> tilt/score.py (pure)  -> tilt_sample rows
 voice AnalyserNode + transcript (opt.)   ─┘          |
                                                      v
                                     band -> HUD pip + driver sentence
                                          -> confirmHoldMs (client friction)
-                                         -> risk.ts open-only gate (server block)
+                                         -> risk/rules.py open-only gate (server block)
 ```
 
 ## Related Code Files
 
-- Create: `apps/gateway/src/tilt/score.ts` (pure composition, renormalisation, bands)
-- Create: `apps/gateway/src/tilt/score.test.ts` (weights sum; missing components renormalise; tilt=1.0 never blocks close/panic)
-- Create: `apps/gateway/src/tilt/baseline.ts` (rolling 30-session medians per player)
-- Create: `apps/gateway/src/db/migrations/007-tilt.sql`
-- Create: `apps/web/src/hud/TiltPip.svelte` (band colour + top-driver sentence)
+- Create: `apps/gateway/tilt/score.py` (pure composition, renormalisation, bands)
+- Create: `apps/gateway/tilt/test_score.py` (weights sum; missing components renormalise; tilt=1.0 never blocks close/panic)
+- Create: `apps/gateway/tilt/baseline.py` (rolling 30-session medians per player)
+- Create: `apps/gateway/db/migrations/007-tilt.sql`
+- Create: `apps/web/src/hud/TiltPip.tsx` (band colour + top-driver sentence)
 - Create: `apps/web/src/voice/arousal.ts` (AnalyserNode RMS; optional, phase 8)
-- Modify: `apps/gateway/src/risk.ts` (open-only friction gate reusing the dead-man predicate)
+- Modify: `apps/gateway/risk/rules.py` (open-only friction gate reusing the dead-man predicate)
 - Modify: `apps/web/src/pad/fsm.ts` (consume `confirmHoldMs`; no new states)
-- Modify: `apps/web/src/hud/ConfirmOverlay.svelte` (driver + R when hot)
-- Modify: `apps/gateway/src/copilot/prompt.ts` (one monitor advice at the hot band)
-- Modify: `apps/gateway/src/journal.ts` (`tilt_sample` writes; `trade_closed.tilt_at_entry`)
+- Modify: `apps/web/src/hud/ConfirmOverlay.tsx` (driver + R when hot)
+- Modify: `apps/gateway/copilot/prompt.py` (one monitor advice at the hot band)
+- Modify: `apps/gateway/journal/writer.py` (`tilt_sample` writes; `trade_closed.tilt_at_entry`)
 - Modify: `config/default.yaml` (`tilt.*`)
 - Modify: `README.md` (what tilt measures, what it can and cannot do)
 
 ## Implementation Steps
 
-1. Apply `007-tilt.sql`; implement `score.ts` pure functions and fixtures, including the
+1. Apply `007-tilt.sql`; implement `score.py` pure functions and fixtures, including the
    renormalisation cases.
 2. Baselines from the journal; guard the cold-start month (fewer than 5 sessions -> behavioural
    components only, voice weight redistributed).
 3. `tilt_sample` rows at 1 Hz plus `tilt_at_entry` frozen onto every fire.
 4. HUD pip and the driver sentence; confirm overlay additions at the hot band.
 5. `confirmHoldMs` threaded through the existing fire predicate — parameter, not new state.
-6. Server cooldown gate in `risk.ts` reusing the dead-man open-only predicate.
+6. Server cooldown gate in `risk/rules.py` reusing the dead-man open-only predicate.
 7. Memo/acknowledge halving of recency terms.
 8. Safety tests: `tilt = 1.0` and assert panic flatten executes and `intent.close` is accepted.
 

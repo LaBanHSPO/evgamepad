@@ -11,7 +11,7 @@ dependencies: [2, 3, 4]
 
 ## Overview
 
-Put **docker compose** on the existing Ubuntu VPS. Existing TLS on 443 reverse-proxies to `127.0.0.1:8444`. `ev-exec` has no published ports. This is not an MT5 stub phase. cTrader is already live from phase 2; this phase is production packaging, Origin, secrets, and runbook.
+Put **docker compose** on the existing Ubuntu VPS. Existing TLS on 443 reverse-proxies to `127.0.0.1:8444`. Compose runs **one service**, `ev-gateway`, and publishes nothing else. This is not an MT5 stub phase. cTrader is already live from phase 2; this phase is production packaging, Origin, secrets, and runbook.
 
 ## Context Links
 
@@ -23,7 +23,7 @@ Put **docker compose** on the existing Ubuntu VPS. Existing TLS on 443 reverse-p
 - Functional: inspect VPS OS/region and the **live** TLS terminator; write them into `deploy/README.md`
 - Functional: `docker compose up -d` on Ubuntu 22.04/24.04
 - Functional: compose publishes **only** `127.0.0.1:8444:8444` for gateway
-- Functional: `ev-exec` :9101 on the internal network only
+- Functional: the compose file declares exactly one service; a second service appearing in `docker compose config` is a deploy failure, not a variation
 - Functional: gateway serves `apps/web/dist` at `/` and the game socket at `/ws`; the existing 443 vhost proxies both to `127.0.0.1:8444`. One origin, one Origin-allowlist entry
 <!-- Updated: Validation Session 2 - no phase served the built SPA; copilot is not a service -->
 - Functional: volumes for sqlite journal + OAuth refresh token + voice audio archive + whisper models
@@ -44,10 +44,10 @@ Put **docker compose** on the existing Ubuntu VPS. Existing TLS on 443 reverse-p
 ```
 Internet --TLS--> host :443 (existing caddy/nginx)
                     → 127.0.0.1:8444  ev-gateway   ( / = HUD build, /ws = game socket )
-                         ├─ copilot child process
-                         └─ whisper.cpp child (batch, nice + taskset, concurrency 1)
-                         → ev-exec:9101
-                              → demo.ctraderapi.com:5035
+                         ├─ copilot worker task (in-process)
+                         ├─ whisper.cpp child (batch, nice + taskset, concurrency 1)
+                         └─ broker: ctrader-open-api
+                              → demo.ctraderapi.com:5035  (outbound only)
 ```
 
 Firewall: 443 + SSH. Drop 8444 from WAN (loopback bind).

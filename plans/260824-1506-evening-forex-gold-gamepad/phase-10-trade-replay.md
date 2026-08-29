@@ -92,7 +92,7 @@ GET /api/replay/:cid
    -> trade_closed row (R, MFE/MAE, efficiency, playbook, tilt_at_entry)
    -> voice_memo index for this cid
                 |
-        Replay.svelte  (order FSM hard-LOCKED)
+        Replay.tsx  (order FSM hard-LOCKED)
         Lightweight Charts + marker layer + event rail
         LS scrub / RS zoom / A play / D-pad speed / LB-RB step / B exit
         <audio> memo playback synced to the playhead
@@ -100,16 +100,16 @@ GET /api/replay/:cid
 
 ## Related Code Files
 
-- Create: `apps/gateway/src/replay/routes.ts` (`GET /api/replay/:cid`, `GET /api/replay/index`)
-- Create: `apps/gateway/src/replay/routes.test.ts` (missing tape, missing memo, gzip round-trip)
-- Create: `apps/web/src/replay/Replay.svelte` (route shell, FSM lock)
-- Create: `apps/web/src/replay/Timeline.svelte` (playhead, event rail, memo pins)
+- Create: `apps/gateway/replay/routes.py` (`GET /api/replay/:cid`, `GET /api/replay/index`)
+- Create: `apps/gateway/replay/test_routes.py` (missing tape, missing memo, gzip round-trip)
+- Create: `apps/web/src/replay/Replay.tsx` (route shell, FSM lock)
+- Create: `apps/web/src/replay/Timeline.tsx` (playhead, event rail, memo pins)
 - Create: `apps/web/src/replay/Markers.ts` (entry/exit/MFE/MAE/arm/cancel marker layer)
 - Create: `apps/web/src/replay/transport.ts` (play/pause/scrub/speed; audio sync)
 - Create: `apps/web/src/replay/resample.ts` (1 Hz -> displayed timeframe)
 - Create: `apps/web/src/replay/resample.test.ts` (integer-price OHLC aggregation is lossless)
-- Modify: `apps/web/src/App.svelte` (route `/replay/:cid`, FSM lock on entry, unlock on exit)
-- Modify: `apps/web/src/deck/OutcomePanel.svelte` (trade rows link to replay)
+- Modify: `apps/web/src/App.tsx` (route `/replay/:cid`, FSM lock on entry, unlock on exit)
+- Modify: `apps/web/src/deck/OutcomePanel.tsx` (trade rows link to replay)
 - Modify: `README.md` (replay controls)
 
 ## Implementation Steps

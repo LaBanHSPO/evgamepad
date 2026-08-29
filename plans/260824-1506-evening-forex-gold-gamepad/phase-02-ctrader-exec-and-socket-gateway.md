@@ -1,5 +1,5 @@
 ---
-title: "Phase 2: cTrader exec and socket gateway"
+title: "Phase 2: cTrader broker link and socket gateway"
 status: todo
 phase: 2
 priority: P1
@@ -7,11 +7,14 @@ effort: 22h
 dependencies: [1]
 ---
 
-# Phase 2: cTrader exec and socket gateway
+# Phase 2: cTrader broker link and socket gateway
 
 ## Overview
 
-Run **cTrader Open API** in `ev-exec` and the game WebSocket in `ev-gateway`. Spots, M5 bars, market orders, positions, and P/L are **Spotware demo**. No in-process matching. No MT5.
+Run **cTrader Open API** and the game WebSocket in the **same** `ev-gateway` process, through the
+native Python client (`ctrader-open-api` / OpenApiPy). Spots, M5 bars, market orders, positions, and
+P/L are **Spotware demo**. No in-process matching. No MT5. No sidecar — the module that checks risk
+is the module that calls the broker.
 
 ## Prerequisites (blocks implementation)
 
@@ -19,7 +22,7 @@ Run **cTrader Open API** in `ev-exec` and the game WebSocket in `ev-gateway`. Sp
 - [ ] **IC Markets** cTrader **demo** account opened under it
 - [ ] Open API application registered and approved at connect.spotware.com
 - [ ] `.env` populated per the phase 1 README flow (manual consent; no helper ships)
-- [ ] A real `SymbolsList` + `SymbolById` dump captured to `apps/exec/fixtures/`
+- [ ] A real `SymbolsList` + `SymbolById` dump captured to `apps/gateway/broker/fixtures/`
 
 <!-- Updated: Validation Session 2 - broker named, OAuth is manual -->
 
@@ -34,7 +37,14 @@ Run **cTrader Open API** in `ev-exec` and the game WebSocket in `ev-gateway`. Sp
 
 ## Requirements
 
-- Functional: persistent Protobuf connection over **TCP** to `demo.ctraderapi.com:5035` (OpenApiPy's transport)
+- Functional: persistent Protobuf connection over **TCP** to `demo.ctraderapi.com:5035` (OpenApiPy's transport), opened by the gateway itself
+- Functional: **OpenApiPy is Twisted-based and the gateway is asyncio.** Install
+  `twisted.internet.asyncioreactor` before any module imports `reactor`, so the broker client and the
+  web server share one event loop. Boot-fail loudly if a default reactor was already installed —
+  a silently mismatched reactor is the failure mode that looks like "the socket is just slow"
+- Functional: broker callbacks are **contained** at the module boundary. An exception in a Protobuf
+  callback becomes an `order.reject` or a `maint` frame; it may never escape into the reactor and
+  take the process down. With the sidecar gone this process is also the HUD and the journal
 - Functional: `ProtoHeartbeatEvent` so the proxy stays up
 - Functional: app auth + account auth; **refresh** a manually provisioned OAuth token. Boot-fail with a pointer to the phase 1 README when `CT_REFRESH_TOKEN` is absent
 - Functional: refuse if account `isLive` or host is live
@@ -61,8 +71,8 @@ Run **cTrader Open API** in `ev-exec` and the game WebSocket in `ev-gateway`. Sp
   SL/TP, planned risk/reward, fill/close facts, lots, P/L, and adherence. cTrader remains the money
   source of truth; never re-derive balance from summed fills
 <!-- Updated: Validation Session 3 - phase 6 needs a session equity series and closed-trade rows -->
-- Functional: the risk rule set is **exported**, not private — phase 6 scores adherence with the same rules the gateway enforced, never a second definition. Phase 7 moves these rules into `packages/method/src/rules.ts` and `risk.ts` imports them; **that extraction must be behaviour-preserving, and this phase's tests are the regression gate**
-- Functional: **R is defined once, here, in the module `risk.ts` imports.** Protocol volume is
+- Functional: the risk rule set is **exported**, not private — phase 6 scores adherence with the same rules the gateway enforced, never a second definition. Phase 7 moves these rules into `apps/gateway/method/rules.py` and `risk/rules.py` imports them; **that extraction must be behaviour-preserving, and this phase's tests are the regression gate**
+- Functional: **R is defined once, here, in the module `risk/rules.py` imports.** Protocol volume is
   cents of units, so `units = protocolVolume / 100`; raw stop risk is
   `units * abs(entry - sl)` in the symbol's quote asset. Convert that value through cTrader's
   quote-to-USD conversion chain at entry before naming it `R_usd` (`XAUUSD` is already USD;
@@ -90,15 +100,19 @@ Run **cTrader Open API** in `ev-exec` and the game WebSocket in `ev-gateway`. Sp
 ## Architecture
 
 ```
-game WSS → ev-gateway (Node)
-              risk, cid, seq, journal
-              → TCP JSON ev-exec:9101
-                    OpenApiPy / protobuf
+game WSS → ev-gateway (Python, one process, one event loop)
+              api/    ws, rest, static HUD
+              risk/   risk, cid, seq
+              journal/ plan, events, tape
+              broker/ ctrader-open-api (OpenApiPy / Twisted on asyncioreactor)
                     ProtoOA* ↔ demo.ctraderapi.com:5035
 ```
 
-Official protocol volume is expressed in **0.01 of a unit**. HUD speaks lots. Exec converts using
-`ProtoOASymbol.lotSize` and broker min/step/max from `SymbolByIdReq` — never from
+An approved intent reaches the broker by **direct call**, not by a socket. The 9101 TCP JSON hop,
+its framing, its reconnect logic, and its two-process failure matrix are all gone.
+
+Official protocol volume is expressed in **0.01 of a unit**. HUD speaks lots. The broker module
+converts using `ProtoOASymbol.lotSize` and broker min/step/max from `SymbolByIdReq` — never from
 `SymbolsListReq`. Document the mapping in logs at subscribe time.
 
 Spot prices in protocol are 1/100000 of a price unit (`123000` → `1.23`). Scale with `digits` from the symbol.
@@ -107,43 +121,52 @@ Spot prices in protocol are 1/100000 of a price unit (`123000` → `1.23`). Scal
 
 ## Related Code Files
 
-- Create: `apps/exec/src/ctrader.py` (connect, heartbeat, auth, spots, trendbars,
-  new/close/amend-position-SLTP)
-- Create: `apps/exec/src/volume.py` (lots ↔ protocol volume)
-- Create: `apps/exec/src/conversion.py` (asset graph and timestamped quote-to-USD conversion)
-- Create: `apps/exec/src/ctrader.test.py` (volume + price scaling fixtures)
-- Create: `apps/gateway/src/ws.ts`
-- Create: `apps/gateway/src/risk.ts`
-- Create: `apps/gateway/src/session.ts`
-- Create: `apps/gateway/src/journal.ts` (cid ledger + phase 2 plan/events/equity/closed-trade/tape writes)
-- Create: `apps/gateway/src/r.ts` (**the** R definition; imported by `risk.ts`, the HUD payloads, and the deck)
-- Create: `apps/gateway/src/db/migrations/001-core-trading.sql`
-- Create: `apps/gateway/src/tape/ring.ts` (1 Hz bid+ask ring, pre-conflation tap)
-- Create: `apps/gateway/src/tape/freeze.ts` (window extraction, gzip columnar, MFE/MAE)
-- Create: `apps/gateway/src/tape/freeze.test.ts` (long vs short excursion sides; short post-roll on shutdown)
-- Modify: `apps/gateway/src/main.ts`
-- Modify: `compose.yaml` (exec depends_on nothing public)
+- Create: `apps/gateway/broker/ctrader.py` (connect, heartbeat, auth, spots, trendbars,
+  new/close/amend-position-SLTP; owns the callback containment boundary)
+- Create: `apps/gateway/broker/reactor_setup.py` (installs `asyncioreactor` before any `reactor`
+  import; boot-fails if a different reactor is already installed)
+- Create: `apps/gateway/broker/volume.py` (lots ↔ protocol volume)
+- Create: `apps/gateway/broker/conversion.py` (asset graph and timestamped quote-to-USD conversion)
+- Create: `apps/gateway/broker/test_ctrader.py` (volume + price scaling fixtures)
+- Create: `apps/gateway/api/ws.py`
+- Create: `apps/gateway/risk/rules.py`
+- Create: `apps/gateway/risk/session.py`
+- Create: `apps/gateway/journal/writer.py` (cid ledger + phase 2 plan/events/equity/closed-trade/tape writes)
+- Create: `apps/gateway/risk/r.py` (**the** R definition; imported by the risk rules, the HUD payloads, and the deck)
+- Create: `apps/gateway/db/migrations/001-core-trading.sql`
+- Create: `apps/gateway/journal/tape/ring.py` (1 Hz bid+ask ring, pre-conflation tap)
+- Create: `apps/gateway/journal/tape/freeze.py` (window extraction, gzip columnar, MFE/MAE)
+- Create: `apps/gateway/journal/tape/test_freeze.py` (long vs short excursion sides; short post-roll on shutdown)
+- Modify: `apps/gateway/main.py`
 
 ## Implementation Steps
 
-1. Volume/price unit tests from documented examples; gold fixture once a real symbol/asset dump is
-   captured (record a demo fixture in `apps/exec/fixtures/`).
-2. Exec: connect, heartbeat, app+account auth, `isLive` guard, symbol map — `SymbolsListReq` for ids,
+1. Reactor first: `asyncioreactor` installed at import time, with a test that proves the gateway
+   refuses to start on a mismatched reactor. Everything else in this phase depends on it.
+2. Volume/price unit tests from documented examples; gold fixture once a real symbol/asset dump is
+   captured (record a demo fixture in `apps/gateway/broker/fixtures/`).
+3. Broker: connect, heartbeat, app+account auth, `isLive` guard, symbol map — `SymbolsListReq` for ids,
    then `SymbolByIdReq` for volume/digits/lot size and the asset list for conversion.
-3. Spots + M5 subscribe; sidecar `snapshot` / quote stream.
-4. `place` with relative SL/TP, full `close`, and absolute position-SLTP amendment with
+4. Spots + M5 subscribe; in-process `snapshot` / quote stream.
+5. `place` with relative SL/TP, full `close`, and absolute position-SLTP amendment with
    `clientMsgId`; map execution events to `OrderAck`/position events.
-5. Gateway WS: welcome, quote conflation, intents, cid UNIQUE, risk, dead-man, session.unlock.
-6. Reconnect: exec reconnects Spotware independently; gateway `Reconcile` → `pos.snap`.
-7. Tests: duplicate cid; overlapping retry; fire 50ms after clutch-down with last ping clutch=false still sends one order; live host refused.
-8. R definition + unit tests: XAUUSD identity conversion, USDJPY JPY->USD conversion, broker step
+6. Gateway WS: welcome, quote conflation, intents, cid UNIQUE, risk, dead-man, session.unlock.
+7. Reconnect: **one** client reconnects to Spotware and then `Reconcile` → `pos.snap`. There is no
+   longer an exec↔gateway link that can be up while the broker link is down, so the reconnect state
+   machine has one axis instead of two.
+8. Callback containment: prove a raised exception inside a Protobuf callback yields `order.reject`
+   or `maint` and leaves the WS, the HUD, and the journal running.
+9. Tests: duplicate cid; overlapping retry; fire 50ms after clutch-down with last ping clutch=false still sends one order; live host refused.
+10. R definition + unit tests: XAUUSD identity conversion, USDJPY JPY->USD conversion, broker step
    rounding, a timestamped conversion audit record, and the no-SL fallback.
-9. Tape ring on the pre-conflation spot path; freeze job on close; MFE/MAE with long and short fixtures.
-10. Apply `001-core-trading.sql`; prove the phase 1 runner is idempotent and records this migration.
+11. Tape ring on the pre-conflation spot path; freeze job on close; MFE/MAE with long and short fixtures.
+12. Apply `001-core-trading.sql`; prove the phase 1 runner is idempotent and records this migration.
 
 ## Todo
 
+- [ ] `asyncioreactor` installed before any `reactor` import; mismatch boot-fails
 - [ ] Open API auth + heartbeat
+- [ ] Broker callback containment boundary
 - [ ] Symbol/asset map + SymbolById lot/volume specs + quote-to-USD conversion
 - [ ] Spots + M5
 - [ ] MARKET open with relative SL/TP + absolute position amendment + full close/panic + cid
@@ -173,12 +196,26 @@ Spot prices in protocol are 1/100000 of a price unit (`123000` → `1.23`). Scal
 - [ ] USDJPY risk converts JPY to USD using the captured entry-time rate; XAUUSD uses identity
       conversion; both retain rate/source/timestamp in the plan
 - [ ] Fresh boot applies `001-core-trading.sql` once and contains no tables owned by later phases
+- [ ] The gateway serves the HUD, accepts a WS, and streams cTrader quotes **from one process** —
+      `docker compose ps` shows a single container
+- [ ] A forced exception inside a broker callback produces a reject/maint frame and does **not**
+      terminate the process; the socket stays up and the journal keeps writing
+- [ ] Importing the app under a non-asyncio reactor exits non-zero with a named error
 
 ## Risk Assessment
 
 - **Volume scale wrong on gold** — signal: margin call on 0.01. Response: log protocol volume; cap by `maxVolume`; start 0.01 only after a successful 0.01 round-trip you verify in cTrader web.
 - **Demo vs live token mix-up** — signal: `isLive true`. Response: exit.
-- **Twisted + Docker signals** — OpenApiPy is Twisted. Response: one process, `tini`, SIGTERM closes the protobuf socket.
+- **Twisted and asyncio fight over the loop** — signal: quotes arrive in bursts, awaits never resume,
+  or the WS heartbeat stalls while the broker socket is healthy. This is the **most likely way this
+  phase fails**, and it is new: the sidecar used to keep the two runtimes in separate processes.
+  Response: `asyncioreactor` installed before any `reactor` import, verified by a boot check and a
+  test; if it cannot be made to hold, the documented fallback is to run the OpenApiPy client in a
+  dedicated thread with a `run_coroutine_threadsafe` bridge — still one process, still no sidecar.
+- **Twisted + Docker signals** — OpenApiPy is Twisted. Response: `tini` in the gateway image, SIGTERM closes the protobuf socket and drains the WS.
+- **One process, one blast radius** — signal: a broker bug takes the HUD and the journal with it.
+  Response: the containment boundary above, tested in step 8. This is the cost of removing the
+  sidecar and it is paid deliberately, not ignored.
 - **5/s history limit** — seed M5 once per symbol per session, then live bars.
 - **R silently means two things** — signal: the HUD's R and the deck's R disagree on the same trade.
   Response: one module, one asset-conversion path, timestamped inputs, and no second formula.

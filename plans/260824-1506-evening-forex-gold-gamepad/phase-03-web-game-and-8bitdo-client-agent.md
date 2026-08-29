@@ -11,7 +11,14 @@ dependencies: [2]
 
 ## Overview
 
-Ship the evening game: Chrome HUD + **client agent** that turns 8BitDo Ultimate 2 input into protocol intents. Look like a game, not a terminal. Tab must stay focused.
+Ship the evening game: Chrome HUD + **client agent** that turns 8BitDo Ultimate 2 input into protocol
+intents. Look like a game, not a terminal. Tab must stay focused.
+
+The app is a **client-side React PWA** — Vite build, TanStack Router for the overlay routes, TanStack
+Query for the REST decks. There is **no SSR and no server-side rendering step**: the socket supplies
+everything that matters within a frame of connecting, and the gateway serves the built bundle as
+static files. Installing it gives the evening session its own window with no browser chrome to
+mis-click during a fire.
 
 ## Context Links
 
@@ -62,9 +69,15 @@ Ship the evening game: Chrome HUD + **client agent** that turns 8BitDo Ultimate 
 <!-- Updated: Validation Session 4 - journal layer capture, PTT chord, playbook grade in the overlay -->
 <!-- Updated: Validation Session 3 - process cues in HUD; end goal is confidence, not P/L -->
 - Functional: WS token lives in **memory** this session (paste once); never `localStorage`, never `VITE_*`
+- Functional: installable PWA — web app manifest, `display: standalone`, dark theme colour, and a
+  service worker that precaches the **app shell only**. It must never cache `/ws`, `/api/*`, quotes,
+  positions, or any journal response; a stale price or a stale position is worse than no app
+- Functional: a new build must take effect on the next launch — the service worker activates
+  immediately rather than waiting for every tab to close, and the HUD refuses to run against a
+  protocol version it does not recognise
 - Non-functional: quote **text** at 10–20 Hz max, not 60 Hz framework state
 - Non-functional: desktop Chrome first; rumble optional on Firefox/Safari
-- Non-functional: dev runs the Vite dev server with `/ws` proxied to `127.0.0.1:8444`; **production is same-origin** — the gateway serves `dist` at `/` and the socket at `/ws`, so the memory-only token and `default-src 'self'` hold without a CORS carve-out
+- Non-functional: dev runs the Vite dev server with `/ws` proxied to `127.0.0.1:8444`; **production is same-origin** — the Python gateway serves `dist` at `/` and the socket at `/ws`, so the memory-only token and `default-src 'self'` hold without a CORS carve-out. No Node process runs in production
 - Non-functional: entertainment copy in chrome: **cTrader demo**, not advice, not live
 
 ## Architecture
@@ -139,22 +152,26 @@ Not a DOM-dense Bloomberg clone.
 - Create: `apps/web/src/pad/fsm.ts`
 - Create: `apps/web/src/pad/map.ts` (standard + extra-button detect)
 - Create: `apps/web/src/net/ws.ts`
-- Create: `apps/web/src/hud/Chart.svelte`
-- Create: `apps/web/src/hud/PriceTape.svelte`
-- Create: `apps/web/src/hud/ConfirmOverlay.svelte`
-- Create: `apps/web/src/hud/PositionStrip.svelte`
-- Create: `apps/web/src/hud/SessionBar.svelte`
-- Create: `apps/web/src/hud/AdherenceBadge.svelte` (adherence + stood-down counter)
-- Create: `apps/web/src/session/CheckIn.svelte` (pad-driven pre/post 1–5 check-in)
-- Create: `apps/web/src/hud/SentinelBar.svelte` (stub until phase 4)
-- Create: `apps/web/src/hud/CopilotDesk.svelte` (tabs stub until phase 4)
-- Create: `apps/web/src/game-overlay/GameOverlay.svelte` (single safe navigation surface)
-- Create: `apps/web/src/App.svelte`
+- Create: `apps/web/src/hud/Chart.tsx`
+- Create: `apps/web/src/hud/PriceTape.tsx`
+- Create: `apps/web/src/hud/ConfirmOverlay.tsx`
+- Create: `apps/web/src/hud/PositionStrip.tsx`
+- Create: `apps/web/src/hud/SessionBar.tsx`
+- Create: `apps/web/src/hud/AdherenceBadge.tsx` (adherence + stood-down counter)
+- Create: `apps/web/src/session/CheckIn.tsx` (pad-driven pre/post 1–5 check-in)
+- Create: `apps/web/src/hud/SentinelBar.tsx` (stub until phase 4)
+- Create: `apps/web/src/hud/CopilotDesk.tsx` (tabs stub until phase 4)
+- Create: `apps/web/src/game-overlay/GameOverlay.tsx` (single safe navigation surface)
+- Create: `apps/web/src/routes/` (TanStack Router tree for the overlay destinations)
+- Create: `apps/web/src/App.tsx`
+- Create: `apps/web/public/manifest.webmanifest` + icons (installable, standalone, dark)
+- Create: `apps/web/src/sw.ts` (app-shell precache only; `/ws` and `/api/*` never cached)
 - Create: `apps/web/src/pad/telemetry.ts` (transition fields + 1 Hz batching)
 - Create: `apps/web/src/pad/fsm.test.ts`
 - Create: `apps/web/src/pad/chord.test.ts` (LB+RB vs single bumper; fire-on-release)
-- Create: `apps/web/src/game-overlay/GameOverlay.test.ts` (focus/navigation; never emits open/modify)
-- Create: `apps/gateway/src/db/migrations/002-client-session.sql` (`pad_event`, `session_process`)
+- Create: `apps/web/src/game-overlay/GameOverlay.test.tsx` (focus/navigation; never emits open/modify)
+- Create: `apps/web/src/sw.test.ts` (asserts no data route is cacheable)
+- Create: `apps/gateway/db/migrations/002-client-session.sql` (`pad_event`, `session_process`)
 - Modify: `README.md` (dongle pairing + wired fallback, map, “tab must stay focused”)
 
 ## Implementation Steps
@@ -163,7 +180,8 @@ Not a DOM-dense Bloomberg clone.
 2. FSM unit tests: held A does not spam; stick drift never fires; hide cancels arm.
 3. WS client: hello, ping with `{visible,pad,clutch}`, seq gap resync, cid retry.
 4. Chart: LWC `series.update` from `candle` + last from `quote`.
-5. HUD numbers via `textContent` / signals sampled 15 Hz, not per tick store updates.
+5. HUD numbers written imperatively at 15 Hz — refs and direct DOM writes on the hot price path, not
+   React state per tick. React owns layout and the overlay; it does not re-render on quotes.
 6. Telemetry fields on every transition; 1 Hz batch on `session`.
 7. `LB + RB` chord with bumper fire-on-release; connect it to a no-op voice adapter and unit-test
    that the control event emits no order transition. MediaRecorder begins in phase 8.
@@ -174,8 +192,10 @@ Not a DOM-dense Bloomberg clone.
 11. Settings: lot, symbol list, clutch deadzone, rumble on/off. SL/TP apply stages a modify action
     and returns to the LT+RT confirmation flow.
 12. Apply `002-client-session.sql` and write check-in/telemetry rows.
-13. Manual matrix: 8BitDo via **2.4G dongle** on Mac Chrome — connect, trade, overlay, unplug, hide
-    tab. Repeat wired as the fallback path.
+13. Manifest, icons, and the shell-only service worker; assert in a test that no data route is
+    cacheable and that a new build activates on the next launch.
+14. Manual matrix: 8BitDo via **2.4G dongle** on Mac Chrome — connect, trade, overlay, unplug, hide
+    tab. Repeat wired as the fallback path, and once from the **installed** PWA window.
 
 ## Todo
 
@@ -194,8 +214,9 @@ Not a DOM-dense Bloomberg clone.
 - [ ] SL/TP apply stages modify; LT+RT remains mandatory
 - [ ] `002-client-session.sql` + check-in/telemetry writes
 - [ ] Disabled mic control until phase 8; tilt pip placeholder
+- [ ] Installable manifest + shell-only service worker + no-cache-on-data test
 - [ ] README dongle pairing + wired fallback + map
-- [ ] Manual 8BitDo pass
+- [ ] Manual 8BitDo pass, browser tab and installed window
 
 ## Success Criteria
 
@@ -215,6 +236,11 @@ Not a DOM-dense Bloomberg clone.
 - [ ] An SL/TP edit returns as an armed modify preview and cannot reach the broker without LT+RT
 - [ ] Before phase 7, the confirm overlay says `grading unavailable` without blocking a fire
 - [ ] `fsm.test.ts` passes unchanged after `confirmHoldMs` is introduced
+- [ ] Chrome offers **Install**; the installed window trades identically to the tab, and the pad,
+      rumble, and focus-lock rules behave the same in it
+- [ ] With the network cut, the installed app opens its shell and shows a disconnected state — it
+      never shows a cached price, position, or P/L
+- [ ] Shipping a new build makes the next launch run it, without asking the player to hard-reload
 
 ## Risk Assessment
 
@@ -234,7 +260,9 @@ Not a DOM-dense Bloomberg clone.
 ## Security Considerations
 
 - Token in memory this session only. CSP `default-src 'self'`. Never `{@html}` on copilot/journal strings.
-- No broker passwords in the browser. Exec sidecar stays on the VPS.
+- No broker passwords in the browser. The broker link and its tokens stay in the gateway on the VPS.
+- The service worker caches the shell only — no quote, position, or journal response is ever written
+  to a cache the browser would replay after the session ends.
 
 ## Next Steps
 

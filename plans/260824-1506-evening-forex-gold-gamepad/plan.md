@@ -55,8 +55,8 @@ tools can place, close, or modify an order.
 
 | Decision | Choice | Why |
 |----------|--------|-----|
-| Execution | **cTrader Open API** on `demo.ctraderapi.com:5035` (Protobuf) | User: no paper, no MT5. Linux-native. |
-| Host | Ubuntu VPS, **Docker Compose** | User. Exec has no published ports. |
+| Execution | **cTrader Open API** on `demo.ctraderapi.com:5035` (Protobuf), spoken **in-process** by the gateway via `ctrader-open-api` | User: no paper, no MT5. Linux-native. A Python gateway can import the official client directly, so no sidecar process and no local RPC hop. |
+| Host | Ubuntu VPS, **Docker Compose**, **one service** (`ev-gateway`) | User. Only `127.0.0.1:8444` is bound; nothing else is published. |
 | Live | **Refuse** | Entertainment. Boot-fail if live host or `isLive`. |
 | Pad | 8BitDo Ultimate 2, default LT/RT | Unchanged. |
 | Client-agent | In-tab pad FSM; Chrome focused | Unchanged. |
@@ -64,22 +64,22 @@ tools can place, close, or modify an order.
 | Bind | Gateway `127.0.0.1:8444`; existing VPS TLS :443 | Unchanged. |
 | Timezone | `Asia/Ho_Chi_Minh` 18:00–23:30 | Validated. |
 | Symbols | XAUUSD, EURUSD, GBPUSD, USDJPY | Validated. Size: $10k feel is **cTrader demo balance**, max 0.10 lot gold still a **risk gate**. |
-| AI desk | Sentinel + news + Volman + copilot child | Unchanged. |
+| AI desk | Sentinel + news + Volman + copilot worker | Unchanged in behaviour; the copilot is now an in-process Python task rather than a forked child. |
 | TradingView VIP | Dual-screen + Pine webhook signals | Unchanged. Never auto-trade. |
 | End goal | **Confidence + enjoyment**, not P/L | User. Steenbarger: outcome anxiety pulls attention off process. |
 | Deck priority | **Process first**, outcome behind a click | Validated. Money never on the default view. |
 | Deck data | Session equity snapshots **and** closed-trade rows | Validated. Sharpe needs a time series; R-multiple needs per-trade. |
 | Flatten | Panic-on-disconnect off; HUD Flatten | Unchanged. |
 | Pad link | **2.4G dongle** primary; wired USB fallback | Validated. BT on the Ultimate 2 needs macOS 26; this Mac is 15.6. |
-| Copilot process | **Node child forked by `ev-gateway`** | Validated. Not a third container; phase 4 files already live in `apps/gateway/src/copilot/`. |
+| Copilot process | **Python worker task inside `ev-gateway`** | Not a second container. Lives in `apps/gateway/copilot/`. Hot-path isolation stays enforced by `copilot.on_hot_path: false` and the read-only tool allowlist, not by a process boundary. |
 | Broker | **IC Markets** cTrader demo | Validated. Plain XAUUSD/EURUSD/GBPUSD/USDJPY, no suffix handling. |
 | Web serving | Gateway serves `dist` at `/`, socket at `/ws` | Validated. Single origin makes CSP + Origin allowlist trivially true. |
-| OAuth | Manual consent once → paste into `.env`; exec refreshes | Validated. No auth helper in v1. |
+| OAuth | Manual consent once → paste into `.env`; the gateway refreshes | Validated. No auth helper in v1. |
 | Images | Dockerfiles land in phase 1 | Validated. Compose had three services and zero build files. |
 | Journal layer | **Playbook + grading, voice memos, trade replay, tilt-meter, process score** | User: inherit the best of Edgewonk and TradeZella. What-if simulator cut. |
 | Voice role | **Journal memos + ask-the-coach only** | Never navigation, never execution. Enforced by a binding boot-fail, not convention. |
 | Speech-to-text | **Browser capture -> whisper.cpp on the VPS** | Audio never leaves the box. No cloud STT code path exists to misconfigure. |
-| STT process | **`spawn` child of `ev-gateway`**, `nice` + `taskset` + concurrency 1 | VPS is 4+ vCPU / 4 GB+. Compose stays at two services, same reasoning as the copilot child. |
+| STT process | **`whisper-cli` subprocess of `ev-gateway`**, `nice` + `taskset` + concurrency 1 | VPS is 4+ vCPU / 4 GB+. whisper.cpp is a binary, so it stays a spawned child in any language. Compose stays at one service. |
 | Coach TTS | Browser `speechSynthesis`, **default off** | VPS CPU is the scarce resource; the text is already on screen. Piper is a documented drop-in. |
 | Game layer | **One process-weighted score**, five process-only axes | Standing down raises it. No streaks, no levels, no cross-session accumulator. |
 | Rule definitions | **One registry, two consequences** | `risk` rules are enforced; `playbook` rules are graded and can never block a fire. |
@@ -90,23 +90,28 @@ tools can place, close, or modify an order.
 | Daily journal | Readiness, analysis, calculator, heatmap/history, Actual vs Plan, execution scores, mistakes, principles | User chose the full focused cockpit rather than a lightweight memo layer. |
 | Data ownership | CSV + JSON + browser PDF + manifested backup/restore/delete | Complete local data lifecycle; no broker/MT5 history import. |
 | Presentation | **Desktop Chrome, dark-only** | Explicit v1 scope; no mobile or light-mode commitment. |
+| Web stack | **Client-side React PWA** — Vite + TanStack Router/Query, installable, no SSR | The HUD is a focused single-tab game driven by a socket and a gamepad; SSR buys nothing and would put a Node server back on the box. Node is a build-time dependency only. |
+| Gateway stack | **Python**, one process: WS, REST, risk, cid, journal, static HUD, broker link | Removing the sidecar is only coherent if the process that owns risk is the process that can call the broker. Pydantic replaces Zod as the protocol catalog; the web gets generated TS types from its JSON Schema. |
 | Schema evolution | **Phase-owned migrations `001`–`010`** | Prevent duplicate table ownership and allow fresh/upgrade/restore verification. |
 
 ## Architecture
 
 ```text
   8BitDo Ultimate 2 --2.4G--> Mac Chrome (focused, desktop dark UI)
-                               pad FSM + HUD + copilot desk
+                               React PWA: pad FSM + HUD + copilot desk
                                |
                           WSS TLS  existing :443
                                |
-  Ubuntu VPS  docker compose
-    ev-gateway   127.0.0.1:8444   risk, cid UNIQUE, journal, HUD build at /, socket at /ws
-       ├─ copilot child process   (no order tools)
-       └─ whisper.cpp child       (batch, nice + taskset, concurrency 1, no order tools)
-    ev-exec      Python OpenApiPy
-         |  Protobuf TCP 5035  (no published container port)
-         v
+  Ubuntu VPS  docker compose   ── one service ──
+    ev-gateway   127.0.0.1:8444   Python
+       ├─ api/       HUD build at /, socket at /ws, REST at /api/*
+       ├─ risk/      cid UNIQUE, limits, dead-man, session lock
+       ├─ journal/   SQLite, tape, replay, score
+       ├─ copilot/   in-process worker task (no order tools)
+       ├─ whisper.cpp child   (batch, nice + taskset, concurrency 1, no order tools)
+       └─ broker/    ctrader-open-api client, same process as risk
+              |  Protobuf TCP 5035  (outbound only)
+              v
     demo.ctraderapi.com     cTrader demo account
 ```
 
@@ -135,8 +140,8 @@ Spotware, not the VPS building, is the matching engine. Docker on Ubuntu does **
 
 | # | Goal | Priority |
 |---|------|----------|
-| 1 | Protocol + config + Docker skeleton; cTrader secrets; demo-only boot | P1 |
-| 2 | `ev-exec` + gateway: spots, M5 bars, MARKET open with relative SL/TP, amend protection, full close/panic on **cTrader demo** | P1 |
+| 1 | Protocol + config + Docker skeleton; cTrader secrets; demo-only boot; React PWA shell | P1 |
+| 2 | Gateway broker link: spots, M5 bars, MARKET open with relative SL/TP, amend protection, full close/panic on **cTrader demo** | P1 |
 | 3 | 8BitDo HUD against live cTrader quotes | P1 |
 | 4 | AI desk + TV webhooks | P1 |
 | 5 | Compose on Ubuntu behind existing TLS | P1 |
@@ -155,7 +160,7 @@ Spotware, not the VPS building, is the matching engine. Docker on Ubuntu does **
 | # | Phase | Status |
 |---|-------|--------|
 | 1 | [Repo, protocol, Docker config](./phase-01-repo-protocol-docker-config.md) | Pending |
-| 2 | [cTrader exec and socket gateway](./phase-02-ctrader-exec-and-socket-gateway.md) | Pending |
+| 2 | [cTrader broker link and socket gateway](./phase-02-ctrader-exec-and-socket-gateway.md) | Pending |
 | 3 | [Web game and 8BitDo client agent](./phase-03-web-game-and-8bitdo-client-agent.md) | Pending |
 | 4 | [AI desk: sentinel, news, Volman, research / plan / advise](./phase-04-ai-desk-sentinel-news-volman.md) | Pending |
 | 5 | [Ubuntu Docker deploy](./phase-05-ubuntu-docker-deploy.md) | Pending |
@@ -193,11 +198,12 @@ Total: **203h ≈ 26 working days** before empirical blockers or deployment lead
       absolute position SL/TP, fully closes, and panics; fill rumbles; P/L comes from cTrader
 - [ ] Quotes/candles are **Spotware spots + trendbars**, not a simulator
 - [ ] Hidden tab / unplug locks **new** opens; evening window, max lot, max daily loss on the gateway
-- [ ] Docker Compose on Ubuntu: gateway loopback, exec unpublished, existing :443 TLS
+- [ ] Docker Compose on Ubuntu: **one service**, gateway on loopback, existing :443 TLS
 - [ ] Live host or live account → process **does not** trade
 - [ ] Copilot desk + TV webhook signals; neither can `place`
 - [ ] README: cTID OAuth, 8BitDo pair, dual-screen TV
-- [ ] Chrome loads the HUD from the VPS origin (gateway-served `dist`), same origin as `/ws`
+- [ ] Chrome loads the HUD from the VPS origin (gateway-served `dist`), same origin as `/ws`, and
+      the PWA installs and reopens without a network round-trip for its shell
 - [ ] `/deck` opens on the **process** panel; no dollar figure until a tab is clicked
 - [ ] An evening with zero trades in a dead tape scores well, not badly
 - [ ] Month-over-month deltas render for adherence, declined-rate, return %, and average R
@@ -235,6 +241,15 @@ Total: **203h ≈ 26 working days** before empirical blockers or deployment lead
 ## Replan note — 2026-08-24
 
 User reversed paper-first and MT5. **Source of truth is this file + phases after this note.** Ignore older “PaperAdapter / Mt5Adapter / GBM” prose in journals.
+
+## Replan note — 2026-08-29
+
+User removed the execution sidecar and moved the broker link into the gateway using the native
+Python client (`ctrader-open-api`), and chose a **client-side React PWA** for the web layer instead
+of Vite + Svelte. Compose drops from two services to one. **Source of truth is this file and the
+phases after this note**; Validation Sessions 2–5 below remain accurate records of *when* the
+earlier decisions were taken, but where they name `ev-exec`, the sidecar TCP protocol, `packages/exec`,
+Zod, Svelte, or "two services", Session 6 supersedes them.
 
 ## Validation Log
 
@@ -645,5 +660,89 @@ Re-read `plan.md`, `README.md`, and all 14 phase files after propagation.
 - `git diff --check`: clean.
 
 **Unresolved plan contradictions: none. Runtime validation remains future implementation work.**
+
+### Session 6 — 2026-08-29 (architecture change: remove the sidecar, native Python cTrader, React PWA)
+
+#### Requested change
+
+> "remove all sidecar, use native python support ctrader (ctrader-open-api)" — plus, on
+> clarification: the web layer is a **client-side PWA in React**, with no TanStack Start SSR.
+
+#### Questions & Answers
+
+1. **[Architecture]** With the sidecar gone, which process owns the cTrader connection?
+   - Options: Gateway itself, in-process (Recommended) | Spawned Python child over stdio | Keep a container
+   - **Answer:** Gateway itself, in-process
+   - **Rationale:** `ctrader-open-api` is a Python library, so the only way "no sidecar" is coherent
+     is for the process that owns risk and `cid` to be the process that can call the broker. Removing
+     the hop deletes the 9101 TCP JSON contract, one Dockerfile, one image, and an entire class of
+     partial-failure states (exec up / gateway down and the reverse) — and it removes a queue between
+     the risk check and the order that never earned its place on the hot path.
+
+2. **[Architecture]** What replaces Node for the gateway?
+   - Options: Python, one process (Recommended) | Node gateway + Python broker child | Keep Node
+   - **Answer:** Python, one process
+   - **Rationale:** Follows from Q1. The Zod catalog becomes a **Pydantic v2** catalog, and the web
+     app consumes TS types generated from its JSON Schema so there is still exactly one protocol
+     source of truth. The copilot stops being a forked Node child and becomes an in-process worker
+     task; `whisper-cli` stays a spawned binary because it always was one.
+
+3. **[Architecture]** What is the web stack, and does its server run anywhere?
+   - Options: Client-side React PWA, no server (Recommended) | TanStack Start with SSR | Keep Svelte
+   - **Answer:** Client-side React PWA, no server
+   - **Rationale:** User's call. The HUD is a single focused tab driven by a socket and a gamepad —
+     SSR has nothing to render that the socket does not immediately replace, and a Start server would
+     put a Node runtime back on the box one decision after removing a Python one. Vite builds a static
+     bundle; the gateway serves it, so phase 3's `default-src 'self'` CSP and phase 2's Origin
+     allowlist stay trivially true. PWA install is a genuine gain: the evening session opens from a
+     dock icon in its own window, with no browser chrome to mis-click during a fire.
+
+#### Consequences that need care in implementation
+
+- **Twisted vs asyncio.** `ctrader-open-api` (OpenApiPy) is Twisted-based; FastAPI is asyncio. The
+  gateway must install `twisted.internet.asyncioreactor` **before** anything imports `reactor`, so
+  both run on one event loop. Getting this wrong is the single most likely way this change fails,
+  and it is now an explicit phase 2 requirement, risk, and success criterion.
+- **The sidecar was also an isolation story.** A crash in broker code used to kill `ev-exec` alone.
+  In one process it can take the gateway down with it, so broker-callback exceptions must be
+  contained at the boundary and surfaced as `order.reject` / `maint` rather than propagating.
+- **`tini` moves.** The SIGTERM/Twisted shutdown path now belongs to the gateway image.
+
+#### Confirmed Decisions
+
+- One compose service, `ev-gateway`; no `ev-exec`, no 9101 TCP JSON, no `packages/exec`
+- Gateway is Python and owns WS, REST, risk, `cid`, journal, static HUD, and the broker link
+- Protocol catalog is Pydantic v2; the web gets generated TS types from its JSON Schema
+- Copilot is an in-process Python worker; `whisper-cli` remains a spawned child binary
+- Web is a client-side React PWA (Vite + TanStack Router/Query), installable, no SSR
+- Node is a build-time dependency only; `uv` + `pytest` + `ruff` are the gateway toolchain
+
+#### Impact on Phases
+
+- **Phase 1:** pnpm workspace → `uv` project plus a `apps/web` npm build; Zod → Pydantic; three
+  Dockerfiles → one gateway image with a web build stage; sidecar protocol types and their step
+  deleted; `broker.exec_addr` removed from the config sketch; compose skeleton is one service.
+- **Phase 2:** retitled to the broker link; OpenApiPy now runs inside the gateway, so the
+  asyncioreactor install, callback-exception containment, and the removal of the exec↔gateway
+  reconnect dance are requirements. Reconnect is now one client reconnecting, not two.
+- **Phase 3:** Svelte → React; Vite build now also emits a service worker and manifest; PWA install
+  and offline-shell acceptance added.
+- **Phase 4:** copilot restated as an in-process worker; `on_hot_path: false` and the read-only tool
+  allowlist remain the enforcement, unchanged in intent.
+- **Phase 5:** deploy drops the second service from compose, the diagram, and the health checks.
+- **Phases 6–14:** endpoint and deck work is unchanged in behaviour; references to Node/Zod/Svelte
+  internals are restated in Python/Pydantic/React terms.
+
+#### Whole-Plan Consistency Sweep
+
+- `ev-exec`, `packages/exec`, `sidecar`, or `9101` as live architecture: **0 remaining** outside the
+  historical Validation Sessions 2–5 and the dated research file, neither of which is authority.
+- "two services" / "third service" as the compose shape: **0 remaining**.
+- Svelte or Zod as the shipping stack: **0 remaining**.
+- The gateway-is-the-only-approver boundary is **unchanged** — this change moves where the broker
+  call happens, not who is allowed to authorise it.
+
+**Unresolved plan contradictions: none. The Twisted/asyncio integration is the one new empirical
+risk and is gated in phase 2, not assumed.**
 
 <!-- slug: evening-forex-gold-gamepad -->

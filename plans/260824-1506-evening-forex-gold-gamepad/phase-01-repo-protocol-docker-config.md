@@ -11,11 +11,17 @@ dependencies: []
 
 ## Overview
 
-Scaffold the monorepo and freeze contracts: JSON WebSocket envelope, Zod catalog, cTrader-only config, Docker Compose skeleton. No paper engine. No MT5 types. `ev-exec` is a stub that cannot place until phase 2.
+Scaffold the repo and freeze contracts: JSON WebSocket envelope, Pydantic catalog, cTrader-only
+config, Docker Compose skeleton. No paper engine. No MT5 types. The broker module is a stub that
+cannot place until phase 2.
+
+The gateway is **one Python process and one container**. There is no execution sidecar, so there is
+no local RPC contract to freeze — the broker link is an internal module boundary
+(`apps/gateway/broker/`), not a wire protocol.
 
 Protocol v1 is frozen **here**, so the journal layer's channel and messages (phases 7-14) are
 declared in this phase even though nothing implements them yet. Adding them later would be a v2
-migration; adding them now costs a few Zod schemas.
+migration; adding them now costs a few Pydantic models.
 
 ## Context Links
 
@@ -26,14 +32,15 @@ migration; adding them now costs a few Zod schemas.
 
 ## Requirements
 
-- Functional: pnpm workspace `apps/web`, `apps/gateway`, `apps/exec` (Python), `packages/protocol`, `packages/exec`, `packages/method`
-<!-- Updated: Validation Session 2 - packages/exec was created but undeclared -->
+- Functional: `uv` project rooted at `apps/gateway` (Python 3.11+) with packages `protocol`, `broker`,
+  `risk`, `method`, `copilot`, `journal`, `api`; plus an npm-built `apps/web` React app
+<!-- Updated: Validation Session 6 - pnpm workspace and packages/exec removed with the sidecar -->
 - Functional: protocol v1 `{v,t,seq,ts,ch,cid,p}`; 64KiB max; ULID `cid`; channels `quotes|orders|session|ai|voice`
 <!-- Updated: Validation Session 4 - journal layer adds exactly one channel; telemetry/tilt/grades/score ride `session` -->
 - Functional: `hello` + `lastSeq`; `resync` / `snap`; one WS per token
 - Functional: `intent.*` carries `clutch: true`; heartbeat clutch is dead-man only
 - Functional: config `broker.adapter: ctrader` only; `mode: demo`; IANA timezone required
-- Functional: Docker Compose file exists (services defined, exec unpublished)
+- Functional: Docker Compose file exists with **exactly one service** (`ev-gateway`), binding only `127.0.0.1:8444`
 - Non-functional: boot-fail on `mode: live`, live Open API host, `on_hot_path: true`, `timezone: local`, non-loopback listen in non-dev, `tradingview.auto_trade: true`
 - Non-functional: boot-fail on `voice.stt.mode` outside `{local, off}`, `voice.bindings` resolving to LT/RT/A/B/X/Y, `tilt.gate_close: true`, or `score.weights` not summing to 1.0. These are **structural guarantees** that voice and tilt can never reach the order path, and that the score cannot be silently mis-weighted
 <!-- Updated: Validation Session 4 - journal layer safety invariants enforced by config, not convention -->
@@ -47,7 +54,9 @@ migration; adding them now costs a few Zod schemas.
 
 ## Architecture
 
-Envelope and message catalog unchanged from the game protocol. Exec sidecar protocol stays TCP JSON on `127.0.0.1:9101` **inside the compose network**; the only implementation is cTrader.
+Envelope and message catalog unchanged from the game protocol. The cTrader link is a **module inside
+the gateway process** (`apps/gateway/broker/`), reached by direct call, not by TCP. There is no
+sidecar address, no local RPC, and no second container to keep alive.
 
 ### Client → VPS
 
@@ -93,7 +102,6 @@ broker:
   host: "demo.ctraderapi.com"
   port: 5035
   proto: protobuf
-  exec_addr: "ev-exec:9101"   # compose DNS
   account_id_env: CT_ACCOUNT_ID
   token_env: CT_ACCESS_TOKEN
   refresh_env: CT_REFRESH_TOKEN
@@ -189,51 +197,56 @@ playbook:                      # phase 7
 ```
 
 `risk` rules are **enforced**; `playbook` rules are **graded** and never block a fire. Both come from
-one registry at `packages/method/src/rules.ts` (phase 7) so they cannot drift apart.
+one registry at `apps/gateway/method/rules.py` (phase 7) so they cannot drift apart.
 
-Volume in cTrader is **not lots**. `ev-exec` converts HUD lots → protocol volume from `ProtoOASymbol` at connect. If `name` is missing on the demo, refuse that symbol.
+Volume in cTrader is **not lots**. The broker module converts HUD lots → protocol volume from
+`ProtoOASymbol` at connect. If `name` is missing on the demo, refuse that symbol.
 
 ## Related Code Files
 
-- Create: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`, `.env.example`
-- Create: `compose.yaml` (gateway, exec, volumes; no host bind except 127.0.0.1:8444)
-- Create: `apps/gateway/Dockerfile` (node; also serves `apps/web/dist`; adds `ffmpeg`, `whisper-cli`, and a baked `ggml-tiny.en` floor for phase 8)
-- Create: `apps/exec/Dockerfile` (python slim + `tini`, for the Twisted SIGTERM path in phase 2)
-- Create: `apps/web/Dockerfile` (build stage emitting `dist` into the gateway image)
-<!-- Updated: Validation Session 2 - no phase created Dockerfiles -->
-- Create: `packages/protocol/src/index.ts`
-- Create: `apps/gateway/src/db/migrate.ts` (ordered, transactional runner; bootstraps the
+- Create: `pyproject.toml` + `uv.lock` (gateway), `.gitignore`, `.env.example`
+- Create: `compose.yaml` (**one service** `ev-gateway`, volumes; no host bind except 127.0.0.1:8444)
+- Create: `apps/gateway/Dockerfile` — multi-stage: a Node stage builds `apps/web/dist`, the final
+  python-slim stage copies it in and adds `tini` (Twisted SIGTERM path, phase 2), `ffmpeg`,
+  `whisper-cli`, and a baked `ggml-tiny.en` floor for phase 8
+<!-- Updated: Validation Session 6 - three images collapse to one; tini moves to the gateway -->
+- Create: `apps/gateway/protocol/__init__.py` (Pydantic v2 envelope + message catalog)
+- Create: `apps/gateway/protocol/export_schema.py` (dumps JSON Schema; the web's TS types are
+  generated from it so the catalog has one source of truth)
+- Create: `apps/gateway/db/migrate.py` (ordered, transactional runner; bootstraps the
   `schema_migration` ledger and records every id)
 - Create: `deploy/fetch-models.sh` (checksum-verified `small.en` download into the journal volume)
-- Create: `packages/exec/src/sidecar-protocol.ts`
-- Create: `apps/exec/src/main.py` (stub: healthz TCP, `place` → `not_wired`)
-- Create: `apps/gateway/src/main.ts` (healthz `{ok:true}` loopback)
-- Create: `apps/web` Vite+Svelte stub
+- Create: `apps/gateway/broker/__init__.py` (stub: `place` → `not_wired`; phase 2 wires OpenApiPy)
+- Create: `apps/gateway/main.py` (healthz `{ok:true}` on the loopback bind)
+- Create: `apps/web` React + Vite stub (TanStack Router, PWA manifest + service worker)
 - Create: `config/default.yaml`
 - Create: `README.md`
 
 ## Implementation Steps
 
-1. Workspace + Vitest + protocol Zod round-trips.
-2. Sidecar protocol types (`health`, `snapshot`, `account`, `positions`, `place`, `close`,
-   `amendPositionSlTp`, fill stream). There is no pending-order cancel or partial-close contract.
+1. `uv` project + `pytest` + protocol Pydantic round-trips.
+2. Broker module interface (`health`, `snapshot`, `account`, `positions`, `place`, `close`,
+   `amend_position_sl_tp`, fill callback). This is a **Python interface, not a wire protocol** —
+   phase 2 implements it against OpenApiPy. There is no pending-order cancel or partial-close method.
 3. Config loader: refuse live host (`live.ctraderapi.com`), `mode: live`, bad timezone, public bind, `auto_trade`.
-4. Dockerfiles: gateway (node), exec (python slim + `tini`), web build stage.
-5. `compose.yaml` with real `build:` contexts; `ev-exec` has **no** `ports:`.
-6. Gateway healthz. Web stub pad-connect.
+4. One `apps/gateway/Dockerfile`: Node build stage for the web bundle, python-slim runtime with `tini`.
+5. `compose.yaml` with a real `build:` context and exactly one service.
+6. Gateway healthz. React PWA stub pad-connect.
 7. Add the migration runner and prove ordered, transactional, idempotent application on a fresh DB.
-8. Journal-layer schemas in the Zod catalog (`voice` channel + the message types above) and the new
-   config blocks with their boot-fails. Nothing implements them yet — this is the protocol freeze,
+8. Journal-layer schemas in the Pydantic catalog (`voice` channel + the message types above) and the
+   new config blocks with their boot-fails. Nothing implements them yet — this is the protocol freeze,
    and it is why they land in phase 1 rather than phase 7.
+9. Export the catalog's JSON Schema and generate the web's TS types from it in the build.
 
 ## Todo
 
-- [ ] Workspace + protocol tests
-- [ ] Sidecar protocol
+- [ ] `uv` project + protocol tests
+- [ ] Broker module interface (in-process, no wire protocol)
+- [ ] JSON Schema export + generated TS types for the web
 - [ ] Versioned migration runner with per-id tracking
 - [ ] Config boot-fails (live, local TZ, auto_trade, 0.0.0.0)
-- [ ] Dockerfiles (gateway, exec, web build stage)
-- [ ] compose.yaml skeleton with real build contexts
+- [ ] Single gateway Dockerfile with the web build stage
+- [ ] compose.yaml skeleton, one service, real build context
 - [ ] Journal-layer messages + `voice` channel in the frozen catalog for phases 7–14
 - [ ] Journal-layer config blocks (`voice`, `tape`, `tilt`, `score`, `playbook`, `risk.r_unit_usd`)
 - [ ] Boot-fails: stt mode, voice bindings, `tilt.gate_close`, score weights
@@ -242,10 +255,13 @@ Volume in cTrader is **not lots**. `ev-exec` converts HUD lots → protocol volu
 
 ## Success Criteria
 
-- [ ] `pnpm test` protocol round-trips
+- [ ] `uv run pytest` protocol round-trips
 - [ ] `mode: live` or `host: live.ctraderapi.com` exits non-zero
-- [ ] `docker compose build` succeeds for gateway and exec
-- [ ] `docker compose config` validates with real `build:` contexts, not placeholders
+- [ ] `docker compose build` succeeds for the single gateway image
+- [ ] `docker compose config` validates with a real `build:` context, not a placeholder, and lists
+      **one** service
+- [ ] Generated TS types match the exported JSON Schema; a deliberate catalog change fails the web
+      build until the types are regenerated
 - [ ] Fresh DB applies an ordered migration fixture once; a second run is a no-op and a failed
       migration rolls back without being marked applied
 - [ ] `voice.stt.mode: cloud`, `voice.bindings: [RT]`, `tilt.gate_close: true`, and score weights
@@ -261,12 +277,15 @@ Volume in cTrader is **not lots**. `ev-exec` converts HUD lots → protocol volu
   declared in this phase; only their implementations are deferred.
 - **Gateway image bloats with models** — signal: a multi-hundred-MB image. Response: bake only the
   ~75 MB `tiny.en` floor; `small.en` lands in the journal volume via `deploy/fetch-models.sh`.
-- **No token to refresh** — signal: `CT_REFRESH_TOKEN` empty. Response: initial consent is manual and documented in the README; exec boot-fails with a pointer to it rather than half-starting.
+- **No token to refresh** — signal: `CT_REFRESH_TOKEN` empty. Response: initial consent is manual and documented in the README; the gateway boot-fails with a pointer to it rather than half-starting.
+- **One process now means one blast radius** — signal: an unhandled broker-callback exception takes
+  the whole gateway down, where it used to kill `ev-exec` alone. Response: the broker module owns a
+  containment boundary from phase 1; callbacks may not raise past it. Phase 2 tests it.
 
 ## Security Considerations
 
 - No secrets in yaml or images. `.env` gitignored.
-- Exec container not published to the internet.
+- The single container publishes nothing beyond the `127.0.0.1:8444` loopback bind.
 
 ### README: cTrader credentials (one-time, manual)
 
@@ -276,7 +295,7 @@ Volume in cTrader is **not lots**. `ev-exec` converts HUD lots → protocol volu
 4. Run the consent flow in a browser with the `trading` scope against the app's redirect URI.
 5. Paste `CT_CLIENT_ID`, `CT_CLIENT_SECRET`, `CT_ACCESS_TOKEN`, `CT_REFRESH_TOKEN`, `CT_ACCOUNT_ID` into `.env`.
 
-No auth helper ships in v1 — `ev-exec` only refreshes what step 5 provided.
+No auth helper ships in v1 — the gateway only refreshes what step 5 provided.
 
 ## Next Steps
 

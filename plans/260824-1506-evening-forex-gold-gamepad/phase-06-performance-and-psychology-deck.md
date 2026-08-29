@@ -78,7 +78,7 @@ cTrader account + fills ──► ev-gateway journal
                               trade_closed     (pnl, R, setup tag, adherence)
                               session_process  (check-in, note, declined)
                                     │
-                              deck/metrics.ts  (pure functions, unit-tested)
+                              deck/metrics.py  (pure functions, unit-tested)
                                     │
                               GET /api/deck/*  ──► /deck  ProcessPanel | OutcomePanel
                                     │
@@ -90,16 +90,16 @@ deck; the copilot may only narrate numbers the deck already produced.
 
 ## Related Code Files
 
-- Create: `apps/gateway/src/db/migrations/004-deck.sql` (deck-specific indices/views only)
-- Create: `apps/gateway/src/deck/metrics.ts` (adherence, R, profit factor, drawdown, Sharpe)
-- Create: `apps/gateway/src/deck/metrics.test.ts` (fixture months; Sharpe low-N guard)
-- Create: `apps/gateway/src/deck/routes.ts` (`GET /api/deck/summary|process|outcome`)
-- Create: `apps/web/src/deck/Deck.svelte` (tabs, process default)
-- Create: `apps/web/src/deck/ProcessPanel.svelte`
-- Create: `apps/web/src/deck/OutcomePanel.svelte`
-- Modify: `apps/gateway/src/copilot/tools.ts` (add `get_progress`, read-only; phase 11 extends it with the score axes)
-- Modify: `apps/gateway/src/copilot/prompt.ts` (process-over-outcome coaching stance)
-- Modify: `apps/web/src/App.svelte` (route `/deck`)
+- Create: `apps/gateway/db/migrations/004-deck.sql` (deck-specific indices/views only)
+- Create: `apps/gateway/deck/metrics.py` (adherence, R, profit factor, drawdown, Sharpe)
+- Create: `apps/gateway/deck/test_metrics.py` (fixture months; Sharpe low-N guard)
+- Create: `apps/gateway/deck/routes.py` (`GET /api/deck/summary|process|outcome`)
+- Create: `apps/web/src/deck/Deck.tsx` (tabs, process default)
+- Create: `apps/web/src/deck/ProcessPanel.tsx`
+- Create: `apps/web/src/deck/OutcomePanel.tsx`
+- Modify: `apps/gateway/copilot/tools.py` (add `get_progress`, read-only; phase 11 extends it with the score axes)
+- Modify: `apps/gateway/copilot/prompt.py` (process-over-outcome coaching stance)
+- Modify: `apps/web/src/App.tsx` (route `/deck`)
 - Modify: `config/default.yaml` (`deck.min_sessions_for_sharpe`, adherence rule weights)
 - Modify: `README.md` (what the deck is for; what it deliberately refuses to show)
 
@@ -107,7 +107,7 @@ deck; the copilot may only narrate numbers the deck already produced.
 
 1. Apply `004-deck.sql`, then consume phase 2 equity/trade rows and phase 3 process/check-in rows.
    Do not recreate or take ownership of those tables.
-2. `metrics.ts` pure functions with fixture months — including a two-session month that
+2. `metrics.py` pure functions with fixture months — including a two-session month that
    must render the low-N Sharpe state rather than a number.
 3. Adherence evaluation: reuse the phase 2 risk rules as the rule set so the deck scores
    exactly what the gateway enforced. No second, drifting definition.
@@ -122,7 +122,7 @@ deck; the copilot may only narrate numbers the deck already produced.
 ## Todo
 
 - [ ] `004-deck.sql` indices/views over phase 2/3-owned rows
-- [ ] metrics.ts + fixture tests incl. low-N Sharpe
+- [ ] metrics.py + fixture tests incl. low-N Sharpe
 - [ ] Adherence reuses phase 2 risk rules
 - [ ] `/api/deck/*` routes
 - [ ] ProcessPanel (default) with month-over-month deltas

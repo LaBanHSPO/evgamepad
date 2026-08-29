@@ -32,9 +32,9 @@ trade blocker.
 
 ### Rule registry (one definition, two consequences)
 
-- Functional: `packages/method/src/rules.ts` exports a registry of
+- Functional: `apps/gateway/method/rules.py` exports a registry of
   `{ code, label, scope: 'risk' | 'playbook', kind: 'auto' | 'manual', evaluate(ctx) -> { ok, actual, expected } }`
-- Functional: phase 2 `risk.ts` imports the `scope: 'risk'` subset and **enforces** it — a failing
+- Functional: phase 2 `risk/rules.py` imports the `scope: 'risk'` subset and **enforces** it — a failing
   risk rule rejects the intent server-side, exactly as it does today
 - Functional: grading imports the whole registry and **scores** it; the phase 11 deck extension
   consumes these grades. Phase 6's already-delivered risk adherence remains unchanged
@@ -75,11 +75,11 @@ trade blocker.
 ## Architecture
 
 ```
-packages/method/src/rules.ts   registry: code -> evaluate(ctx)
+apps/gateway/method/rules.py   registry: code -> evaluate(ctx)
         |                    \
    scope:'risk'               scope:'playbook' + all
         |                              |
-  gateway risk.ts               grading/grade.ts
+  gateway risk/rules.py               grading/grade.py
   ENFORCE (reject)              SCORE (never rejects)
                                        |
                         trade_grade row + `grade` WS message
@@ -96,29 +96,29 @@ BUY 0.10 XAUUSD @ 2345.12
 
 ## Related Code Files
 
-- Create: `packages/method/src/rules.ts` (registry + `evaluate` implementations)
-- Create: `packages/method/src/rules.test.ts` (each rule against fixtures; playbook rules never reject)
-- Create: `apps/gateway/src/grading/grade.ts` (evaluate a playbook against context, write `trade_grade`)
-- Create: `apps/gateway/src/grading/grade.test.ts` (unplanned fallback, unknown manual answers, low-N)
-- Create: `apps/gateway/src/grading/routes.ts` (`GET|POST /api/playbooks`, `POST /api/playbooks/:id/retire`)
-- Create: `apps/gateway/src/grading/seed.ts` (Volman starter playbooks)
-- Create: `apps/gateway/src/db/migrations/005-playbooks.sql`
-- Create: `apps/web/src/playbook/PlaybookEditor.svelte`
-- Create: `apps/web/src/playbook/PlaybookPicker.svelte` (pad-driven inside GameOverlay)
-- Create: `apps/web/src/playbook/PostTradeChecklist.svelte` (3-tap, skippable)
-- Modify: `apps/gateway/src/risk.ts` (import the registry instead of inlining rules)
-- Modify: `apps/web/src/hud/ConfirmOverlay.svelte` (render the live grade)
-- Modify: `apps/gateway/src/journal.ts` (playbook, playbook_rule, trade_grade writes)
+- Create: `apps/gateway/method/rules.py` (registry + `evaluate` implementations)
+- Create: `apps/gateway/method/test_rules.py` (each rule against fixtures; playbook rules never reject)
+- Create: `apps/gateway/grading/grade.py` (evaluate a playbook against context, write `trade_grade`)
+- Create: `apps/gateway/grading/test_grade.py` (unplanned fallback, unknown manual answers, low-N)
+- Create: `apps/gateway/grading/routes.py` (`GET|POST /api/playbooks`, `POST /api/playbooks/:id/retire`)
+- Create: `apps/gateway/grading/seed.py` (Volman starter playbooks)
+- Create: `apps/gateway/db/migrations/005-playbooks.sql`
+- Create: `apps/web/src/playbook/PlaybookEditor.tsx`
+- Create: `apps/web/src/playbook/PlaybookPicker.tsx` (pad-driven inside GameOverlay)
+- Create: `apps/web/src/playbook/PostTradeChecklist.tsx` (3-tap, skippable)
+- Modify: `apps/gateway/risk/rules.py` (import the registry instead of inlining rules)
+- Modify: `apps/web/src/hud/ConfirmOverlay.tsx` (render the live grade)
+- Modify: `apps/gateway/journal/writer.py` (playbook, playbook_rule, trade_grade writes)
 - Modify: `config/default.yaml` (`playbook.*`)
 - Modify: `README.md` (what a playbook is; risk vs playbook rules)
 
 ## Implementation Steps
 
-1. Extract the registry from phase 2's `risk.ts`; make `risk.ts` import it. Existing risk tests must
+1. Extract the registry from phase 2's `risk/rules.py`; make `risk/rules.py` import it. Existing risk tests must
    pass untouched — that is the proof the extraction was behaviour-preserving.
 2. Add `scope: 'playbook'` rules and the assertion test that they cannot reject an intent.
 3. Apply `005-playbooks.sql` + seed the Volman starter playbooks.
-4. `grade.ts` pure evaluation; fixture tests including `__unplanned__`.
+4. `grade.py` pure evaluation; fixture tests including `__unplanned__`.
 5. Wire ARM/FIRE grading into the gateway; push `grade` on `session`.
 6. Confirm overlay renders the grade; GameOverlay Playbook destination owns selection.
 7. Post-trade checklist on close, skippable, `unknown` on skip.
@@ -126,7 +126,7 @@ BUY 0.10 XAUUSD @ 2345.12
 
 ## Todo
 
-- [ ] Rule registry extracted; risk.ts imports it; existing tests green
+- [ ] Rule registry extracted; risk/rules.py imports it; existing tests green
 - [ ] Playbook rules provably cannot reject an intent
 - [ ] `005-playbooks.sql` + Volman starter seed
 - [ ] Grading pure functions + fixtures
@@ -144,7 +144,7 @@ BUY 0.10 XAUUSD @ 2345.12
 - [ ] Skipping the post-trade checklist leaves `unknown`, and `required_total` shrinks accordingly
 - [ ] A cancelled ARM during a stand-down still writes a `trade_grade` row (phase 6 counts it)
 - [ ] Retiring a playbook keeps last month's deck numbers resolving
-- [ ] `risk.ts` contains no rule logic of its own — only registry calls
+- [ ] `risk/rules.py` contains no rule logic of its own — only registry calls
 
 ## Risk Assessment
 

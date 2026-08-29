@@ -19,7 +19,7 @@ Ship the **evening trading desk copilot**. Structure comes from **cTrader M5 bar
 4. **Bob Volman method lens** — 5-minute price-action checklist on the chart (our detectors, not a reprint of the books)
 5. **Research / plan / advise / monitor** loops that **read** those engines and still **cannot trade**
 
-Provider: SpaceXAI. Process: `ev-copilot` — a Node **child process forked by `ev-gateway`**, not a third container. Never on the order hot path.
+Provider: SpaceXAI. Process: the copilot is an **in-process Python worker task inside `ev-gateway`**, not a second container and no longer a forked child. Never on the order hot path.
 
 <!-- Updated: Validation Session 2 - copilot is a gateway child, not a compose service -->
 
@@ -94,17 +94,18 @@ Provider: SpaceXAI. Process: `ev-copilot` — a Node **child process forked by `
 ## Architecture
 
 ```
-[HOT]   pad → intent → risk → sidecar.place
+[HOT]   pad → intent → risk → broker.place   (same process, direct call)
 [RULE]  candles + calendar + spread → sentinel + volman detectors → sentinel.tick / signal.item
-[COLD]  ev-copilot child
+[COLD]  copilot worker task
           tools: get_* (read) + SpaceXAI web_search (allowlisted) [+ x_search if accounts]
           loops: plan / research / news / advise / monitor
           → ai.advice / news.item   (acks have WS priority)
 ```
 
-The child is forked by `ev-gateway`. Isolation from the hot path is enforced by the
-`copilot.on_hot_path: false` boot-fail and the read-only tool allowlist — not by a
-container boundary.
+The worker runs inside `ev-gateway`. Isolation from the hot path is enforced by the
+`copilot.on_hot_path: false` boot-fail and the read-only tool allowlist — not by a process or
+container boundary. Because it shares the gateway's event loop, every copilot call is cancellable
+and runs off the order path's critical section; a slow or hung model call must never delay an ack.
 
 ### Method profile (ship this, not the book)
 
@@ -139,25 +140,25 @@ emit an order intent. View remains session lock/unlock.
 
 ## Related Code Files
 
-- Create: `packages/method/src/volman.ts` (EMA, range box, setup tags + tests)
-- Create: `apps/gateway/src/sentinel/engine.ts`
-- Create: `apps/gateway/src/signals/calendar.ts` (FF JSON cache)
-- Create: `apps/gateway/src/signals/calendar.yaml.example`
-- Create: `apps/gateway/src/signals/tv-webhook.ts`
+- Create: `apps/gateway/method/volman.py` (EMA, range box, setup tags + tests)
+- Create: `apps/gateway/sentinel/engine.py`
+- Create: `apps/gateway/signals/calendar.py` (FF JSON cache)
+- Create: `apps/gateway/signals/calendar.yaml.example`
+- Create: `apps/gateway/signals/tv_webhook.py`
 - Create: `pine/volman-m5-alerts.pine` (alertconditions only; our geometry; cite books in header comment)
-- Create: `apps/gateway/src/copilot/client.ts` (Responses API + `web_search` + domain filter)
-- Create: `apps/gateway/src/copilot/tools.ts` (read-only allowlist)
-- Create: `apps/gateway/src/copilot/loops.ts`
-- Create: `apps/gateway/src/copilot/prompt.ts` (method profile)
-- Create: `apps/gateway/src/copilot/copilot.test.ts`
-- Create: `packages/method/src/volman.test.ts`
-- Modify: `apps/web/src/hud/SentinelBar.svelte`
-- Modify: `apps/web/src/hud/CopilotDesk.svelte`
-- Create: `apps/web/src/hud/NewsRail.svelte`
+- Create: `apps/gateway/copilot/client.py` (Responses API + `web_search` + domain filter)
+- Create: `apps/gateway/copilot/tools.py` (read-only allowlist)
+- Create: `apps/gateway/copilot/loops.py`
+- Create: `apps/gateway/copilot/prompt.py` (method profile)
+- Create: `apps/gateway/copilot/test_copilot.py`
+- Create: `apps/gateway/method/test_volman.py`
+- Modify: `apps/web/src/hud/SentinelBar.tsx`
+- Modify: `apps/web/src/hud/CopilotDesk.tsx`
+- Create: `apps/web/src/hud/NewsRail.tsx`
 - Create: `apps/web/src/chart/ema.ts` (or use LWC line series)
-- Modify: `apps/gateway/src/ws.ts`
-- Create: `apps/gateway/src/db/migrations/003-copilot-signals.sql` (stored session plan and signal references)
-- Modify: `apps/web/src/game-overlay/GameOverlay.svelte` (five-tab desk navigation)
+- Modify: `apps/gateway/api/ws.py`
+- Create: `apps/gateway/db/migrations/003-copilot-signals.sql` (stored session plan and signal references)
+- Modify: `apps/web/src/game-overlay/GameOverlay.tsx` (five-tab desk navigation)
 - Modify: `config/default.yaml`
 - Modify: `.env.example`
 
@@ -167,7 +168,7 @@ emit an order intent. View remains session lock/unlock.
 2. Volman detectors + unit tests on fixture M5 candles (range, false break, doji cluster). No book quotes in fixtures.
 3. Sentinel engine from gateway snapshot + calendar cache + volman tag. WS `sentinel.tick` at 2s.
 4. Calendar: fetch FF weekly JSON once, cache 6h, timezone convert, high-impact filter. Test with a saved fixture if the network is down.
-4b. TV webhook: HMAC/secret, Zod payload, `signal.item kind=tv`, reject if `auto_trade`. Dual-screen runbook in README (VIP Supercharts + game). Do not import TV CSV as a fake tape — chart data is cTrader trendbars.
+4b. TV webhook: HMAC/secret, Pydantic-validated payload, `signal.item kind=tv`, reject if `auto_trade`. Dual-screen runbook in README (VIP Supercharts + game). Do not import TV CSV as a fake tape — chart data is cTrader trendbars.
 5. Copilot child: read-only tools test **fails** if a trade or write name appears. `web_search` only when `kind` is research/news/plan.
 6. Plan at session start; news pulse 10 min; research on ask; advise async after fill; monitor timer.
 7. Desk HUD: five-tab shell with four working AI tabs and disabled Memo, sentinel strip, EMA + box
@@ -227,7 +228,7 @@ emit an order intent. View remains session lock/unlock.
 ## Security Considerations
 
 - `XAI_API_KEY` env only. News HTML never `{@html}`.
-- Calendar JSON is untrusted input: parse with Zod, cap array length.
+- Calendar JSON is untrusted input: parse with Pydantic, cap array length.
 - `web_search` is a spend + data exfil path: allowlist, rate-limit `ai.ask` (e.g. 20/hour), no tools that send the account login.
 
 ## Next Steps

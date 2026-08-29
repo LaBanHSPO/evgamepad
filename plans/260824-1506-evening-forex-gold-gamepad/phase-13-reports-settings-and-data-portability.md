@@ -86,22 +86,22 @@ theme remain the product boundary.
 
 ## Related Code Files
 
-- Create: `apps/gateway/src/db/migrations/010-settings-data.sql`
-- Create: `apps/gateway/src/settings/schema.ts`
-- Create: `apps/gateway/src/settings/routes.ts`
-- Create: `apps/gateway/src/reports/routes.ts`
-- Create: `apps/gateway/src/data/export.ts`
-- Create: `apps/gateway/src/data/backup.ts`
-- Create: `apps/gateway/src/data/restore.ts`
-- Create: `apps/gateway/src/data/delete.ts`
-- Create: `apps/gateway/src/data/backup.test.ts`
-- Create: `apps/gateway/src/data/restore.test.ts`
-- Create: `apps/web/src/settings/Settings.svelte`
-- Create: `apps/web/src/reports/ReportBuilder.svelte`
+- Create: `apps/gateway/db/migrations/010-settings-data.sql`
+- Create: `apps/gateway/settings/schema.py`
+- Create: `apps/gateway/settings/routes.py`
+- Create: `apps/gateway/reports/routes.py`
+- Create: `apps/gateway/data/export.py`
+- Create: `apps/gateway/data/backup.py`
+- Create: `apps/gateway/data/restore.py`
+- Create: `apps/gateway/data/delete.py`
+- Create: `apps/gateway/data/test_backup.py`
+- Create: `apps/gateway/data/test_restore.py`
+- Create: `apps/web/src/settings/Settings.tsx`
+- Create: `apps/web/src/reports/ReportBuilder.tsx`
 - Create: `apps/web/src/reports/report-print.css`
-- Create: `apps/web/src/settings/DataManagement.svelte`
-- Modify: `apps/web/src/App.svelte` (settings/report routes)
-- Modify: `apps/web/src/game-overlay/GameOverlay.svelte` (settings/report destinations)
+- Create: `apps/web/src/settings/DataManagement.tsx`
+- Modify: `apps/web/src/App.tsx` (settings/report routes)
+- Modify: `apps/web/src/game-overlay/GameOverlay.tsx` (settings/report destinations)
 - Modify: `README.md` (backup/restore/export/delete runbook)
 
 ## Implementation Steps

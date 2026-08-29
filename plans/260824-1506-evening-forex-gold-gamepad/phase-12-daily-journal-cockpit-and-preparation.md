@@ -106,7 +106,7 @@ multi-account journal platform.
 phase 2 facts + phase 6 metrics + phase 7 grades + phase 8 memos
         + phase 10 replay + phase 11 score
                          |
-               journal/query-service.ts
+               journal/query_service.py
                          |
           /api/journal/* + attachment storage
                          |
@@ -118,25 +118,25 @@ it cannot rewrite fills, prices, R conversion inputs, or execution events.
 
 ## Related Code Files
 
-- Create: `apps/gateway/src/db/migrations/009-journal-cockpit.sql`
-- Create: `apps/gateway/src/journal/query-service.ts`
-- Create: `apps/gateway/src/journal/metrics.ts`
-- Create: `apps/gateway/src/journal/metrics.test.ts`
-- Create: `apps/gateway/src/journal/routes.ts`
-- Create: `apps/gateway/src/journal/attachments.ts`
-- Create: `apps/web/src/journal/Today.svelte`
-- Create: `apps/web/src/journal/WorldSessions.svelte`
-- Create: `apps/web/src/journal/ReadinessChecklist.svelte`
-- Create: `apps/web/src/journal/PositionSizeCalculator.svelte`
-- Create: `apps/web/src/journal/Heatmap.svelte`
-- Create: `apps/web/src/journal/History.svelte`
-- Create: `apps/web/src/journal/TradeDetail.svelte`
-- Create: `apps/web/src/journal/TradeQuality.svelte`
-- Create: `apps/web/src/journal/MistakeTrends.svelte`
-- Create: `apps/web/src/journal/SystemPrinciples.svelte`
-- Modify: `apps/web/src/App.svelte` (journal routes)
-- Modify: `apps/web/src/game-overlay/GameOverlay.svelte` (Journal and System destinations)
-- Modify: `apps/gateway/src/copilot/tools.ts` (read-only journal aggregates; no write tool)
+- Create: `apps/gateway/db/migrations/009-journal-cockpit.sql`
+- Create: `apps/gateway/journal/query_service.py`
+- Create: `apps/gateway/journal/metrics.py`
+- Create: `apps/gateway/journal/test_metrics.py`
+- Create: `apps/gateway/journal/routes.py`
+- Create: `apps/gateway/journal/attachments.py`
+- Create: `apps/web/src/journal/Today.tsx`
+- Create: `apps/web/src/journal/WorldSessions.tsx`
+- Create: `apps/web/src/journal/ReadinessChecklist.tsx`
+- Create: `apps/web/src/journal/PositionSizeCalculator.tsx`
+- Create: `apps/web/src/journal/Heatmap.tsx`
+- Create: `apps/web/src/journal/History.tsx`
+- Create: `apps/web/src/journal/TradeDetail.tsx`
+- Create: `apps/web/src/journal/TradeQuality.tsx`
+- Create: `apps/web/src/journal/MistakeTrends.tsx`
+- Create: `apps/web/src/journal/SystemPrinciples.tsx`
+- Modify: `apps/web/src/App.tsx` (journal routes)
+- Modify: `apps/web/src/game-overlay/GameOverlay.tsx` (Journal and System destinations)
+- Modify: `apps/gateway/copilot/tools.py` (read-only journal aggregates; no write tool)
 - Modify: `README.md` (daily journal loop)
 
 ## Implementation Steps
