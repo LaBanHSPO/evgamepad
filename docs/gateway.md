@@ -27,7 +27,7 @@ deploy/fetch-models.sh
 
 ```bash
 uv sync --all-extras
-uv run pytest                                  # 160 tests, no broker needed
+uv run pytest                                  # 210 tests, no credentials needed
 uv run python -m apps.gateway.db.migrate       # applies 001-core-trading
 uv run python -m apps.gateway.protocol.export_schema
 node app/scripts/gen-protocol-types.mjs        # regenerate the web's TS types
@@ -39,6 +39,40 @@ curl -s localhost:8444/healthz
 
 `docker compose build && docker compose up -d` builds the same thing as one
 image, with the web bundle baked in.
+
+## Running without credentials
+
+`broker.transport` picks how ProtoOA messages are delivered:
+
+| value | what it does |
+|-------|--------------|
+| `real` | TLS socket to `demo.ctraderapi.com:5035`. Needs the full `.env`. |
+| `mock` | Answered in process by `broker/mock.py`. Needs only `EV_WS_TOKEN`. |
+| `none` | The phase 1 stub. Refuses every broker-changing call with `not_wired`. |
+
+```bash
+EV_WS_TOKEN=dev EV_CONFIG=config/mock.yaml uv run python -m apps.gateway.main
+```
+
+`config/mock.yaml` is that setup ready to run: mock transport, a 24/7 session
+window so opens are not refused during the working day, and the copilot off.
+
+Anything but `real` is a **boot-fail unless `dev: true`**, reports
+`"simulated": true` in `/healthz`, and logs a banner at startup. A mock broker
+must never be something you are running by accident.
+
+What the mock replaces is the *socket*, not the protocol. The gateway still
+builds genuine `ProtoOANewOrderReq` messages and the mock answers with genuine
+`ProtoOAExecutionEvent` messages, so symbol mapping, the lots/volume scale,
+execution translation, the `isLive` guard, and error-code mapping are all
+exercised for real. It reproduces the orderings that matter: `ORDER_ACCEPTED`
+first and `ORDER_FILLED` on a later tick, one-sided spot ticks, stop-outs with
+no request, and rejections on a bad volume grid.
+
+What it cannot tell you is whether the *numbers* match IC Markets. Its symbol
+specs are invented. Phase 2 is not done until a real `SymbolsList` +
+`SymbolById` dump lands in `broker/fixtures/` and a 0.01-lot gold round trip has
+been eyeballed in cTrader web.
 
 ## The parts worth knowing
 
@@ -64,9 +98,11 @@ exit. They still need the clutch — exempt from risk gates is not exempt from t
 confirm contract.
 
 **R is defined once**, in `risk/r.py`. Protocol volume is cents of a unit, so
-`units = volume / 100`; raw stop risk is `units * abs(entry - sl)` in the
-symbol's *quote* asset, converted to USD through `broker/conversion.py` at the
-entry-time rate, with the rate, chain, and timestamp stored alongside the plan.
+`units = volume / 100`; raw stop risk is `units * distance` in the symbol's
+*quote* asset, converted to USD through `broker/conversion.py` at the entry-time
+rate, with the rate, chain, and timestamp stored alongside the plan. It is
+computed from the stop **distance**, because that is what a MARKET order
+carries — so R is known at FIRE without waiting for a fill price.
 XAUUSD is identity; USDJPY is JPY and must be converted before it may be called
 USD. Phase 12's position-size calculator is the tested inverse of the same
 function, so the HUD and the journal cannot disagree about the same trade.
@@ -86,16 +122,29 @@ migration edited after the fact, and rolls a failure back without marking it
 applied. `001-core-trading.sql` holds the phase 2 core and nothing a later phase
 owns.
 
+**Two calls per symbol, on purpose.** `SymbolsListReq` returns
+`ProtoOALightSymbol` — ids, names, and base/quote assets, and no volume spec at
+all. `SymbolByIdReq` returns `ProtoOASymbol` — digits, lotSize, min/step/max
+volume, and no name and no assets. `SymbolSpec` is the join, and the broker
+refuses a symbol it has not resolved through both. Reading min/step/max off the
+light record is the bug that sends a thousand times the intended ounces of gold.
+
+**`isLive` is checked before account auth.** It lives on
+`ProtoOACtidTraderAccount`, reached through `GetAccountListByAccessToken`, so a
+live account is refused before the gateway has even authenticated — let alone
+placed anything.
+
 ## What is not implemented
 
-`broker/ctrader.py` does not exist. `NotWiredBroker` answers every
-broker-changing call with `not_wired`, which is what lets the whole intent path
-— protocol, risk, cid reservation, journal, reject frame — be exercised end to
-end before there are credentials to exercise it with.
+The broker link itself is written and tested against the mock, but it has never
+spoken to Spotware. Phase 2 is done when its prerequisites are met — a cTrader
+ID, an IC Markets demo account, an approved Open API application, the manual
+consent flow, and a real symbol dump in `broker/fixtures/` — and the acceptance
+criteria pass against the real endpoint.
 
-Wiring OpenApiPy needs the phase 2 prerequisites: a cTrader ID, an IC Markets
-demo account, an approved Open API application, a completed manual consent flow,
-and a real `SymbolsList` + `SymbolById` dump captured to
-`apps/gateway/broker/fixtures/`. The specs currently in that module are
-placeholders shaped like `ProtoOASymbol`, not a capture — phase 2's success
-criterion is asserting volume conversion against the real dump.
+Still outstanding from phase 2: M5 trendbar history for the chart seed, the
+per-trade tape freeze job on close (the ring and the freeze function exist and
+are tested; nothing schedules them yet), and session equity snapshots at open
+and close. Phases 4 and 6-14 are untouched: `ai.ask` answers `{disabled: true}`,
+and the voice, playbook, tilt, replay, and score messages are accepted and
+dropped.

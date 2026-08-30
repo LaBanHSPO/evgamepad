@@ -10,14 +10,17 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
+from typing import Any
 
-from ..broker import Broker, Containment, NotWiredBroker
+from ..broker import Broker, Containment
 from ..broker.conversion import AssetGraph
+from ..broker.factory import build_broker
 from ..config import Config
 from ..journal.tape.ring import TapeRing
 from ..journal.writer import DuplicateCid, JournalWriter
 from ..protocol import now_ms
 from ..protocol.catalog import IntentClose, IntentModify, IntentOpen, IntentPanic
+from ..risk.r import r_fallback, r_from_distance
 from ..risk import rules
 from ..risk.session import SessionWindow
 
@@ -43,6 +46,7 @@ class LiveState:
     cooldown_until_ms: int | None = None
     session_id: int | None = None
     spreads: dict[str, float] = field(default_factory=dict)
+    last_quote: dict[str, tuple[float, float, int]] = field(default_factory=dict)
 
 
 class Gateway:
@@ -55,17 +59,165 @@ class Gateway:
     ) -> None:
         self.cfg = cfg
         self.containment = Containment()
-        self.broker = broker or NotWiredBroker(self.containment)
+        self.assets = AssetGraph()
+        self.broker = broker or build_broker(
+            cfg, containment=self.containment, graph=self.assets
+        )
         self.journal = journal or JournalWriter(cfg.db_path)
         self.session = SessionWindow(cfg.session, cfg.timezone)
-        self.assets = AssetGraph()
         self.tape = TapeRing(cfg.tape.ring_minutes, cfg.tape.dt_s)
         self.state = LiveState()
         self.token = os.environ.get(cfg.gateway.token_env, "")
+        #: Live sockets. Quotes, fills and P/L are pushed to all of them; the
+        #: WS layer registers and removes itself.
+        self.sessions: set[Any] = set()
+        self._wire_broker()
+
+    # -- broker lifecycle ---------------------------------------------------
+
+    def _wire_broker(self) -> None:
+        """Attach the spot and execution taps, if this broker has them.
+
+        NotWiredBroker does not, which is why these are checked rather than
+        assumed -- phase 1's stub has to keep working.
+        """
+        if hasattr(self.broker, "set_spot_sink"):
+            self.broker.set_spot_sink(self.containment("spot")(self._on_spot))
+        if hasattr(self.broker, "set_execution_sink"):
+            self.broker.set_execution_sink(
+                self.containment("execution")(self._on_execution)
+            )
+
+    async def start(self) -> None:
+        start = getattr(self.broker, "start", None)
+        if start is None:
+            return
+        try:
+            await start()
+        except Exception as exc:
+            # A broker that will not come up must not take the HUD with it. The
+            # socket stays serving, the session shows maint, and the operator
+            # gets a reason instead of a dead container.
+            self.containment.report("startup", str(exc))
+            self.state.locked = True
+
+    def _on_spot(self, sym: str, bid_raw: int, ask_raw: int, ts_ms: int) -> None:
+        """The raw spot tap: tape ring first, then the derived state.
+
+        This runs before any conflation, which is what makes the tape's
+        n_ticks real. What reaches the browser is throttled by the WS layer.
+        """
+        spec = self.broker.symbol_spec(sym)
+        digits = spec.digits if spec else 5
+        self.tape.on_tick(sym, bid_raw, ask_raw, ts_ms, digits=digits)
+        scale = 10 ** 5
+        self.state.spreads[sym] = (ask_raw - bid_raw) / scale
+        self.state.last_quote[sym] = (bid_raw / scale, ask_raw / scale, ts_ms)
+
+    def _on_execution(self, update: Any) -> None:
+        """Journal every broker fact, then tell the sockets.
+
+        Append-only and in arrival order: position_event is the record of what
+        the broker said, not a summary of what we think happened.
+        """
+        if update.position_id is None:
+            return
+        kind = {
+            "filled": "fill", "closed": "close", "amended": "amend",
+            "rejected": "reject",
+        }.get(update.kind)
+        if kind is None:
+            return
+
+        spec = self.broker.symbol_spec(update.sym) if update.sym else None
+        lots = self.lots_for(update)
+
+        self.journal.append_event(
+            update.position_id, update.ts, kind, cid=update.cid,
+            price=update.price, lots=lots, sl=update.sl, tp=update.tp,
+            detail=update.reason,
+        )
+        if kind == "fill":
+            self.state.open_positions += 1
+        elif kind == "close":
+            self.state.open_positions = max(0, self.state.open_positions - 1)
+            self._record_close(update, lots, spec)
+
+        self.broadcast(update)
+
+    def _record_close(self, update: Any, lots: float, spec: Any) -> None:
+        """One trade_closed row per full close, with a non-null r_multiple.
+
+        R comes from risk/r.py via the stored plan, so the deck and the HUD
+        cannot end up with two different ideas of the same trade.
+        """
+        plan = self.journal.plan_for_position(update.position_id)
+        r_usd = plan["r_usd"] if plan and plan["r_usd"] else self.cfg.risk.r_unit_usd
+        net = (update.gross_pnl or 0.0) + update.commission + update.swap
+        self.journal.write_closed({
+            "position_id": update.position_id,
+            "cid": update.cid,
+            "session_id": self.state.session_id,
+            "sym": update.sym or "",
+            "side": update.side or "buy",
+            "lots": lots,
+            "opened_at": plan["created_at"] if plan else update.ts,
+            "closed_at": update.ts,
+            "entry": update.entry or 0.0,
+            "exit": update.price or 0.0,
+            "sl_at_entry": plan["planned_sl"] if plan else None,
+            "tp_at_entry": plan["planned_tp"] if plan else None,
+            "gross_pnl": update.gross_pnl or 0.0,
+            "commission": update.commission,
+            "swap": update.swap,
+            "net_pnl": net,
+            "r_usd": r_usd,
+            "r_multiple": net / r_usd if r_usd else 0.0,
+            "exit_reason": "manual",
+        })
+
+    def lots_for(self, update: Any) -> float:
+        """Protocol volume back into the lots the HUD speaks."""
+        spec = self.broker.symbol_spec(update.sym) if update.sym else None
+        if spec is None or not update.volume:
+            return 0.0
+        from ..broker.volume import volume_to_lots
+
+        return volume_to_lots(update.volume, spec)
+
+    def broadcast(self, update: Any) -> None:
+        for session in list(self.sessions):
+            enqueue = getattr(session, "enqueue_execution", None)
+            if enqueue is not None:
+                enqueue(update)
+
+    def plan_r(self, payload: IntentOpen, ts: int):
+        """The one R call for an open, used at FIRE.
+
+        Computed from the stop *distance* the order carries, so it does not
+        depend on having seen a quote first -- R is a property of the size and
+        the stop, and waiting for a fill price to know it would leave the first
+        trade of an evening scored against the fallback for no reason.
+        """
+        spec = self.broker.symbol_spec(payload.sym)
+        if spec is None:
+            return None
+        from ..broker.volume import lots_to_volume, relative_to_price_distance
+
+        volume = lots_to_volume(payload.lots, spec)
+        if not payload.relativeSl:
+            return r_fallback(self.cfg.risk.r_unit_usd, ts)
+        return r_from_distance(
+            protocol_volume=volume,
+            distance=relative_to_price_distance(payload.relativeSl),
+            spec=spec, graph=self.assets, ts=ts,
+        )
 
     # -- risk ---------------------------------------------------------------
 
-    def risk_context(self, intent_type: str, payload: object, ts: int) -> rules.RiskContext:
+    def risk_context(
+        self, intent_type: str, payload: object, ts: int, cid: str | None = None
+    ) -> rules.RiskContext:
         cfg = self.cfg
         sym = getattr(payload, "sym", None)
         sym_cfg = cfg.symbol(sym) if sym else None
@@ -90,7 +242,11 @@ class Gateway:
             min_seconds_between_orders=cfg.risk.min_seconds_between_orders,
             last_client_ms=self.state.last_client_ms,
             heartbeat_dead_s=cfg.gateway.heartbeat_dead_s,
-            cid_seen=False,
+            # Ask the ledger, not a placeholder. The UNIQUE constraint below
+            # is the backstop; this is what lets a double-press come back as
+            # `duplicate_cid` rather than as whatever gate it happens to trip
+            # once the first order is already open.
+            cid_seen=cid is not None and self.journal.cid_state(cid) is not None,
             symbol_known=sym is None or sym_cfg is not None,
             lots_ok=lots_ok,
             spread=self.state.spreads.get(sym) if sym else None,
@@ -128,7 +284,7 @@ class Gateway:
         sendable twice.
         """
         ts = now_ms() if ts is None else ts
-        ctx = self.risk_context(intent_type, payload, ts)
+        ctx = self.risk_context(intent_type, payload, ts, cid)
         decision = rules.evaluate(ctx)
         if not decision.allowed:
             assert decision.reason is not None
@@ -153,10 +309,67 @@ class Gateway:
             self.journal.mark_cid(
                 cid, "acked", ts, order_id=result.order_id, position_id=result.position_id
             )
+            if intent_type == "intent.open":
+                self._write_plan(cid, payload, ts)
             return True, None, ""
 
         self.journal.mark_cid(cid, "rejected", ts, reject_reason=result.reason)
         return False, result.reason or "broker_error", result.detail or ""
+
+    def _write_plan(self, cid: str, payload: IntentOpen, ts: int) -> None:
+        """Snapshot the intent at FIRE, before the market answers.
+
+        Written after the ack so ``planned_entry`` is the price the order
+        actually got rather than a guess, but it records what was *intended*:
+        the plan is never rewritten by what happened next.
+        """
+        from ..broker.volume import lots_to_volume, relative_to_price_distance
+        from ..journal.writer import PlanRow
+
+        spec = self.broker.symbol_spec(payload.sym)
+        if spec is None:
+            return
+        entry = self.state.last_quote.get(payload.sym, (0.0, 0.0, ts))
+        price = entry[1] if payload.side == "buy" else entry[0]
+        r = self.plan_r(payload, ts)
+
+        sl = tp = None
+        if price and payload.relativeSl:
+            d = relative_to_price_distance(payload.relativeSl)
+            sl = price - d if payload.side == "buy" else price + d
+        if price and payload.relativeTp:
+            d = relative_to_price_distance(payload.relativeTp)
+            tp = price + d if payload.side == "buy" else price - d
+
+        try:
+            self.journal.write_plan(PlanRow(
+                cid=cid,
+                session_id=self.state.session_id,
+                created_at=ts,
+                sym=payload.sym,
+                side=payload.side,
+                lots=payload.lots,
+                protocol_volume=lots_to_volume(payload.lots, spec),
+                planned_entry=price or None,
+                relative_sl=payload.relativeSl,
+                relative_tp=payload.relativeTp,
+                planned_sl=sl,
+                planned_tp=tp,
+                planned_rr=(abs(tp - price) / abs(price - sl))
+                if (sl and tp and price and sl != price) else None,
+                r_usd=r.usd if r else self.cfg.risk.r_unit_usd,
+                r_source=r.source if r else "r_unit_fallback",
+                r_rate=r.rate if r else None,
+                r_rate_chain=r.chain if r else None,
+                r_rate_ts=r.rate_ts if r else None,
+                armed_at=payload.armedAt,
+                time_to_fire_ms=ts - payload.armedAt,
+                market_session=self.session.trading_day(ts),
+            ))
+        except Exception as exc:
+            # A journal failure must never unwind a placed order. The position
+            # is real; losing its plan row is a reporting gap, not a trade bug.
+            self.containment.report("journal", f"plan for {cid}: {exc}", cid)
 
     async def _dispatch(self, intent_type: str, cid: str, payload: object):
         from ..broker.types import OpenRequest
@@ -208,6 +421,14 @@ class Gateway:
             )
         return BrokerResult(ok=True, cid=cid)
 
-    def shutdown(self) -> None:
+    async def shutdown(self) -> None:
+        stop = getattr(self.broker, "stop", None)
+        if stop is not None:
+            try:
+                await stop()
+            except Exception as exc:
+                log.warning("broker stop: %s", exc)
+        # Seal the in-progress bar so a shutdown inside a post-roll window still
+        # freezes what the tape actually had.
         self.tape.seal_all()
         self.journal.close()

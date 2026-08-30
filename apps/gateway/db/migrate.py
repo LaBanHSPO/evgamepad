@@ -71,7 +71,13 @@ def discover(directory: Path = MIGRATIONS_DIR) -> list[Migration]:
 def connect(db_path: str | Path) -> sqlite3.Connection:
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, isolation_level=None)
+    # check_same_thread=False because the connection outlives the thread that
+    # opened it: the app is constructed on one thread and served on the loop's,
+    # and the documented Twisted fallback (running OpenApiPy on its own thread
+    # with a run_coroutine_threadsafe bridge) would cross threads again.
+    # JournalWriter serialises every statement behind a lock; nothing else may
+    # use this connection concurrently.
+    conn = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA foreign_keys = ON")

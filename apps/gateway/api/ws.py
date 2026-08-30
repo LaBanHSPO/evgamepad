@@ -24,7 +24,39 @@ from .gateway import Gateway
 
 log = logging.getLogger("ev.ws")
 
+
+def _execution_frame(update: Any, lots: float = 0.0) -> tuple[str, dict, str | None] | None:
+    """Translate one broker execution into the frame the HUD reads."""
+    if update.kind == "filled":
+        if not (update.cid and update.sym and update.side):
+            # A fill we did not originate -- reconciled or server-side. It is
+            # an update, not an acknowledgement of anything this socket sent.
+            return ("order.upd", {"positionId": update.position_id,
+                                  "status": "filled", "ts": update.ts}, None)
+        return ("order.ack", {
+            "cid": update.cid, "sym": update.sym, "side": update.side,
+            "lots": lots, "price": update.price or 0.0, "ts": update.ts,
+            "orderId": update.order_id, "positionId": update.position_id,
+        }, update.cid)
+    if update.kind in {"closed", "amended", "cancelled", "expired"}:
+        status = {"closed": "closed", "amended": "amended",
+                  "cancelled": "cancelled", "expired": "expired"}[update.kind]
+        return ("order.upd", {
+            "cid": update.cid, "orderId": update.order_id,
+            "positionId": update.position_id, "status": status, "ts": update.ts,
+        }, update.cid)
+    if update.kind == "rejected":
+        return ("order.reject", {
+            "cid": update.cid, "reason": "broker_error", "detail": update.reason,
+        }, update.cid)
+    return None
+
 Send = Callable[[str], Awaitable[None]]
+
+#: Quotes are conflated to this rate before they reach the browser. The tape
+#: ring already saw every tick; the HUD does not need 60 Hz of quote text, and
+#: sending it would compete with the order acks this socket exists to deliver.
+QUOTE_HZ = 15.0
 
 #: Frames kept for replay after a `resync`. A reconnect that has fallen further
 #: behind than this gets a fresh snapshot instead of a partial history, which is
@@ -41,6 +73,8 @@ class WsSession:
         self.authed = False
         self.subs: set[str] = set()
         self._replay: deque[tuple[int, str]] = deque(maxlen=REPLAY_DEPTH)
+        self._last_quote_sent: dict[str, float] = {}
+        self._pending: deque[tuple[str, Any, str | None]] = deque(maxlen=256)
 
     # -- outbound -----------------------------------------------------------
 
@@ -53,6 +87,34 @@ class WsSession:
 
     async def error(self, reason: str, detail: str = "") -> None:
         await self.emit("error", {"reason": reason, "detail": detail or None})
+
+    # -- pushes from the broker --------------------------------------------
+
+    def enqueue_execution(self, update: Any) -> None:
+        """Called from the broker's callback, which is synchronous. Queue here
+        and drain on the socket's own task -- awaiting a send from inside a
+        Protobuf callback is how the two runtimes deadlock."""
+        frame = _execution_frame(update, self.gw.lots_for(update))
+        if frame is not None:
+            self._pending.append(frame)
+
+    def enqueue_quote(self, sym: str, bid: float, ask: float, ts: int, digits: int) -> None:
+        """Conflate to QUOTE_HZ. The ring already has every tick."""
+        now = ts / 1000.0
+        last = self._last_quote_sent.get(sym, 0.0)
+        if now - last < 1.0 / QUOTE_HZ:
+            return
+        self._last_quote_sent[sym] = now
+        self._pending.append((
+            "quote",
+            {"sym": sym, "bid": bid, "ask": ask, "ts": ts, "digits": digits},
+            None,
+        ))
+
+    async def flush(self) -> None:
+        while self._pending:
+            t, payload, cid = self._pending.popleft()
+            await self.emit(t, payload, cid=cid)
 
     # -- inbound ------------------------------------------------------------
 

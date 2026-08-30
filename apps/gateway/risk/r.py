@@ -36,27 +36,29 @@ class RValue:
         return float(Decimal(str(pnl_usd)) / Decimal(str(self.usd)))
 
 
-def r_from_stop(
+def r_from_distance(
     *,
     protocol_volume: int,
-    entry: float,
-    stop: float,
+    distance: float,
     spec: SymbolSpec,
     graph: AssetGraph,
     ts: int,
 ) -> RValue:
-    """Risk to the stop, converted to USD at the entry-time rate.
+    """Risk over a stop *distance*, converted to USD at the entry-time rate.
 
-    ``units = protocolVolume / 100``; raw risk is ``units * abs(entry - stop)``
-    in the symbol's **quote** asset. XAUUSD is already USD (identity); USDJPY is
-    JPY and must be converted before it may be called USD.
+    Distance, not entry and stop, because that is what the order actually
+    carries: a MARKET order sends ``relativeStopLoss``, and R is knowable from
+    it before any fill price exists. ``units = protocolVolume / 100``; raw risk
+    is ``units * distance`` in the symbol's **quote** asset. XAUUSD is already
+    USD (identity); USDJPY is JPY and must be converted before it may be called
+    USD.
     """
-    distance = abs(Decimal(str(entry)) - Decimal(str(stop)))
-    if distance == 0:
-        raise ValueError("stop equals entry; use r_fallback instead")
+    d = abs(Decimal(str(distance)))
+    if d == 0:
+        raise ValueError("zero stop distance; use r_fallback instead")
 
     units = volume_to_units(protocol_volume)
-    raw_quote = float(units * distance)
+    raw_quote = float(units * d)
 
     quote_asset = graph.asset_name(spec.quote_asset_id)
     if not quote_asset:
@@ -69,6 +71,26 @@ def r_from_stop(
         rate=conv.rate,
         chain=conv.chain,
         rate_ts=conv.ts,
+    )
+
+
+def r_from_stop(
+    *,
+    protocol_volume: int,
+    entry: float,
+    stop: float,
+    spec: SymbolSpec,
+    graph: AssetGraph,
+    ts: int,
+) -> RValue:
+    """Risk to an absolute stop. Thin wrapper over :func:`r_from_distance` so
+    there is still exactly one formula."""
+    distance = abs(Decimal(str(entry)) - Decimal(str(stop)))
+    if distance == 0:
+        raise ValueError("stop equals entry; use r_fallback instead")
+    return r_from_distance(
+        protocol_volume=protocol_volume, distance=float(distance),
+        spec=spec, graph=graph, ts=ts,
     )
 
 

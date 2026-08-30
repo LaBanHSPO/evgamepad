@@ -85,3 +85,23 @@ def price_distance_to_relative(distance: float) -> int:
 
 def relative_to_price_distance(relative: int) -> float:
     return float(Decimal(relative) / Decimal(RELATIVE_UNITS_PER_PRICE))
+
+
+def scale_money(raw: int, money_digits: int) -> float:
+    """cTrader sends money as an integer scaled by ``moneyDigits``.
+
+    The field is proto2-optional and absent on plenty of real messages, where
+    cTrader documents the default as 2 -- so the caller must pass what
+    :func:`money_digits_of` resolved, not a bare ``msg.moneyDigits``, which
+    reads 0 when the field is simply missing and would inflate every figure
+    a hundredfold.
+    """
+    return float(Decimal(raw) / (Decimal(10) ** money_digits))
+
+
+def money_digits_of(msg: object, default: int = 2) -> int:
+    """``moneyDigits`` if the message carries it, else cTrader's documented 2."""
+    has_field = getattr(msg, "HasField", None)
+    if has_field is not None and has_field("moneyDigits"):
+        return int(msg.moneyDigits)  # type: ignore[attr-defined]
+    return default

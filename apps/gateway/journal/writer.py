@@ -9,6 +9,7 @@ the broker about money is worse than no journal.
 from __future__ import annotations
 
 import sqlite3
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -51,13 +52,28 @@ class PlanRow:
 
 
 class JournalWriter:
+    """Single-writer SQLite, serialised.
+
+    The connection is shared across threads (see ``db.migrate.connect``), so
+    every statement goes through :meth:`_run` under one lock. Journal writes are
+    short and infrequent next to the order path, so a lock costs nothing worth
+    measuring and removes a whole class of "works until it doesn't" bug.
+    """
+
     def __init__(self, db_path: str | Path, *, auto_migrate: bool = True) -> None:
+        self._lock = threading.RLock()
         self.conn: sqlite3.Connection = connect(db_path)
         if auto_migrate:
-            migrate(self.conn)
+            with self._lock:
+                migrate(self.conn)
+
+    def _run(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
+        with self._lock:
+            return self.conn.execute(sql, params)
 
     def close(self) -> None:
-        self.conn.close()
+        with self._lock:
+            self.conn.close()
 
     # -- cid ledger ---------------------------------------------------------
 
@@ -66,7 +82,7 @@ class JournalWriter:
         between here and the broker leaves a pending row, which reconnect
         reconciles against cTrader rather than re-sending blind."""
         try:
-            self.conn.execute(
+            self._run(
                 "INSERT INTO cid_ledger (cid, kind, state, sym, reserved_at) "
                 "VALUES (?, ?, 'pending', ?, ?)",
                 (cid, kind, sym, now_ms),
@@ -84,20 +100,20 @@ class JournalWriter:
         position_id: int | None = None,
         reject_reason: str | None = None,
     ) -> None:
-        self.conn.execute(
+        self._run(
             "UPDATE cid_ledger SET state = ?, resolved_at = ?, order_id = ?, "
             "position_id = ?, reject_reason = ? WHERE cid = ?",
             (state, now_ms, order_id, position_id, reject_reason, cid),
         )
 
     def cid_state(self, cid: str) -> str | None:
-        row = self.conn.execute(
+        row = self._run(
             "SELECT state FROM cid_ledger WHERE cid = ?", (cid,)
         ).fetchone()
         return row["state"] if row else None
 
     def pending_cids(self) -> list[sqlite3.Row]:
-        return self.conn.execute(
+        return self._run(
             "SELECT * FROM cid_ledger WHERE state IN ('pending','sent') "
             "ORDER BY reserved_at"
         ).fetchall()
@@ -114,12 +130,12 @@ class JournalWriter:
         balance: float | None = None,
         currency: str = "USD",
     ) -> int:
-        row = self.conn.execute(
+        row = self._run(
             "SELECT id FROM session WHERE trading_day = ?", (trading_day,)
         ).fetchone()
         if row:
             return int(row["id"])
-        cur = self.conn.execute(
+        cur = self._run(
             "INSERT INTO session (trading_day, tz, opened_at, equity_open, "
             "balance_open, currency) VALUES (?, ?, ?, ?, ?, ?)",
             (trading_day, tz, now_ms, equity, balance, currency),
@@ -129,7 +145,7 @@ class JournalWriter:
     def close_session(
         self, session_id: int, now_ms: int, equity: float | None, balance: float | None
     ) -> None:
-        self.conn.execute(
+        self._run(
             "UPDATE session SET closed_at = ?, equity_close = ?, balance_close = ? "
             "WHERE id = ?",
             (now_ms, equity, balance, session_id),
@@ -143,7 +159,7 @@ class JournalWriter:
         balance: float,
         open_pnl: float = 0.0,
     ) -> None:
-        self.conn.execute(
+        self._run(
             "INSERT OR REPLACE INTO session_equity "
             "(session_id, ts, equity, balance, open_pnl) VALUES (?, ?, ?, ?, ?)",
             (session_id, ts, equity, balance, open_pnl),
@@ -154,10 +170,21 @@ class JournalWriter:
     def write_plan(self, plan: PlanRow) -> None:
         fields = list(plan.__dataclass_fields__)
         placeholders = ", ".join("?" for _ in fields)
-        self.conn.execute(
+        self._run(
             f"INSERT INTO trade_plan ({', '.join(fields)}) VALUES ({placeholders})",
             tuple(getattr(plan, f) for f in fields),
         )
+
+    def plan_for_position(self, position_id: int) -> sqlite3.Row | None:
+        """The plan behind an open position, found through the cid the order
+        was sent with. Returns ``None`` for a position this gateway did not
+        open -- one reconciled from cTrader after a restart, say."""
+        return self._run(
+            "SELECT p.* FROM trade_plan p "
+            "JOIN cid_ledger c ON c.cid = p.cid "
+            "WHERE c.position_id = ? ORDER BY p.created_at DESC LIMIT 1",
+            (position_id,),
+        ).fetchone()
 
     def append_event(
         self,
@@ -172,7 +199,7 @@ class JournalWriter:
         tp: float | None = None,
         detail: str | None = None,
     ) -> None:
-        self.conn.execute(
+        self._run(
             "INSERT INTO position_event "
             "(position_id, cid, ts, kind, price, lots, sl, tp, detail) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -185,14 +212,14 @@ class JournalWriter:
         null into the deck."""
         fields = list(row)
         placeholders = ", ".join("?" for _ in fields)
-        self.conn.execute(
+        self._run(
             f"INSERT OR REPLACE INTO trade_closed ({', '.join(fields)}) "
             f"VALUES ({placeholders})",
             tuple(row[f] for f in fields),
         )
 
     def write_tape(self, position_id: int, cid: str | None, tape: FrozenTape, now_ms: int) -> None:
-        self.conn.execute(
+        self._run(
             "INSERT OR REPLACE INTO trade_tape (position_id, cid, sym, from_ts, "
             "to_ts, dt_s, n, digits, bars_gz, events_json, frozen_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -214,7 +241,7 @@ class JournalWriter:
     def day_loss_usd(self, session_id: int) -> float:
         """Realised loss so far today, as a positive number. Feeds the
         ``max_daily_loss`` rule."""
-        row = self.conn.execute(
+        row = self._run(
             "SELECT COALESCE(SUM(net_pnl), 0) AS pnl FROM trade_closed "
             "WHERE session_id = ?",
             (session_id,),

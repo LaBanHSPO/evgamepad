@@ -11,6 +11,8 @@ from apps.gateway.broker import reactor_setup  # noqa: F401  (must be first)
 
 reactor_setup.install()
 
+import asyncio  # noqa: E402
+import contextlib  # noqa: E402
 import logging  # noqa: E402
 import os  # noqa: E402
 from contextlib import asynccontextmanager  # noqa: E402
@@ -40,10 +42,12 @@ def create_app(cfg: Config) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         log.info(
-            "ev-gateway up on %s (%s, %s)", cfg.gateway.listen, cfg.mode, cfg.timezone
+            "ev-gateway up on %s (%s, %s, broker=%s)",
+            cfg.gateway.listen, cfg.mode, cfg.timezone, cfg.broker.transport,
         )
+        await gw.start()
         yield
-        gw.shutdown()
+        await gw.shutdown()
 
     app = FastAPI(title="ev-gateway", version="0.1.0", lifespan=lifespan)
     app.state.gw = gw
@@ -53,13 +57,23 @@ def create_app(cfg: Config) -> FastAPI:
         health = await gw.broker.health()
         return JSONResponse(
             {
+                # `ok` is about the process, not the broker. A gateway serving
+                # the HUD with the broker down is degraded, not dead, and the
+                # container should not be restarted out from under it.
                 "ok": True,
                 "mode": cfg.mode,
                 "protocol": PROTOCOL_VERSION,
                 "tz": cfg.timezone,
                 "broker": {
                     "adapter": cfg.broker.adapter,
+                    "transport": cfg.broker.transport,
+                    # Loud on purpose: anything but `real` means no order
+                    # reaches a broker, and that must never be a surprise.
+                    "simulated": cfg.broker.transport != "real",
                     "connected": health.connected,
+                    "authed": health.authed,
+                    "account": health.account_id,
+                    "symbols": health.symbols,
                     "detail": health.detail,
                 },
                 "faults": gw.containment.faults,
@@ -74,12 +88,19 @@ def create_app(cfg: Config) -> FastAPI:
             return
         await sock.accept()
         session = WsSession(gw, sock.send_text)
+        gw.sessions.add(session)
+        pump = asyncio.create_task(_pump(session, gw))
         try:
             while True:
                 raw = await sock.receive_text()
                 await session.handle(raw)
         except WebSocketDisconnect:
             return
+        finally:
+            gw.sessions.discard(session)
+            pump.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await pump
 
     static_dir = Path(cfg.gateway.static_dir)
     if static_dir.is_dir():
@@ -91,6 +112,23 @@ def create_app(cfg: Config) -> FastAPI:
             static_dir,
         )
     return app
+
+
+async def _pump(session: WsSession, gw: Gateway) -> None:
+    """Drain broker pushes onto the socket.
+
+    Broker callbacks are synchronous and run on the shared reactor, so they
+    queue rather than send. This task is the only thing that writes them out.
+    """
+    while True:
+        for sym, (bid, ask, ts) in list(gw.state.last_quote.items()):
+            spec = gw.broker.symbol_spec(sym)
+            session.enqueue_quote(sym, bid, ask, ts, spec.digits if spec else 5)
+        try:
+            await session.flush()
+        except Exception:
+            return
+        await asyncio.sleep(1.0 / 30.0)
 
 
 def _origin_allowed(origin: str, cfg: Config) -> bool:

@@ -7,7 +7,13 @@ import pytest
 from apps.gateway.broker import fixtures
 from apps.gateway.broker.conversion import AssetGraph, ConversionError
 from apps.gateway.broker.volume import lots_to_volume
-from apps.gateway.risk.r import lots_for_risk, r_fallback, r_for_entry, r_from_stop
+from apps.gateway.risk.r import (
+    lots_for_risk,
+    r_fallback,
+    r_for_entry,
+    r_from_distance,
+    r_from_stop,
+)
 
 TS = 1_700_000_000_000
 
@@ -66,6 +72,40 @@ def test_missing_rate_refuses_rather_than_guessing():
         r_from_stop(
             protocol_volume=volume, entry=150.0, stop=149.85,
             spec=fixtures.USDJPY, graph=graph(with_jpy=False), ts=TS,
+        )
+
+
+def test_distance_and_absolute_stop_are_the_same_formula():
+    """A MARKET order carries relativeStopLoss, not an absolute stop, so R has
+    to be computable from the distance alone -- and must agree with the
+    absolute form to the cent."""
+    volume = lots_to_volume(0.01, fixtures.XAUUSD)
+    by_distance = r_from_distance(
+        protocol_volume=volume, distance=2.00,
+        spec=fixtures.XAUUSD, graph=graph(), ts=TS,
+    )
+    by_stop = r_from_stop(
+        protocol_volume=volume, entry=2340.00, stop=2338.00,
+        spec=fixtures.XAUUSD, graph=graph(), ts=TS,
+    )
+    assert by_distance.usd == pytest.approx(by_stop.usd)
+    assert by_distance.source == by_stop.source == "stop"
+
+
+def test_distance_converts_the_same_way_as_a_stop():
+    volume = lots_to_volume(0.10, fixtures.USDJPY)
+    r = r_from_distance(
+        protocol_volume=volume, distance=0.15,
+        spec=fixtures.USDJPY, graph=graph(), ts=TS,
+    )
+    assert r.usd == pytest.approx(1500 / 150.01, rel=1e-6)
+
+
+def test_zero_distance_is_refused():
+    with pytest.raises(ValueError):
+        r_from_distance(
+            protocol_volume=lots_to_volume(0.01, fixtures.XAUUSD), distance=0.0,
+            spec=fixtures.XAUUSD, graph=graph(), ts=TS,
         )
 
 

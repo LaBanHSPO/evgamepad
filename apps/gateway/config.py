@@ -50,6 +50,12 @@ class Base(BaseModel):
 
 class BrokerCfg(Base):
     adapter: Literal["ctrader"] = "ctrader"
+    #: How ProtoOA messages are delivered. ``real`` opens a TLS socket to
+    #: Spotware. ``mock`` answers them in process (see broker/mock.py) so the
+    #: gateway can be exercised without credentials -- it is never a substitute
+    #: for the acceptance run against a real demo account. ``none`` is the
+    #: phase 1 stub that refuses every broker-changing call.
+    transport: Literal["real", "mock", "none"] = "real"
     host: str = "demo.ctraderapi.com"
     port: int = 5035
     proto: Literal["protobuf"] = "protobuf"
@@ -299,6 +305,16 @@ def check_invariants(cfg: Config) -> None:
     if cfg.gateway.max_frame_bytes > 65536:
         raise BootFail("max_frame", "protocol v1 caps frames at 65536 bytes")
 
+    # A mock broker is a development tool. Reaching a real Spotware host with
+    # one would mean the operator believes orders are going somewhere they are
+    # not, which is the same class of mistake as pointing at a live host.
+    if cfg.broker.transport != "real" and not cfg.dev:
+        raise BootFail(
+            "mock_transport",
+            f"broker.transport is {cfg.broker.transport!r}; no order reaches a "
+            "broker. Set dev: true to acknowledge this is not a real session.",
+        )
+
 
 def check_secrets(cfg: Config, env: dict[str, str] | None = None) -> None:
     """Refuse to start without the credentials phase 1's README says to paste.
@@ -307,7 +323,12 @@ def check_secrets(cfg: Config, env: dict[str, str] | None = None) -> None:
     of a config without a populated ``.env``.
     """
     env = os.environ if env is None else env
-    names = list(REQUIRED_SECRET_ENVS)
+    if cfg.broker.transport != "real":
+        # A mock or stub broker has nothing to authenticate against. Requiring
+        # cTrader credentials here would defeat the purpose of having one.
+        names = [cfg.gateway.token_env]
+    else:
+        names = list(REQUIRED_SECRET_ENVS)
     if cfg.copilot.enabled:
         names.append(cfg.copilot.api_key_env)
     if cfg.tradingview.enabled:

@@ -20,10 +20,11 @@ backup, restore, and deliberate deletion.
 > **The end goal is confidence and enjoyment — improving decision quality, not the money.**
 > Demo only. Not advice. Entertainment, not alpha.
 
-**Status:** phase 1 landed; phase 2 is wired except for the broker itself. The gateway boots, serves
-the HUD, accepts a WebSocket, enforces every risk rule, and journals — with `NotWiredBroker` in place
-of cTrader until credentials exist. See [`docs/gateway.md`](./docs/gateway.md). The authority for
-everything below is
+**Status:** phase 1 landed; phase 2 is written and tested but has never spoken to Spotware. The
+gateway boots, serves the HUD, accepts a WebSocket, enforces every risk rule, places and closes
+orders, and journals plans, events, and closed trades with an auditable R. Run it today with
+`broker.transport: mock`, which answers real Protobuf in process — see
+[`docs/gateway.md`](./docs/gateway.md). The authority for everything below is
 [`plans/260824-1506-evening-forex-gold-gamepad/plan.md`](./plans/260824-1506-evening-forex-gold-gamepad/plan.md).
 
 ---
@@ -167,7 +168,7 @@ acceptance gates follow migration, navigation, and evidence contracts from `1` t
 | # | Phase | Effort | Status |
 |---|-------|--------|--------|
 | 1 | [Repo, protocol, Docker config](./plans/260824-1506-evening-forex-gold-gamepad/phase-01-repo-protocol-docker-config.md) | 12h | **Done** |
-| 2 | [cTrader exec and socket gateway](./plans/260824-1506-evening-forex-gold-gamepad/phase-02-ctrader-exec-and-socket-gateway.md) | 22h | **Partial** — everything but the OpenApiPy link |
+| 2 | [cTrader exec and socket gateway](./plans/260824-1506-evening-forex-gold-gamepad/phase-02-ctrader-exec-and-socket-gateway.md) | 22h | **Partial** — needs the acceptance run against a real demo account |
 | 3 | [Web game and 8BitDo client agent](./plans/260824-1506-evening-forex-gold-gamepad/phase-03-web-game-and-8bitdo-client-agent.md) | 18h | Pending |
 | 4 | [AI desk: sentinel, news, Volman, advise](./plans/260824-1506-evening-forex-gold-gamepad/phase-04-ai-desk-sentinel-news-volman.md) | 18h | Pending |
 | 5 | [Ubuntu Docker deploy](./plans/260824-1506-evening-forex-gold-gamepad/phase-05-ubuntu-docker-deploy.md) | 7h | Pending |
@@ -242,9 +243,17 @@ docker compose up -d      # ev-gateway on 127.0.0.1:8444 — the only service
 ```
 
 Without Docker, `uv run python -m apps.gateway.main` serves the same thing on
-`127.0.0.1:8444`. Until phase 2 wires OpenApiPy, quotes are absent and every
-broker-changing intent is refused with `not_wired` — the rest of the path
-(protocol, risk, cid reservation, journal, reject frame) runs for real.
+`127.0.0.1:8444`.
+
+**No cTrader credentials yet?** Run the whole stack against an in-process mock
+that speaks real Protobuf:
+
+```bash
+EV_WS_TOKEN=dev EV_CONFIG=config/mock.yaml uv run python -m apps.gateway.main
+```
+
+Orders, fills, P/L and quotes are synthetic and `/healthz` says
+`"simulated": true`. It is for building the HUD, not for believing the numbers.
 
 Then open `https://YOUR_DOMAIN` in a focused Chrome tab, connect the pad, and the HUD and socket come
 from the same origin.
