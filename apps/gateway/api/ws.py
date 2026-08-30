@@ -112,6 +112,9 @@ class WsSession:
         if frame is not None:
             self._pending.append(frame)
 
+    def enqueue_score(self, payload: dict) -> None:
+        self._pending.append(("score.session", payload, None))
+
     def enqueue_grade(self, payload: dict) -> None:
         self._pending.append(("grade", payload, payload.get("cid")))
 

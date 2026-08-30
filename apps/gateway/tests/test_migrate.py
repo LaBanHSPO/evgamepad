@@ -15,13 +15,14 @@ OWNERSHIP = {
     "002": {"pad_event", "session_process"},
     "003": {"playbook", "playbook_rule", "trade_grade"},
     "004": {"tilt_sample"},
+    "005": {"score_session"},
 }
 
 
 def test_shipped_migrations_apply_once(tmp_path):
     conn = M.connect(tmp_path / "ev.sqlite3")
     first = M.migrate(conn)
-    assert [m.id for m in first] == ["001", "002", "003", "004"]
+    assert [m.id for m in first] == ["001", "002", "003", "004", "005"]
     assert M.migrate(conn) == []
 
     tables = {
@@ -33,7 +34,7 @@ def test_shipped_migrations_apply_once(tmp_path):
     assert "schema_migration" in tables
     # Nothing a later phase owns has leaked in early. Phase 7 took `playbook`,
     # so this list shrinks as phases land.
-    assert not tables & {"voice_memo", "score_session"}
+    assert not tables & {"voice_memo", "voice_transcript"}
 
 
 def test_each_migration_creates_only_what_it_owns(tmp_path):

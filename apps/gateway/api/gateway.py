@@ -22,6 +22,7 @@ from ..journal.tape.scheduler import FreezeScheduler, PendingFreeze
 from ..method.grading import GradeContext, grade as grade_fire
 from ..method.indicators import ATR_PERIOD, EMA_PERIOD, OHLC, atr, ema
 from ..method.playbook import PlaybookStore
+from ..method import score as score_model
 from ..method import tilt as tilt_model
 from .candles import Bar, CandleBook, payload as candle_payload
 from ..journal.writer import DuplicateCid, JournalWriter
@@ -478,6 +479,52 @@ class Gateway:
         """
         self.state.recency_halved = True
 
+    # -- process score -------------------------------------------------------
+
+    def score_inputs(self, ts: int | None = None) -> score_model.ScoreInputs:
+        """Gather tonight's process evidence.
+
+        Nothing here reads money. Win rate, profit factor, P/L, R and tilt are
+        all deliberately absent -- the score is about how the evening was
+        traded, not how it turned out.
+        """
+        ts = now_ms() if ts is None else ts
+        session_id = self.state.session_id
+        fires, passed, evaluated = self.journal.grade_totals(session_id)
+        process = self.journal.process_row(session_id) if session_id else None
+
+        risk_passed, risk_evaluated = self.journal.risk_adherence(session_id)
+        return score_model.ScoreInputs(
+            fires=fires,
+            required_passed=passed,
+            required_evaluated=evaluated,
+            # Phase 4's sentinel supplies this. Until then Selectivity is
+            # vacuous rather than guessed at.
+            opportunity_quality=None,
+            trades_max=self.cfg.score.trades_max,
+            band_width=self.cfg.score.band_width,
+            stand_downs=int(process["stand_downs"]) if process else 0,
+            risk_passed=risk_passed,
+            risk_evaluated=risk_evaluated,
+            pre_check_in=bool(process and process["pre_at"] is not None),
+            post_check_in=bool(process and process["post_at"] is not None),
+            playbook_selected=bool(self.state.playbook_slug),
+            plan_before_first_fire=bool(self.state.playbook_slug),
+            checklists_answered=sum(len(a) for a in self.state.grade_answers.values()),
+            checklists_available=fires,
+            # Phase 8 owns voice. Until it lands, capture was never available,
+            # so the memo sub-items drop rather than scoring against the player.
+            voice_available=False,
+            replayable_trades_exist=self.journal.has_replayable_trade(),
+        )
+
+    def settle_score(self, ts: int | None = None, persist: bool = True):
+        ts = now_ms() if ts is None else ts
+        result = score_model.compute(self.score_inputs(ts), self.cfg.score.weights)
+        if persist and self.state.session_id is not None:
+            self.journal.write_score(self.state.session_id, ts, result)
+        return result
+
     def lots_for(self, update: Any) -> float:
         """Protocol volume back into the lots the HUD speaks."""
         spec = self.broker.symbol_spec(update.sym) if update.sym else None
@@ -789,6 +836,17 @@ class Gateway:
             await self.snapshot_equity(closing=True)
         except Exception as exc:
             log.warning("closing equity snapshot: %s", exc)
+        try:
+            # Settle once, at the end. There is no live score during the
+            # session by design.
+            if self.state.session_id is not None:
+                result = self.settle_score()
+                for session in list(self.sessions):
+                    push = getattr(session, "enqueue_score", None)
+                    if push is not None:
+                        push(result.as_message())
+        except Exception as exc:
+            log.warning("settling the process score: %s", exc)
 
         if self._equity_task is not None:
             self._equity_task.cancel()

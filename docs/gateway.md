@@ -167,5 +167,16 @@ for a safety exit itself. Starting a memo halves the recency terms, because
 narrating it is the intervention. No keyword scoring, no affect classification,
 no LLM in the score, and tilt is never stored against the player.
 
-Phases 4, 6, 8, and 10-14 are untouched: `ai.ask` answers `{disabled: true}`, and
+Phase 11 is in: five process-side axes, none of them money and none of them
+tilt. A vacuous axis — Adherence with no trades, Selectivity with no sentinel —
+is **dropped and its weight redistributed**, because scoring it 0 punishes
+standing down and scoring it 100 is free points for doing nothing. It renders
+as a dashed n/a ring rather than a zero spoke. A supported degradation (voice
+off, no usable microphone, no past trade to replay) drops its sub-item too;
+voice that was available and skipped stays a genuine miss. The score settles
+once, at session close, and is read by the deck at
+`GET /api/score/session/{id}` — there is deliberately no live score to watch
+mid-session.
+
+Phases 4, 6, 8, 10, and 12-14 are untouched: `ai.ask` answers `{disabled: true}`, and
 the voice, replay, and score messages are accepted and dropped.

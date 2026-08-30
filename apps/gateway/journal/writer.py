@@ -428,6 +428,79 @@ class JournalWriter:
         ).fetchone()
         return int(row["closed_at"]) if row else None
 
+    # -- phase 11: process score -------------------------------------------
+
+    def write_score(self, session_id: int, now_ms: int, score: Any) -> None:
+        import json
+
+        self._run(
+            "INSERT OR REPLACE INTO score_session (session_id, settled_at, total, "
+            "axes_json, na_json, items_json, weights_version) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                session_id, now_ms, score.total,
+                # Only axes with evidence. `na_json` lists the rest, so an axis
+                # never appears in both -- the radar draws a dashed ring from
+                # `na`, never a null spoke from here.
+                json.dumps(
+                    {a.key: a.value for a in score.axes if a.value is not None},
+                    separators=(",", ":"),
+                ),
+                json.dumps(list(score.na), separators=(",", ":")),
+                json.dumps(
+                    [
+                        {"axis": a.key, "key": i.key, "label": i.label,
+                         "ok": i.ok, "note": i.note}
+                        for a in score.axes for i in a.items
+                    ],
+                    separators=(",", ":"),
+                ),
+                score.weights_version,
+            ),
+        )
+
+    def score_row(self, session_id: int) -> sqlite3.Row | None:
+        return self._run(
+            "SELECT * FROM score_session WHERE session_id = ?", (session_id,)
+        ).fetchone()
+
+    def grade_totals(self, session_id: int | None) -> tuple[int, int, int]:
+        """(fires, required_passed, required_evaluated) for tonight."""
+        row = self._run(
+            "SELECT COUNT(*) n, COALESCE(SUM(required_pass), 0) p, "
+            "COALESCE(SUM(required_total), 0) t FROM trade_grade "
+            "WHERE session_id IS ? AND phase != 'arm'",
+            (session_id,),
+        ).fetchone()
+        return int(row["n"]), int(row["p"]), int(row["t"])
+
+    def risk_adherence(self, session_id: int | None) -> tuple[int, int]:
+        """Per-fire risk checks passed over evaluated.
+
+        Derived from the plan rather than re-judged: a plan exists only for a
+        fire the gateway's own risk rules already allowed, so the question left
+        is whether the player protected it -- a stop at entry, and an R the
+        stop actually defined rather than the fallback unit.
+        """
+        rows = self._run(
+            "SELECT planned_sl, r_source FROM trade_plan WHERE session_id IS ?",
+            (session_id,),
+        ).fetchall()
+        if not rows:
+            return 0, 0
+        evaluated = len(rows) * 2
+        passed = 0
+        for r in rows:
+            if r["planned_sl"] is not None:
+                passed += 1
+            if r["r_source"] == "stop":
+                passed += 1
+        return passed, evaluated
+
+    def has_replayable_trade(self) -> bool:
+        row = self._run("SELECT 1 FROM trade_tape LIMIT 1").fetchone()
+        return row is not None
+
     def day_loss_usd(self, session_id: int) -> float:
         """Realised loss so far today, as a positive number. Feeds the
         ``max_daily_loss`` rule."""

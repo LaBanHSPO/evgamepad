@@ -13,6 +13,7 @@ reactor_setup.install()
 
 import asyncio  # noqa: E402
 import contextlib  # noqa: E402
+import json  # noqa: E402
 import logging  # noqa: E402
 import os  # noqa: E402
 from contextlib import asynccontextmanager  # noqa: E402
@@ -99,6 +100,35 @@ def create_app(cfg: Config) -> FastAPI:
         session_id = gw.ensure_session(ts)
         gw.journal.write_check_in(session_id, phase, rating, ts, body.get("note"))
         return JSONResponse({"ok": True, "sessionId": session_id, "skipped": rating is None})
+
+    @app.get("/api/score/session/{session_id}")
+    async def score_session(session_id: int) -> JSONResponse:
+        """The settled Process Score for one session.
+
+        Deliberately a REST read for the deck rather than a live socket push:
+        the plan puts the score on the deck, not the HUD, precisely so there is
+        no live score to watch mid-session.
+        """
+        row = gw.journal.score_row(session_id)
+        if row is None:
+            return JSONResponse({"ok": False, "reason": "not settled"}, 404)
+        return JSONResponse({
+            "ok": True,
+            "sessionId": session_id,
+            "settledAt": row["settled_at"],
+            "total": row["total"],
+            "axes": json.loads(row["axes_json"]),
+            "na": json.loads(row["na_json"]),
+            "items": json.loads(row["items_json"]),
+            "weightsVersion": row["weights_version"],
+        })
+
+    @app.post("/api/score/settle")
+    async def settle_score() -> JSONResponse:
+        """Settle tonight now. Called at session close; exposed so the deck can
+        force it after a late check-in."""
+        result = gw.settle_score()
+        return JSONResponse({"ok": True, **result.as_message()})
 
     @app.post("/api/session/standdown")
     async def stand_down(body: dict) -> JSONResponse:

@@ -129,3 +129,41 @@ def test_stand_down_endpoint(client):
     assert res.status_code == 200
     assert res.json()["count"] == 1
     assert client.post("/api/session/standdown", json={"events": "nope"}).status_code == 400
+
+
+# -- phase 11: the settled score --------------------------------------------
+
+
+def test_the_score_is_not_available_before_it_settles(client):
+    assert client.get("/api/score/session/1").status_code == 404
+
+
+def test_settling_writes_the_score_and_serves_it(client):
+    client.post("/api/session/checkin", json={"phase": "pre", "rating": 4})
+    settled = client.post("/api/score/settle")
+    assert settled.status_code == 200
+    body = settled.json()
+    assert body["ok"] is True
+    assert "adherence" in body["na"]     # no trades tonight
+
+    fetched = client.get("/api/score/session/1").json()
+    assert fetched["total"] == pytest.approx(body["total"])
+    assert fetched["weightsVersion"] == "1"
+    assert set(fetched["axes"]).isdisjoint(fetched["na"])
+
+
+def test_a_prepared_zero_trade_evening_scores_well(client):
+    """Standing down correctly is meant to be a good evening, not a blank one."""
+    client.post("/api/session/checkin", json={"phase": "pre", "rating": 4})
+    client.post("/api/session/checkin", json={"phase": "post", "rating": 4})
+    client.post("/api/session/standdown", json={"events": [
+        {"at": 1, "conditions": ["news"]}, {"at": 2, "conditions": ["spread"]},
+    ]})
+    body = client.post("/api/score/settle").json()
+    assert body["total"] > 50
+
+
+def test_settling_twice_replaces_rather_than_duplicates(client):
+    client.post("/api/score/settle")
+    client.post("/api/score/settle")
+    assert client.get("/api/score/session/1").status_code == 200
