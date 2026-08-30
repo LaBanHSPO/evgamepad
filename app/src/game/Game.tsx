@@ -65,6 +65,9 @@ export function Game() {
         onFlatten={game.flatten}
         padId={game.view.padId}
         conn={game.view.conn}
+        playbooks={game.view.playbooks}
+        activePlaybook={game.view.playbookId}
+        onSelectPlaybook={game.selectPlaybook}
       />
       {/* Rendered over the HUD, never in front of it: the session can start
           while this is still on screen. */}

@@ -251,3 +251,28 @@
   overflow: hidden;
   border: 1px solid var(--line, #1b2420);
 }
+
+/* The grade on the confirm overlay. Only failures are listed: a list of
+   everything that passed is noise at the moment of a fire. */
+.confirm__grade[data-state="clean"] { color: var(--pnl-up, #00ff41); }
+.confirm__grade[data-state="flagged"] { color: var(--warn, #ffd400); }
+.confirm__grade { display: grid; gap: 2px; }
+.confirm__grade-miss { font-size: 0.75rem; color: var(--warn, #ffd400); }
+
+.overlay__playbooks { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2, 8px); }
+.overlay__playbooks button {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 1px solid var(--line, #1b2420);
+  border-left-width: 3px;
+  color: inherit;
+  font: inherit;
+  padding: var(--space-3, 12px);
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+}
+.overlay__playbooks button[data-active="true"] { border-left-color: var(--pnl-up, #00ff41); }
+.overlay__playbooks button span { color: var(--text-muted, #7d8a80); font-size: 0.75rem; }
+.overlay__note { color: var(--text-muted, #7d8a80); font-size: 0.75rem; margin-top: var(--space-2, 8px); }

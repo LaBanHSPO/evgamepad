@@ -50,6 +50,24 @@ export type Position = {
 };
 
 /** What React renders. Deliberately excludes anything that ticks at quote rate. */
+export type GradeResultRow = { ruleId: string; required: boolean; passed: boolean | null; note?: string | null };
+
+export type GradeView = {
+  cid: string;
+  playbookId: string;
+  required_pass: number;
+  required_total: number;
+  clean: boolean;
+  results: GradeResultRow[];
+};
+
+export type PlaybookSummary = {
+  playbookId: string;
+  name: string;
+  ruleCount: number;
+  requiredCount: number;
+};
+
 export type GameView = {
   conn: ConnState;
   connDetail: string;
@@ -70,6 +88,10 @@ export type GameView = {
   lastReject: string | null;
   pttActive: boolean;
   overlayOpen: boolean;
+  /** The most recent grade from the gateway. Never computed in the browser. */
+  grade: GradeView | null;
+  playbooks: PlaybookSummary[];
+  playbookId: string | null;
 };
 
 export type GameApi = {
@@ -81,6 +103,8 @@ export type GameApi = {
   setPnlUnit: (unit: PnlUnit) => void;
   /** Keyboard/click Flatten. Works with no pad, and bypasses the dead-man. */
   flatten: () => void;
+  selectPlaybook: (playbookId: string) => void;
+  answerGrade: (cid: string, ruleId: string, answer: boolean) => void;
   closePosition: (positionId: number) => void;
   clearUnknown: (cid: string) => void;
   marketContext: () => MarketContext;
@@ -124,6 +148,9 @@ export function useGame(): GameApi {
     lastReject: null,
     pttActive: false,
     overlayOpen: false,
+    grade: null,
+    playbooks: [],
+    playbookId: null,
   });
   const viewRef = useRef(view);
   const patch = useCallback((next: Partial<GameView>) => {
@@ -158,6 +185,20 @@ export function useGame(): GameApi {
           // Into a ref, like quotes. The chart drains it on its own frame.
           candles.current.push(frame.p as CandleFrame);
           break;
+        case "grade":
+          // Straight from the gateway. The browser never grades a trade: a
+          // second definition here is how the overlay and the journal end up
+          // disagreeing about the same fire.
+          patch({ grade: frame.p as GradeView });
+          break;
+        case "playbook.list": {
+          const list = (frame.p as { playbooks: PlaybookSummary[] }).playbooks;
+          patch({
+            playbooks: list,
+            playbookId: list.find((b) => b.name.endsWith("✓"))?.playbookId ?? null,
+          });
+          break;
+        }
         case "welcome":
           patch({ connDetail: "" });
           break;
@@ -293,9 +334,15 @@ export function useGame(): GameApi {
       }
 
       switch (result.transition.kind) {
-        case "arm":
+        case "arm": {
           rumble(0.25, 60);
+          // Flush now so the gateway can grade the ARM while the overlay is up.
+          const armBatch = telemetryRef.current.maybeFlush(
+            now, { sym: viewRef.current.sym, lots: viewRef.current.lots }, true,
+          );
+          if (armBatch && gw) gw.telemetry({ ...armBatch, to: "ARMED" });
           break;
+        }
         case "cancel": {
           // A cancel into a bad tape is a win, and is counted as one.
           const event = standDownRef.current.record(Date.now(), marketContext());
@@ -361,6 +408,14 @@ export function useGame(): GameApi {
     gw.send("sub", { ch: "quotes", syms: [view.sym], tf: view.timeframe });
   }, [view.sym, view.timeframe, view.conn]);
 
+  const selectPlaybook = useCallback((playbookId: string) => {
+    gatewayRef.current?.send("playbook.select", { playbookId });
+  }, []);
+
+  const answerGrade = useCallback((cid: string, ruleId: string, answer: boolean) => {
+    gatewayRef.current?.send("grade.answer", { cid, ruleId, answer });
+  }, []);
+
   const flatten = useCallback(() => {
     // Available with no pad and never gated: a safety exit must not depend on
     // hardware the player may have just unplugged.
@@ -378,6 +433,8 @@ export function useGame(): GameApi {
     connect,
     setPnlUnit: (pnlUnit) => patch({ pnlUnit }),
     flatten,
+    selectPlaybook,
+    answerGrade,
     closePosition,
     clearUnknown: (cid) => {
       gatewayRef.current?.clearPending(cid);

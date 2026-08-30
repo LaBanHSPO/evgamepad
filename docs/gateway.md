@@ -148,5 +148,13 @@ open, once a minute, and at close, M5 history seeds the chart, and a watchdog
 re-authenticates and reconciles when the broker link comes back. What it has
 never done is speak to Spotware.
 
-Phases 4 and 6-14 are untouched: `ai.ask` answers `{disabled: true}`, and the
-voice, playbook, tilt, replay, and score messages are accepted and dropped.
+Phase 7 is in: the rule registry moved to `method/rules.py` with two
+consequences — `risk` rules are enforced by `risk/rules.py`, `playbook` rules
+are graded and structurally cannot reject (no `applies_to`, no `reason`, and a
+test asserts it). Five Volman M5 playbooks seed on first boot; grading is a pure
+function over context, keyed on the cid so a declined fire is gradeable too, and
+an unanswered manual rule is *unknown* rather than failed, so skipping the
+post-trade checklist costs nothing.
+
+Phases 4, 6, and 8-14 are untouched: `ai.ask` answers `{disabled: true}`, and
+the voice, tilt, replay, and score messages are accepted and dropped.

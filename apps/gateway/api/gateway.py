@@ -19,6 +19,9 @@ from ..broker.factory import build_broker
 from ..config import Config
 from ..journal.tape.ring import TapeRing
 from ..journal.tape.scheduler import FreezeScheduler, PendingFreeze
+from ..method.grading import GradeContext, grade as grade_fire
+from ..method.indicators import ATR_PERIOD, EMA_PERIOD, OHLC, atr, ema
+from ..method.playbook import PlaybookStore
 from .candles import Bar, CandleBook, payload as candle_payload
 from ..journal.writer import DuplicateCid, JournalWriter
 from ..protocol import now_ms
@@ -51,7 +54,13 @@ class LiveState:
     last_client_ms: int | None = None
     cooldown_until_ms: int | None = None
     session_id: int | None = None
+    #: The playbook this evening is being graded against, by slug.
+    playbook_slug: str | None = None
     spreads: dict[str, float] = field(default_factory=dict)
+    #: Manual-rule answers, by cid. A post-trade checklist fills these.
+    grade_answers: dict[str, dict[str, bool]] = field(default_factory=dict)
+    #: Symbol of the most recent grade, so a settled re-grade has a context.
+    last_graded_sym: str | None = None
     last_quote: dict[str, tuple[float, float, int]] = field(default_factory=dict)
 
 
@@ -81,6 +90,8 @@ class Gateway:
             dt_s=cfg.tape.dt_s,
         )
         self.state = LiveState()
+        self.playbooks = PlaybookStore(self.journal.conn)
+        self.playbooks.seed(now_ms())
         self.token = os.environ.get(cfg.gateway.token_env, "")
         #: Live sockets. Quotes, fills and P/L are pushed to all of them; the
         #: WS layer registers and removes itself.
@@ -303,6 +314,84 @@ class Gateway:
         elif self.journal.session_row(session_id) is not None:
             self.journal.set_session_open_equity(session_id, account.equity, account.balance)
 
+    # -- grading ------------------------------------------------------------
+
+    def grade_context(
+        self,
+        sym: str,
+        side: str | None,
+        lots: float | None,
+        *,
+        has_stop: bool = False,
+        answers: dict[str, bool] | None = None,
+        ts: int | None = None,
+    ) -> GradeContext:
+        """Live market context for a grade. Anything unavailable stays None,
+        which grades as `unknown` rather than as a pass."""
+        ts = now_ms() if ts is None else ts
+        quote = self.state.last_quote.get(sym)
+        price = None
+        if quote:
+            price = quote[1] if side == "buy" else quote[0]
+
+        bars = self.candles.history(sym, "M5", limit=EMA_PERIOD + ATR_PERIOD + 10)
+        closed = [b for b in bars if b.closed]
+        return GradeContext(
+            now_ms=ts,
+            side=side,
+            sym=sym,
+            lots=lots,
+            price=price,
+            ema=ema([b.c for b in closed]),
+            atr=atr([OHLC(b.ts, b.o, b.h, b.l, b.c) for b in closed]),
+            spread=self.state.spreads.get(sym),
+            open_positions=self.state.open_positions,
+            has_stop=has_stop,
+            # Phase 4 fills the calendar. Until then this is unknown, not a
+            # free pass -- a rule that passes when its input is missing is
+            # worse than no rule.
+            minutes_to_news=None,
+            session_open=self.session.is_open(ts),
+            answers=answers or {},
+        )
+
+    def active_playbook(self):
+        if not self.state.playbook_slug:
+            return None
+        return self.playbooks.get(self.state.playbook_slug)
+
+    def grade(
+        self,
+        cid: str,
+        sym: str,
+        side: str | None,
+        lots: float | None,
+        *,
+        phase: str = "fire",
+        has_stop: bool = False,
+        persist: bool = True,
+        ts: int | None = None,
+    ):
+        """Grade one fire and, by default, record it.
+
+        Grading can never refuse anything -- it runs after the risk decision and
+        its result is information, not a gate.
+        """
+        ts = now_ms() if ts is None else ts
+        book = self.active_playbook()
+        answers = self.state.grade_answers.get(cid, {})
+        ctx = self.grade_context(
+            sym, side, lots, has_stop=has_stop, answers=answers, ts=ts
+        )
+        result = grade_fire(book, ctx, phase=phase)  # type: ignore[arg-type]
+        self.state.last_graded_sym = sym
+        if persist:
+            self.journal.write_grade(
+                cid, book.id if book else None, self.state.session_id,
+                phase, result, ts,
+            )
+        return result, book
+
     def lots_for(self, update: Any) -> float:
         """Protocol volume back into the lots the HUD speaks."""
         spec = self.broker.symbol_spec(update.sym) if update.sym else None
@@ -477,10 +566,27 @@ class Gateway:
             )
             if intent_type == "intent.open":
                 self._write_plan(cid, payload, ts)
+                self._grade_fire(cid, payload, ts)
             return True, None, ""
 
         self.journal.mark_cid(cid, "rejected", ts, reject_reason=result.reason)
         return False, result.reason or "broker_error", result.detail or ""
+
+    def _grade_fire(self, cid: str, payload: IntentOpen, ts: int) -> None:
+        """Re-grade at FIRE with the real cid. Runs after the broker accepted
+        the order, so a grading bug can never cost a fire."""
+        try:
+            result, book = self.grade(
+                cid, payload.sym, payload.side, payload.lots,
+                phase="fire", has_stop=bool(payload.relativeSl), ts=ts,
+            )
+        except Exception as exc:
+            self.containment.report("grading", f"{cid}: {exc}", cid)
+            return
+        for session in list(self.sessions):
+            push = getattr(session, "enqueue_grade", None)
+            if push is not None:
+                push(result.as_message(cid, book.slug if book else None))
 
     def _write_plan(self, cid: str, payload: IntentOpen, ts: int) -> None:
         """Snapshot the intent at FIRE, before the market answers.

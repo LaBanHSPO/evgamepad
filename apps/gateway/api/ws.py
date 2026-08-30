@@ -80,6 +80,12 @@ class WsSession:
         self._last_quote_sent: dict[str, float] = {}
         self._last_candle_sent = 0.0
         self._resnap = False
+        #: A stable cid for ARM previews, so the HUD can tell a preview from
+        #: the grade of a fire that actually happened.
+        self.preview_cid = new_cid()
+        #: A stable cid for ARM previews, so the HUD can tell a preview from
+        #: the grade of a fire that actually happened.
+        self.preview_cid = new_cid()
         #: What the chart is showing. Set by `sub`; only this series is pushed.
         self.chart: tuple[str, str] = ("XAUUSD", "M5")
         self._pending: deque[tuple[str, Any, str | None]] = deque(maxlen=256)
@@ -105,6 +111,9 @@ class WsSession:
         frame = _execution_frame(update, self.gw.lots_for(update))
         if frame is not None:
             self._pending.append(frame)
+
+    def enqueue_grade(self, payload: dict) -> None:
+        self._pending.append(("grade", payload, payload.get("cid")))
 
     def enqueue_resnap(self) -> None:
         """Ask this socket to re-send its snapshot after a broker reconnect."""
@@ -201,6 +210,7 @@ class WsSession:
             },
         )
         await self._emit_session()
+        await self._emit_playbooks()
 
     async def _on_ping(self, frame: Any, p: Ping) -> None:
         # `clutch` here is dead-man evidence only. A fire is authorised by the
@@ -220,6 +230,12 @@ class WsSession:
         self.chart = (sym, tf)
         self._last_candle_sent = 0.0
         self._resnap = False
+        #: A stable cid for ARM previews, so the HUD can tell a preview from
+        #: the grade of a fire that actually happened.
+        self.preview_cid = new_cid()
+        #: A stable cid for ARM previews, so the HUD can tell a preview from
+        #: the grade of a fire that actually happened.
+        self.preview_cid = new_cid()
         from .candles import payload as candle_payload
 
         for bar in self.gw.candles.history(sym, tf, limit=300):
@@ -260,6 +276,33 @@ class WsSession:
             session_id, p.model_dump(by_alias=True, exclude_none=False)
         )
 
+        # An ARM transition is what the confirm overlay is waiting on. The
+        # protocol has no `arm` message -- it was frozen in phase 1 -- so the
+        # telemetry batch's own `to` field is the signal, and the client
+        # flushes a batch on the transition rather than waiting for its second.
+        if p.to == "ARMED" and p.sym:
+            await self._preview_grade(p.sym, p.from_, p.lots)
+
+    async def _preview_grade(self, sym: str, side_hint: str | None, lots: float | None) -> None:
+        """Grade the prospective trade for the ARM overlay.
+
+        Not persisted: this is a preview of a fire that may never happen, and a
+        trade_grade row for a trade that was never taken would inflate every
+        count that reads them. The FIRE grade, with the real cid, is the one
+        that is recorded.
+        """
+        side = "buy" if (side_hint or "").lower().startswith("b") else None
+        try:
+            result, book = self.gw.grade(
+                self.preview_cid, sym, side, lots, phase="arm", persist=False
+            )
+        except Exception as exc:
+            log.warning("preview grade failed: %s", exc)
+            return
+        await self.emit(
+            "grade", result.as_message(self.preview_cid, book.slug if book else None)
+        )
+
     async def _on_voice_begin(self, frame: Any, p: Any) -> None:
         await self.emit(
             "voice.transcript",
@@ -273,10 +316,45 @@ class WsSession:
         return
 
     async def _on_grade_answer(self, frame: Any, p: Any) -> None:
-        return
+        """One tap of the post-trade checklist.
+
+        Skipping is not modelled here at all -- an unanswered manual rule stays
+        absent, which grades as unknown and drops out of the required count. A
+        skip cannot cost the player anything because there is nothing to record.
+        """
+        answers = self.gw.state.grade_answers.setdefault(p.cid, {})
+        answers[p.ruleId] = p.answer
+        result, book = self.gw.grade(
+            p.cid, self.gw.state.last_graded_sym or "XAUUSD", None, None,
+            phase="settled",
+        )
+        await self.emit(
+            "grade", result.as_message(p.cid, book.slug if book else None), cid=p.cid
+        )
 
     async def _on_playbook_select(self, frame: Any, p: Any) -> None:
-        await self.emit("playbook.list", {"playbooks": []})
+        """Selecting a playbook is session state, and never a broker action."""
+        book = self.gw.playbooks.get(p.playbookId)
+        if book is not None:
+            self.gw.state.playbook_slug = book.slug
+            self.gw.journal.set_active_playbook(
+                self.gw.ensure_session(now_ms()), book.id
+            )
+        await self._emit_playbooks()
+
+    async def _emit_playbooks(self) -> None:
+        active = self.gw.state.playbook_slug
+        await self.emit("playbook.list", {
+            "playbooks": [
+                {
+                    "playbookId": b.slug,
+                    "name": b.name + (" ✓" if b.slug == active else ""),
+                    "ruleCount": len(b.rules),
+                    "requiredCount": len(b.required_rules),
+                }
+                for b in self.gw.playbooks.list()
+            ],
+        })
 
     async def _on_intent_open(self, frame: Any, p: Any) -> None:
         await self._intent("intent.open", frame, p)

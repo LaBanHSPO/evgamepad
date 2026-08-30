@@ -351,6 +351,39 @@ class JournalWriter:
             (mfe, mae, mfe_r, mae_r, position_id),
         )
 
+    # -- phase 7: playbook and grading -------------------------------------
+
+    def write_grade(
+        self,
+        cid: str,
+        playbook_id: int | None,
+        session_id: int | None,
+        phase: str,
+        grade: Any,
+        now_ms: int,
+    ) -> None:
+        """Keyed on the cid -- one fire -- not on a closed position, because a
+        declined or rejected fire is gradeable too and phase 6's declined count
+        depends on that. Re-grading the same cid at a later phase replaces the
+        earlier row."""
+        self._run(
+            "INSERT OR REPLACE INTO trade_grade (cid, playbook_id, session_id, "
+            "evaluated_at, phase, results_json, required_pass, required_total, clean) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (cid, playbook_id, session_id, now_ms, phase, grade.results_json(),
+             grade.required_pass, grade.required_total, int(grade.clean)),
+        )
+
+    def grade_row(self, cid: str) -> sqlite3.Row | None:
+        return self._run("SELECT * FROM trade_grade WHERE cid = ?", (cid,)).fetchone()
+
+    def set_active_playbook(self, session_id: int, playbook_id: int | None) -> None:
+        self.ensure_process(session_id)
+        self._run(
+            "UPDATE session_process SET playbook_id = ? WHERE session_id = ?",
+            (playbook_id, session_id),
+        )
+
     def day_loss_usd(self, session_id: int) -> float:
         """Realised loss so far today, as a positive number. Feeds the
         ``max_daily_loss`` rule."""

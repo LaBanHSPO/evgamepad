@@ -8,7 +8,7 @@
  */
 
 import type { ArmSide } from "../pad/fsm";
-import type { Quote } from "./useGame";
+import type { GradeView, Quote } from "./useGame";
 
 export function ConfirmOverlay({
   side,
@@ -18,6 +18,7 @@ export function ConfirmOverlay({
   relativeSl,
   relativeTp,
   rUsd,
+  grade,
 }: {
   side: ArmSide;
   sym: string;
@@ -26,6 +27,8 @@ export function ConfirmOverlay({
   relativeSl: number | null;
   relativeTp: number | null;
   rUsd: number | null;
+  /** From the gateway. The browser never grades a trade itself. */
+  grade: GradeView | null;
 }) {
   const price = quote ? (side === "buy" ? quote.ask : quote.bid) : null;
   const digits = quote?.digits ?? 2;
@@ -73,10 +76,31 @@ export function ConfirmOverlay({
         </dl>
       )}
 
-      {/* Reserved for phase 7. Says so rather than pretending to grade. */}
-      <div className="confirm__grade" data-state="unavailable">
-        grading unavailable until phase 7
-      </div>
+      {grade ? (
+        <div
+          className="confirm__grade"
+          data-state={grade.clean ? "clean" : "flagged"}
+        >
+          <strong>
+            {grade.playbookId === "__unplanned__"
+              ? "unplanned"
+              : `${grade.required_pass}/${grade.required_total} rules OK`}
+          </strong>
+          {/* Only the failures. A list of everything that passed is noise at
+              the moment of a fire. */}
+          {grade.results
+            .filter((r) => r.passed === false)
+            .map((r) => (
+              <span key={r.ruleId} className="confirm__grade-miss">
+                ✗ {r.note || r.ruleId}
+              </span>
+            ))}
+        </div>
+      ) : (
+        <div className="confirm__grade" data-state="unavailable">
+          no playbook selected
+        </div>
+      )}
 
       <div className="confirm__hint">
         hold <kbd>LT</kbd> · press <kbd>RT</kbd> to fire · release to cancel

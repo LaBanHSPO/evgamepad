@@ -71,6 +71,11 @@ export function Hud({ game, onOpenOverlay }: { game: GameApi; onOpenOverlay: () 
             </Tag>
           ))}
           {/* Standing down reads as a win, because it is one. */}
+          <Tag color={view.playbookId ? "var(--pnl-up)" : "var(--warn)"}>
+            {view.playbookId
+              ? view.playbooks.find((b) => b.playbookId === view.playbookId)?.name.replace(" ✓", "")
+              : "no playbook"}
+          </Tag>
           <Tag color="var(--text-muted)">stood down {view.standDowns}×</Tag>
           {view.pttActive && <Tag color="var(--warn)">● memo</Tag>}
         </section>
@@ -119,6 +124,7 @@ export function Hud({ game, onOpenOverlay }: { game: GameApi; onOpenOverlay: () 
           relativeSl={null}
           relativeTp={null}
           rUsd={null}
+          grade={view.grade}
         />
       )}
 

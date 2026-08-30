@@ -92,9 +92,18 @@ export class TelemetryCollector {
    * A batch is emitted even when nothing happened: the idle heartbeat is what
    * lets phase 9 tell "calm" apart from "went to make tea".
    */
-  maybeFlush(now: number, context: { sym: string | null; lots: number | null }): TelemetryBatch | null {
+  maybeFlush(
+    now: number,
+    context: { sym: string | null; lots: number | null },
+    force = false,
+  ): TelemetryBatch | null {
     const elapsed = now - this.lastFlush;
-    if (elapsed < BATCH_MS) return null;
+    // `force` is used on an ARM transition and nowhere else. The confirm
+    // overlay's grade comes from the gateway, the protocol has no `arm`
+    // message, and waiting up to a second for the next batch would show the
+    // player a grade for a decision they already made. Still not per-frame:
+    // one flush per ARM, not one per tick.
+    if (!force && elapsed < BATCH_MS) return null;
 
     const batch: TelemetryBatch = {
       ts: Math.round(now),

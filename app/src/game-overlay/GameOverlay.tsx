@@ -33,7 +33,7 @@ const TITLES: Record<Destination, string> = {
 /** What each destination will hold, and which phase fills it. */
 const PENDING: Record<Destination, string | null> = {
   desk: "sentinel, news, setups and coach arrive in phase 4",
-  playbook: "rules and grading arrive in phase 7",
+  playbook: null,
   journal: "the daily cockpit arrives in phase 12",
   system: null,
   reports: "reports and export arrive in phase 13",
@@ -47,6 +47,9 @@ export function GameOverlay({
   onFlatten,
   padId,
   conn,
+  playbooks = [],
+  activePlaybook = null,
+  onSelectPlaybook,
 }: {
   state: OverlayState;
   onState: (next: OverlayState) => void;
@@ -54,6 +57,9 @@ export function GameOverlay({
   onFlatten: () => void;
   padId: string;
   conn: string;
+  playbooks?: { playbookId: string; name: string; ruleCount: number; requiredCount: number }[];
+  activePlaybook?: string | null;
+  onSelectPlaybook?: (playbookId: string) => void;
 }) {
   // Keyboard mirrors the pad contract, so the overlay is usable with no pad.
   useEffect(() => {
@@ -123,6 +129,32 @@ export function GameOverlay({
                 </button>
               ))}
             </div>
+          )}
+
+          {state.destination === "playbook" && (
+            <ul className="overlay__playbooks">
+              {playbooks.length === 0 && <li>no playbooks loaded</li>}
+              {playbooks.map((b) => (
+                <li key={b.playbookId}>
+                  <button
+                    type="button"
+                    data-active={b.playbookId === activePlaybook}
+                    onClick={() => onSelectPlaybook?.(b.playbookId)}
+                  >
+                    <strong>{b.name.replace(" ✓", "")}</strong>
+                    <span>
+                      {b.requiredCount} required of {b.ruleCount} rules
+                    </span>
+                  </button>
+                </li>
+              ))}
+              {/* Selecting is session state, never a broker action -- the
+                  overlay's reducer has no order-emitting effect at all. */}
+              <li className="overlay__note">
+                Selecting a playbook grades your fires against it. It cannot place,
+                modify, or close anything.
+              </li>
+            </ul>
           )}
 
           {state.destination === "system" && (

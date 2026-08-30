@@ -448,6 +448,129 @@ async def test_shutdown_closes_the_session_with_final_equity(stack):
     assert row["equity_close"] == pytest.approx(10_000.00)
 
 
+# -- phase 7: playbook and grading ------------------------------------------
+
+
+async def test_the_player_starts_with_a_real_book(stack):
+    gw, session, client = stack
+    listed = client.last("playbook.list")["p"]["playbooks"]
+    assert len(listed) == 5
+    assert all(b["ruleCount"] > 0 for b in listed)
+
+
+async def test_selecting_a_playbook_is_session_state(stack):
+    gw, session, client = stack
+    await session.handle(frame("playbook.select", {"playbookId": "volman-break"}, seq=5))
+    assert gw.state.playbook_slug == "volman-break"
+
+    row = gw.journal.process_row(gw.state.session_id)
+    assert row["playbook_id"] == gw.playbooks.get("volman-break").id
+    # And it is marked in the list the HUD renders.
+    assert any("✓" in b["name"] for b in client.last("playbook.list")["p"]["playbooks"])
+
+
+async def test_selecting_a_playbook_emits_no_order(stack):
+    """Navigation and apply can never place a trade."""
+    gw, session, client = stack
+    before = len(gw.broker.transport.state.sent)
+    await session.handle(frame("playbook.select", {"playbookId": "volman-break"}, seq=5))
+    await settle(session)
+    orders = [m for m in gw.broker.transport.state.sent
+              if type(m).__name__ == "ProtoOANewOrderReq"]
+    assert orders == []
+    assert len(gw.broker.transport.state.sent) >= before
+
+
+async def test_a_fire_is_graded_and_recorded(stack):
+    gw, session, client = stack
+    await session.handle(frame("playbook.select", {"playbookId": "volman-break"}, seq=5))
+    gw.broker.transport.push_spot("XAUUSD", bid=2340.15, ask=2340.35)
+
+    cid = new_cid()
+    await session.handle(fire(cid=cid, relativeSl=200_000))
+    await settle(session)
+
+    grade = client.last("grade")
+    assert grade is not None
+    assert grade["p"]["cid"] == cid
+    assert grade["p"]["playbookId"] == "volman-break"
+
+    row = gw.journal.grade_row(cid)
+    assert row is not None
+    assert row["phase"] == "fire"
+
+
+async def test_grading_never_refuses_a_fire(stack):
+    """Even a grade that fails every rule leaves the order placed."""
+    gw, session, client = stack
+    await session.handle(frame("playbook.select", {"playbookId": "volman-break"}, seq=5))
+    cid = new_cid()
+    await session.handle(fire(cid=cid))
+    await settle(session)
+
+    assert client.last("order.ack") is not None
+    assert not [f for f in client.all("order.reject") if f["p"]["cid"] == cid]
+
+
+async def test_a_grading_failure_does_not_cost_the_fire(stack, monkeypatch):
+    gw, session, client = stack
+
+    def explode(*a, **k):
+        raise RuntimeError("grading is broken")
+
+    monkeypatch.setattr(gw, "grade", explode)
+    await session.handle(fire())
+    await settle(session)
+    assert client.last("order.ack") is not None
+    assert gw.containment.faults >= 1
+
+
+async def test_an_arm_pushes_a_preview_grade_that_is_not_recorded(stack):
+    """The overlay needs a grade before the fire; a trade_grade row for a trade
+    that never happened would inflate every count that reads them."""
+    gw, session, client = stack
+    await session.handle(frame("playbook.select", {"playbookId": "volman-break"}, seq=5))
+    before = gw.journal.conn.execute("SELECT COUNT(*) c FROM trade_grade").fetchone()["c"]
+
+    await session.handle(frame("pad.telemetry", {
+        "ts": now_ms(), "from": "CLUTCH", "to": "ARMED", "sym": "XAUUSD",
+        "lots": 0.01, "clutchMs": 400, "armMs": 10,
+    }, seq=6))
+
+    grade = client.last("grade")
+    assert grade is not None
+    assert grade["p"]["playbookId"] == "volman-break"
+    after = gw.journal.conn.execute("SELECT COUNT(*) c FROM trade_grade").fetchone()["c"]
+    assert after == before
+
+
+async def test_an_unplanned_fire_reads_as_unplanned(stack):
+    gw, session, client = stack
+    cid = new_cid()
+    await session.handle(fire(cid=cid))
+    await settle(session)
+    grade = client.last("grade")
+    assert grade["p"]["playbookId"] == "__unplanned__"
+    assert grade["p"]["clean"] is False
+
+
+async def test_a_checklist_answer_regrades_without_blocking(stack):
+    gw, session, client = stack
+    await session.handle(frame("playbook.select", {"playbookId": "volman-pullback-test"}, seq=5))
+    cid = new_cid()
+    await session.handle(fire(cid=cid))
+    await settle(session)
+    before = client.last("grade")["p"]["required_total"]
+
+    await session.handle(frame("grade.answer", {
+        "cid": cid, "ruleId": "pb.waited_for_test", "answer": True}, seq=7))
+
+    after = client.last("grade")["p"]
+    assert after["cid"] == cid
+    assert after["required_total"] == before + 1
+    assert gw.journal.grade_row(cid)["phase"] == "settled"
+
+
 async def test_a_broker_that_will_not_start_leaves_the_socket_serving(tmp_path, monkeypatch):
     """One process is one blast radius, so a dead broker must degrade the
     gateway rather than kill it."""
