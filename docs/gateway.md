@@ -142,9 +142,11 @@ ID, an IC Markets demo account, an approved Open API application, the manual
 consent flow, and a real symbol dump in `broker/fixtures/` — and the acceptance
 criteria pass against the real endpoint.
 
-Still outstanding from phase 2: M5 trendbar history for the chart seed, the
-per-trade tape freeze job on close (the ring and the freeze function exist and
-are tested; nothing schedules them yet), and session equity snapshots at open
-and close. Phases 4 and 6-14 are untouched: `ai.ask` answers `{disabled: true}`,
-and the voice, playbook, tilt, replay, and score messages are accepted and
-dropped.
+Phase 2's code is complete. The tape freezes at `closed_at + post_roll_s` and
+flushes on shutdown, MFE/MAE land on the closed trade, equity is snapshotted at
+open, once a minute, and at close, M5 history seeds the chart, and a watchdog
+re-authenticates and reconciles when the broker link comes back. What it has
+never done is speak to Spotware.
+
+Phases 4 and 6-14 are untouched: `ai.ask` answers `{disabled: true}`, and the
+voice, playbook, tilt, replay, and score messages are accepted and dropped.

@@ -360,6 +360,94 @@ async def test_a_stop_out_reaches_the_hud_and_the_journal(stack):
         (position_id,)).fetchone()["c"] == 1
 
 
+async def test_a_closed_trade_gets_its_tape_and_excursion(stack):
+    """End to end: fire, feed the tape, close, flush, and find both rows."""
+    gw, session, client = stack
+    base = now_ms()
+    for i in range(60):
+        gw.broker.transport.push_spot(
+            "XAUUSD", bid=2340.0 + (0.5 if i == 30 else 0.0),
+            ask=2340.2 + (0.5 if i == 30 else 0.0), ts=base + i * 1000)
+
+    await session.handle(fire(relativeSl=200_000))
+    await settle(session)
+    position_id = client.last("order.ack")["p"]["positionId"]
+
+    for i in range(60, 120):
+        gw.broker.transport.push_spot("XAUUSD", bid=2341.0, ask=2341.2, ts=base + i * 1000)
+
+    await session.handle(frame("intent.close",
+                               {"positionId": position_id, "clutch": True,
+                                "armedAt": now_ms()}, new_cid()))
+    await settle(session)
+    assert gw.freezer.pending_count == 1
+
+    # Shutting down inside the post-roll must still freeze.
+    await gw.freezer.flush_all()
+
+    tape = gw.journal.conn.execute(
+        "SELECT * FROM trade_tape WHERE position_id = ?", (position_id,)).fetchone()
+    assert tape is not None
+    assert tape["n"] > 0
+    assert tape["sym"] == "XAUUSD"
+
+    closed = gw.journal.conn.execute(
+        "SELECT * FROM trade_closed WHERE position_id = ?", (position_id,)).fetchone()
+    assert closed["mfe"] is not None
+    assert closed["mae"] is not None
+
+
+async def test_a_zero_trade_evening_writes_no_tape(stack):
+    gw, session, client = stack
+    base = now_ms()
+    for i in range(120):
+        gw.broker.transport.push_spot("XAUUSD", bid=2340.0, ask=2340.2, ts=base + i * 1000)
+    await gw.freezer.flush_all()
+    assert gw.journal.conn.execute(
+        "SELECT COUNT(*) c FROM trade_tape").fetchone()["c"] == 0
+
+
+async def test_the_session_records_equity_from_ctrader(stack):
+    """Balance is read from the account, never re-derived by summing fills."""
+    gw, session, client = stack
+    await gw.snapshot_equity()
+    sid = gw.state.session_id
+    row = gw.journal.conn.execute(
+        "SELECT * FROM session_equity WHERE session_id = ? ORDER BY ts DESC LIMIT 1",
+        (sid,)).fetchone()
+    assert row is not None
+    assert row["balance"] == pytest.approx(10_000.00)
+
+    opening = gw.journal.session_row(sid)
+    assert opening["equity_open"] == pytest.approx(10_000.00)
+
+
+async def test_the_opening_equity_is_not_overwritten_mid_session(stack):
+    """It is the baseline every P/L figure for the day is measured against, so
+    a restart must not move it."""
+    gw, session, client = stack
+    await gw.snapshot_equity()
+    sid = gw.state.session_id
+    gw.broker.transport.state.balance_cents = 500_000
+    await gw.snapshot_equity()
+
+    row = gw.journal.session_row(sid)
+    assert row["equity_open"] == pytest.approx(10_000.00)
+    points = gw.journal.conn.execute(
+        "SELECT COUNT(*) c FROM session_equity WHERE session_id = ?", (sid,)).fetchone()
+    assert points["c"] >= 2
+
+
+async def test_shutdown_closes_the_session_with_final_equity(stack):
+    gw, session, client = stack
+    await gw.snapshot_equity()
+    sid = gw.state.session_id
+    await gw.snapshot_equity(closing=True)
+    row = gw.journal.session_row(sid)
+    assert row["closed_at"] is not None
+    assert row["equity_close"] == pytest.approx(10_000.00)
+
+
 async def test_a_broker_that_will_not_start_leaves_the_socket_serving(tmp_path, monkeypatch):
     """One process is one blast radius, so a dead broker must degrade the
     gateway rather than kill it."""

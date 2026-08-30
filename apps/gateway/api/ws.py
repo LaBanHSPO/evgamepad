@@ -79,6 +79,7 @@ class WsSession:
         self._replay: deque[tuple[int, str]] = deque(maxlen=REPLAY_DEPTH)
         self._last_quote_sent: dict[str, float] = {}
         self._last_candle_sent = 0.0
+        self._resnap = False
         #: What the chart is showing. Set by `sub`; only this series is pushed.
         self.chart: tuple[str, str] = ("XAUUSD", "M5")
         self._pending: deque[tuple[str, Any, str | None]] = deque(maxlen=256)
@@ -104,6 +105,10 @@ class WsSession:
         frame = _execution_frame(update, self.gw.lots_for(update))
         if frame is not None:
             self._pending.append(frame)
+
+    def enqueue_resnap(self) -> None:
+        """Ask this socket to re-send its snapshot after a broker reconnect."""
+        self._resnap = True
 
     def enqueue_candle(self, payload: dict) -> None:
         """A closed bar. Pushed immediately -- a bar that closes late redraws
@@ -139,6 +144,10 @@ class WsSession:
         ))
 
     async def flush(self) -> None:
+        if self._resnap:
+            self._resnap = False
+            await self.emit("maint", {"reason": "broker_reconnected", "detail": "resynced"})
+            await self._snapshot()
         while self._pending:
             t, payload, cid = self._pending.popleft()
             await self.emit(t, payload, cid=cid)
@@ -210,6 +219,7 @@ class WsSession:
         tf = p.tf or self.chart[1]
         self.chart = (sym, tf)
         self._last_candle_sent = 0.0
+        self._resnap = False
         from .candles import payload as candle_payload
 
         for bar in self.gw.candles.history(sym, tf, limit=300):

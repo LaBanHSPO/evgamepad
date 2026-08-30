@@ -151,6 +151,24 @@ class JournalWriter:
             (now_ms, equity, balance, session_id),
         )
 
+    def session_row(self, session_id: int) -> sqlite3.Row | None:
+        return self._run("SELECT * FROM session WHERE id = ?", (session_id,)).fetchone()
+
+    def set_session_open_equity(
+        self, session_id: int, equity: float, balance: float
+    ) -> None:
+        """Fill the opening equity if it is still unset.
+
+        Written once, on the first snapshot of the evening. A restart mid-session
+        must not overwrite the equity the session actually opened at -- that is
+        the baseline every P/L figure for the day is measured against.
+        """
+        self._run(
+            "UPDATE session SET equity_open = COALESCE(equity_open, ?), "
+            "balance_open = COALESCE(balance_open, ?) WHERE id = ?",
+            (equity, balance, session_id),
+        )
+
     def record_equity(
         self,
         session_id: int,
@@ -314,6 +332,24 @@ class JournalWriter:
         return self._run(
             "SELECT * FROM session_process WHERE session_id = ?", (session_id,)
         ).fetchone()
+
+    def update_excursion(
+        self,
+        position_id: int,
+        *,
+        mfe: float,
+        mae: float,
+        mfe_r: float | None,
+        mae_r: float | None,
+    ) -> None:
+        """MFE/MAE land after the trade closes, once the post-roll has elapsed
+        and the tape is frozen -- so they are an update, not part of the insert
+        that had to happen at close time."""
+        self._run(
+            "UPDATE trade_closed SET mfe = ?, mae = ?, mfe_r = ?, mae_r = ? "
+            "WHERE position_id = ?",
+            (mfe, mae, mfe_r, mae_r, position_id),
+        )
 
     def day_loss_usd(self, session_id: int) -> float:
         """Realised loss so far today, as a positive number. Feeds the

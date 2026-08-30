@@ -54,6 +54,9 @@ log = logging.getLogger("ev.broker.ctrader")
 
 HEARTBEAT_S = 10.0
 
+#: How often the watchdog checks whether the broker link came back.
+RECONNECT_POLL_S = 5.0
+
 _SIDE_TO_PROTO = {"buy": model.BUY, "sell": model.SELL}
 _PROTO_TO_SIDE: dict[int, Side] = {model.BUY: "buy", model.SELL: "sell"}
 
@@ -134,8 +137,11 @@ class CTraderBroker(Broker):
         self._positions: dict[int, BrokerPosition] = {}
         self._last_heartbeat_ms: int | None = None
         self._heartbeat_task: asyncio.Task | None = None
+        self._watchdog_task: asyncio.Task | None = None
+        self.reconnects = 0
         self._on_execution: ExecutionSink | None = None
         self._on_spot: SpotSink | None = None
+        self._on_reconnect: Callable[[list[BrokerPosition]], None] | None = None
         self._detail: str | None = None
 
         transport.set_message_sink(self.containment("inbound")(self._on_message))
@@ -163,13 +169,58 @@ class CTraderBroker(Broker):
         await self.reconcile()
         self.authed = True
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        if self._watchdog_task is None:
+            self._watchdog_task = asyncio.create_task(self._watchdog_loop())
         log.info(
             "cTrader ready: account=%s symbols=%s",
             self.account_id,
             ",".join(sorted(self._specs)),
         )
 
+    async def _watchdog_loop(self) -> None:
+        """Re-auth and reconcile after the socket comes back.
+
+        With the sidecar gone there is one link rather than two, so the state
+        machine has one axis: either Spotware is reachable or it is not. On
+        the way back cTrader is the source of truth, so the local book is
+        rebuilt from Reconcile rather than trusted across the gap.
+        """
+        while True:
+            try:
+                await asyncio.sleep(RECONNECT_POLL_S)
+                if self.transport.connected:
+                    continue
+
+                self.authed = False
+                self._detail = "reconnecting"
+                await self.transport.connect()
+                await self._app_auth()
+                await self._account_auth()
+                await self._subscribe_spots()
+                positions = await self.reconcile()
+                self.authed = True
+                self._detail = None
+                self.reconnects += 1
+                log.info("broker link restored; reconciled %s position(s)", len(positions))
+                if self._on_reconnect is not None:
+                    self._on_reconnect(positions)
+            except asyncio.CancelledError:
+                return
+            except Exception as exc:
+                # Keep trying. A gateway that gives up on the broker is a
+                # gateway the player has to restart mid-evening.
+                self._detail = f"reconnect failed: {exc}"[:200]
+                self.containment.report("reconnect", str(exc))
+
+    def set_reconnect_sink(self, sink: Callable[[list[BrokerPosition]], None]) -> None:
+        self._on_reconnect = sink
+
     async def stop(self) -> None:
+        if self._watchdog_task is not None:
+            self._watchdog_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._watchdog_task
+            self._watchdog_task = None
         if self._heartbeat_task is not None:
             self._heartbeat_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

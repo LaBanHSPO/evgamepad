@@ -477,3 +477,54 @@ async def test_balance_is_read_from_ctrader_not_derived_from_fills():
 
     transport.state.balance_cents = 987_654
     assert (await broker.account()).balance == pytest.approx(9_876.54)
+
+
+# -- reconnect watchdog -----------------------------------------------------
+
+
+async def test_the_watchdog_restores_the_link_and_reconciles():
+    """One link, one axis: either Spotware is reachable or it is not. On the
+    way back cTrader is the source of truth, so the book is rebuilt."""
+    import apps.gateway.broker.ctrader as ct
+    from apps.gateway.broker.mock import MockPosition
+
+    broker, transport = await started()
+    seen: list[list] = []
+    broker.set_reconnect_sink(seen.append)
+
+    # The link drops, and a position appears while we are away.
+    transport.connected = False
+    broker.authed = False
+    transport.state.positions[8_800] = MockPosition(
+        position_id=8_800, symbol_id=41, side=model.BUY, volume=100,
+        entry=2339.0, opened_at=1_700_000_000_000,
+    )
+
+    original = ct.RECONNECT_POLL_S
+    ct.RECONNECT_POLL_S = 0.01
+    try:
+        await broker.stop()
+        broker._watchdog_task = asyncio.create_task(broker._watchdog_loop())
+        for _ in range(200):
+            await asyncio.sleep(0.01)
+            if broker.authed:
+                break
+        # Captured before teardown: stop() clears `authed` by design.
+        recovered = broker.authed
+        reconnects = broker.reconnects
+        book = [p.position_id for p in await broker.positions()]
+    finally:
+        ct.RECONNECT_POLL_S = original
+        await broker.stop()
+
+    assert recovered is True, f"detail={broker._detail} faults={broker.containment.faults}"
+    assert reconnects == 1
+    assert book == [8_800]
+    assert seen and [p.position_id for p in seen[0]] == [8_800]
+
+
+async def test_health_reports_the_link_as_down_while_it_is_down():
+    broker, transport = await started()
+    transport.connected = False
+    health = await broker.health()
+    assert health.connected is False

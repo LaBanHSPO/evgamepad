@@ -7,6 +7,7 @@ socket, no framing, and no two-process failure matrix in between.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from dataclasses import dataclass, field
@@ -17,6 +18,7 @@ from ..broker.conversion import AssetGraph
 from ..broker.factory import build_broker
 from ..config import Config
 from ..journal.tape.ring import TapeRing
+from ..journal.tape.scheduler import FreezeScheduler, PendingFreeze
 from .candles import Bar, CandleBook, payload as candle_payload
 from ..journal.writer import DuplicateCid, JournalWriter
 from ..protocol import now_ms
@@ -26,6 +28,9 @@ from ..risk import rules
 from ..risk.session import SessionWindow
 
 log = logging.getLogger("ev.gateway")
+
+#: How often an equity point is recorded through the evening.
+EQUITY_INTERVAL_S = 60
 
 _KIND = {
     "intent.open": "open",
@@ -68,11 +73,19 @@ class Gateway:
         self.session = SessionWindow(cfg.session, cfg.timezone)
         self.tape = TapeRing(cfg.tape.ring_minutes, cfg.tape.dt_s)
         self.candles = CandleBook()
+        self.freezer = FreezeScheduler(
+            self.tape,
+            self.journal,
+            pre_roll_s=cfg.tape.pre_roll_s,
+            post_roll_s=cfg.tape.post_roll_s,
+            dt_s=cfg.tape.dt_s,
+        )
         self.state = LiveState()
         self.token = os.environ.get(cfg.gateway.token_env, "")
         #: Live sockets. Quotes, fills and P/L are pushed to all of them; the
         #: WS layer registers and removes itself.
         self.sessions: set[Any] = set()
+        self._equity_task: asyncio.Task | None = None
         self._wire_broker()
 
     # -- broker lifecycle ---------------------------------------------------
@@ -89,6 +102,20 @@ class Gateway:
             self.broker.set_execution_sink(
                 self.containment("execution")(self._on_execution)
             )
+        if hasattr(self.broker, "set_reconnect_sink"):
+            self.broker.set_reconnect_sink(
+                self.containment("reconnect")(self._on_reconnect)
+            )
+
+    def _on_reconnect(self, positions: list) -> None:
+        """The broker link came back. Re-derive open state from what cTrader
+        says, and tell every socket -- the HUD's position strip is otherwise
+        showing whatever was true before the gap."""
+        self.state.open_positions = len(positions)
+        for session in list(self.sessions):
+            resnap = getattr(session, "enqueue_resnap", None)
+            if resnap is not None:
+                resnap()
 
     async def start(self) -> None:
         start = getattr(self.broker, "start", None)
@@ -104,6 +131,20 @@ class Gateway:
             self.state.locked = True
             return
         await self.seed_candles()
+        await self.snapshot_equity()
+        self._equity_task = asyncio.create_task(self._equity_loop())
+
+    async def _equity_loop(self) -> None:
+        """An equity point a minute, for phase 6's session curve. Cheap, and
+        the only way to draw the evening rather than just its endpoints."""
+        while True:
+            try:
+                await asyncio.sleep(EQUITY_INTERVAL_S)
+                await self.snapshot_equity()
+            except asyncio.CancelledError:
+                return
+            except Exception as exc:
+                self.containment.report("equity_loop", str(exc))
 
     async def seed_candles(self, timeframe: str = "M5") -> None:
         """One history call per symbol per session.
@@ -178,6 +219,7 @@ class Gateway:
         elif kind == "close":
             self.state.open_positions = max(0, self.state.open_positions - 1)
             self._record_close(update, lots, spec)
+            self._schedule_freeze(update, spec)
 
         self.broadcast(update)
 
@@ -211,6 +253,55 @@ class Gateway:
             "r_multiple": net / r_usd if r_usd else 0.0,
             "exit_reason": "manual",
         })
+
+    def _schedule_freeze(self, update: Any, spec: Any) -> None:
+        """Queue this trade's tape freeze for after the post-roll.
+
+        Only trades get tape. A zero-trade evening writes nothing, which is why
+        this hangs off the close rather than off the ring.
+        """
+        plan = self.journal.plan_for_position(update.position_id)
+        if not update.sym or not update.side:
+            return
+        self.freezer.schedule(
+            PendingFreeze(
+                position_id=update.position_id,
+                cid=update.cid,
+                sym=update.sym,
+                side=update.side,
+                entry=update.entry or (plan["planned_entry"] if plan else 0.0) or 0.0,
+                digits=spec.digits if spec else 5,
+                opened_at=plan["created_at"] if plan else update.ts,
+                closed_at=update.ts,
+                r_usd=(plan["r_usd"] if plan else None) or self.cfg.risk.r_unit_usd,
+                protocol_volume=(plan["protocol_volume"] if plan else 0) or update.volume,
+                r_rate=(plan["r_rate"] if plan else None) or 1.0,
+            ),
+            now_ms(),
+        )
+
+    async def snapshot_equity(self, ts: int | None = None, closing: bool = False) -> None:
+        """Record equity from cTrader.
+
+        The account is the money source of truth: balance is read, never
+        re-derived by summing fills. A journal that disagrees with the broker
+        about money is worse than no journal.
+        """
+        ts = now_ms() if ts is None else ts
+        try:
+            account = await self.broker.account()
+        except Exception as exc:
+            self.containment.report("equity", str(exc))
+            return
+        session_id = self.ensure_session(ts)
+        self.journal.record_equity(
+            session_id, ts, account.equity, account.balance,
+            open_pnl=account.equity - account.balance,
+        )
+        if closing:
+            self.journal.close_session(session_id, ts, account.equity, account.balance)
+        elif self.journal.session_row(session_id) is not None:
+            self.journal.set_session_open_equity(session_id, account.equity, account.balance)
 
     def lots_for(self, update: Any) -> float:
         """Protocol volume back into the lots the HUD speaks."""
@@ -497,6 +588,19 @@ class Gateway:
         return BrokerResult(ok=True, cid=cid)
 
     async def shutdown(self) -> None:
+        # Freeze first: a trade whose post-roll was still running must not lose
+        # its tape because the process stopped.
+        flushed = await self.freezer.flush_all()
+        if flushed:
+            log.info("flushed %s pending tape freeze(s) on shutdown", flushed)
+        try:
+            await self.snapshot_equity(closing=True)
+        except Exception as exc:
+            log.warning("closing equity snapshot: %s", exc)
+
+        if self._equity_task is not None:
+            self._equity_task.cancel()
+            self._equity_task = None
         stop = getattr(self.broker, "stop", None)
         if stop is not None:
             try:
