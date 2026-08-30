@@ -75,3 +75,41 @@ button {
   color: var(--phos-200) !important;
   border-color: var(--line-strong) !important;
 }
+
+/* Sidebar rail — collapsed to icons by default, expands while hovered or focused. */
+.ev-nav {
+  width: var(--nav-rail, 48px);
+  transition: width var(--dur-med, 180ms) var(--ease-out, ease);
+  overflow: hidden;
+}
+.ev-nav:hover,
+.ev-nav:has(:focus-visible) {
+  width: var(--nav-open, 216px);
+}
+.ev-nav-label {
+  opacity: 0;
+  white-space: nowrap;
+  transition: opacity var(--dur-fast, 120ms) var(--ease-out, ease);
+}
+.ev-nav:hover .ev-nav-label,
+.ev-nav:has(:focus-visible) .ev-nav-label {
+  opacity: 1;
+}
+/* The rail glyph stands in for the label while collapsed. */
+.ev-nav-short {
+  opacity: 1;
+  transition: opacity var(--dur-fast, 120ms) var(--ease-out, ease);
+}
+.ev-nav:hover .ev-nav-short,
+.ev-nav:has(:focus-visible) .ev-nav-short {
+  opacity: 0;
+}
+/* Scrolls in both states — the rail just hides its scrollbar. */
+.ev-nav-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.ev-nav-scroll::-webkit-scrollbar {
+  width: 0;
+}
