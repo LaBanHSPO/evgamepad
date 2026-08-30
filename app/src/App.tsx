@@ -49,9 +49,14 @@ type ScreenId =
   | "settings"
   | "philosophy";
 
-const GROUPS: { heading: string; items: { id: ScreenId; label: string }[] }[] = [
+const GROUPS: {
+  heading: string;
+  short: string;
+  items: { id: ScreenId; label: string }[];
+}[] = [
   {
     heading: "1 · Before the session",
+    short: "1",
     items: [
       { id: "title", label: "Attract screen" },
       { id: "boot", label: "Boot sequence" },
@@ -60,6 +65,7 @@ const GROUPS: { heading: string; items: { id: ScreenId; label: string }[] }[] = 
   },
   {
     heading: "2 · In session",
+    short: "2",
     items: [
       { id: "session", label: "Session HUD" },
       { id: "artmatrix", label: "HUD on matrix art" },
@@ -71,6 +77,7 @@ const GROUPS: { heading: string; items: { id: ScreenId; label: string }[] }[] = 
   },
   {
     heading: "3 · After the session",
+    short: "3",
     items: [
       { id: "clear", label: "Session clear" },
       { id: "over", label: "Session over" },
@@ -83,6 +90,7 @@ const GROUPS: { heading: string; items: { id: ScreenId; label: string }[] }[] = 
   },
   {
     heading: "4 · Setup & reference",
+    short: "4",
     items: [
       { id: "pad", label: "Gamepad" },
       { id: "data", label: "Data" },
@@ -114,12 +122,17 @@ const SCREENS: Record<Exclude<ScreenId, "session">, () => JSX.Element> = {
   philosophy: PhilosophyScreen,
 };
 
+const RAIL = 48;
+const OPEN = 216;
+
 const navStyle = (active: boolean): CSSProperties => ({
   display: "flex",
   alignItems: "center",
+  gap: 10,
   height: 32,
-  padding: "0 12px",
-  width: "100%",
+  padding: "0 12px 0 16px",
+  width: OPEN,
+  boxSizing: "border-box",
   textAlign: "left",
   border: 0,
   borderLeft: `2px solid ${active ? "var(--phos-400)" : "transparent"}`,
@@ -135,10 +148,31 @@ const navStyle = (active: boolean): CSSProperties => ({
 });
 
 const headingStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
   fontSize: 9,
   letterSpacing: ".18em",
   textTransform: "uppercase",
   color: "var(--text-disabled)",
+};
+
+/* The dot column sits under the rail's centre line, so items stay readable
+   as markers while the labels are clipped away. */
+const dotStyle = (active: boolean): CSSProperties => ({
+  flex: "none",
+  width: 8,
+  height: 8,
+  borderRadius: 1,
+  border: `1px solid ${active ? "var(--phos-400)" : "var(--text-disabled)"}`,
+  background: active ? "var(--phos-400)" : "transparent",
+  ...(active ? { boxShadow: "var(--glow-text)" } : null),
+});
+
+const shortStyle: CSSProperties = {
+  flex: "none",
+  width: 8,
+  textAlign: "center",
 };
 
 export default function App() {
@@ -150,7 +184,7 @@ export default function App() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "216px 1fr",
+          gridTemplateColumns: `${RAIL}px 1fr`,
           minHeight: "100vh",
           background: "var(--surface-app)",
           fontFamily: "var(--font-core)",
@@ -158,15 +192,18 @@ export default function App() {
         }}
       >
         <nav
+          className="ev-nav"
           style={{
             borderRight: "1px solid var(--line-hairline)",
             background: "var(--black-2)",
             display: "grid",
             gridTemplateRows: "44px 1fr auto",
             alignContent: "start",
-            position: "sticky",
+            position: "fixed",
+            left: 0,
             top: 0,
             height: "100vh",
+            zIndex: 30,
           }}
         >
           <div
@@ -185,23 +222,31 @@ export default function App() {
                 textShadow: "var(--glow-text)",
               }}
             >
-              EV<span style={{ color: "var(--arcade-red)" }}>GAMEPAD</span>
+              EV
+              <span className="ev-nav-label" style={{ color: "var(--arcade-red)" }}>
+                GAMEPAD
+              </span>
             </span>
           </div>
 
           <div
+            className="ev-nav-scroll"
             style={{
               padding: "10px 0",
               display: "grid",
               gap: 2,
               alignContent: "start",
-              overflow: "auto",
             }}
           >
             {GROUPS.map((group, gi) => (
               <div key={group.heading} style={{ display: "grid", gap: 2 }}>
-                <div style={{ ...headingStyle, padding: gi === 0 ? "6px 12px" : "14px 12px 6px" }}>
-                  {group.heading}
+                <div
+                  style={{ ...headingStyle, padding: gi === 0 ? "6px 12px 6px 18px" : "14px 12px 6px 18px" }}
+                >
+                  <span className="ev-nav-short" style={shortStyle}>
+                    {group.short}
+                  </span>
+                  <span className="ev-nav-label">{group.heading}</span>
                 </div>
                 {group.items.map((item) => (
                   <button
@@ -209,15 +254,22 @@ export default function App() {
                     className="ev-nav-item"
                     onClick={() => setScreen(item.id)}
                     style={navStyle(screen === item.id)}
+                    title={item.label}
                   >
-                    {item.label}
+                    <span style={dotStyle(screen === item.id)} />
+                    <span className="ev-nav-label">{item.label}</span>
                   </button>
                 ))}
 
                 {/* the HUD's six states hang off the in-session group */}
                 {gi === 1 ? (
                   <>
-                    <div style={{ ...headingStyle, padding: "14px 12px 6px" }}>Session state</div>
+                    <div style={{ ...headingStyle, padding: "14px 12px 6px 18px" }}>
+                      <span className="ev-nav-short" style={shortStyle}>
+                        S
+                      </span>
+                      <span className="ev-nav-label">Session state</span>
+                    </div>
                     {HUD_STATES.map((state) => (
                       <button
                         key={state.id}
@@ -227,8 +279,10 @@ export default function App() {
                           setHud(state.id);
                         }}
                         style={navStyle(screen === "session" && hud === state.id)}
+                        title={state.label}
                       >
-                        {state.label}
+                        <span style={dotStyle(screen === "session" && hud === state.id)} />
+                        <span className="ev-nav-label">{state.label}</span>
                       </button>
                     ))}
                   </>
@@ -245,9 +299,16 @@ export default function App() {
               gap: 6,
             }}
           >
-            <span style={headingStyle}>Click-through</span>
+            <span style={{ ...headingStyle, padding: "0 0 0 6px" }}>
+              <span className="ev-nav-short" style={shortStyle}>
+                &gt;
+              </span>
+              <span className="ev-nav-label">Click-through</span>
+            </span>
             <span
+              className="ev-nav-label"
               style={{
+                width: OPEN - 24,
                 fontFamily: "var(--font-terminal)",
                 fontSize: 15,
                 color: "var(--phos-600)",
@@ -260,6 +321,8 @@ export default function App() {
 
         <main
           style={{
+            /* the rail is fixed, so main claims the second column explicitly */
+            gridColumn: 2,
             padding: 20,
             overflow: "auto",
             display: "grid",
