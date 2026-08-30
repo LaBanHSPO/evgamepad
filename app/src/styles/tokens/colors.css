@@ -1,0 +1,93 @@
+:root{
+  /* ---- base: deep terminal blacks ---- */
+  --black-0:#000000;
+  --black-1:#040604;      /* app background */
+  --black-2:#080C08;      /* panel */
+  --black-3:#0D130D;      /* raised panel / row hover */
+  --black-4:#131B13;      /* input well */
+  --black-5:#1B241B;      /* hairline-adjacent fill */
+
+  /* ---- phosphor green ramp (Matrix code rain) ---- */
+  --phos-100:#D2FFDE;
+  --phos-200:#8CFFAC;
+  --phos-300:#3DFF6E;
+  --phos-400:#00FF41;     /* the signature phosphor */
+  --phos-500:#00D636;
+  --phos-600:#00A62A;
+  --phos-700:#00751D;
+  --phos-800:#004B13;
+  --phos-900:#00280A;
+  --phos-950:#001706;
+
+  /* ---- arcade accents (Contra sprite palette) ---- */
+  --arcade-red:#E8202A;
+  --arcade-red-dim:#8E1119;
+  --arcade-orange:#FF8A00;
+  --arcade-yellow:#FFD400;
+  --arcade-cyan:#22E0FF;
+  --arcade-blue:#1668FF;
+  --arcade-magenta:#FF3DA6;
+
+  /* ---- neutrals ---- */
+  --grey-100:#E8EFE8;
+  --grey-300:#A8B6A8;
+  --grey-500:#6E7C6E;
+  --grey-700:#3F4A3F;
+  --grey-900:#212821;
+
+  /* ---- alpha utilities ---- */
+  --phos-a08:rgba(0,255,65,.08);
+  --phos-a16:rgba(0,255,65,.16);
+  --phos-a32:rgba(0,255,65,.32);
+  --phos-a64:rgba(0,255,65,.64);
+  --black-a64:rgba(0,0,0,.64);
+  --black-a88:rgba(0,0,0,.88);
+
+  /* ---- semantic: surfaces ---- */
+  --surface-app:var(--black-1);
+  --surface-panel:var(--black-2);
+  --surface-raised:var(--black-3);
+  --surface-well:var(--black-4);
+  --surface-overlay:var(--black-a88);
+  --surface-hover:var(--phos-a08);
+  --surface-selected:var(--phos-a16);
+
+  /* ---- semantic: text ---- */
+  --text-primary:var(--phos-100);
+  --text-body:var(--grey-100);
+  --text-secondary:var(--grey-300);
+  --text-muted:var(--grey-500);
+  --text-disabled:var(--grey-700);
+  --text-accent:var(--phos-400);
+  --text-inverse:var(--black-1);
+  --text-terminal:var(--phos-300);
+
+  /* ---- semantic: lines ---- */
+  --line-hairline:rgba(0,255,65,.16);
+  --line-strong:rgba(0,255,65,.42);
+  --line-solid:var(--phos-700);
+  --line-neutral:var(--grey-900);
+
+  /* ---- semantic: trading ---- */
+  --pnl-up:var(--phos-400);
+  --pnl-up-bg:var(--phos-a16);
+  --pnl-down:var(--arcade-red);
+  --pnl-down-bg:rgba(232,32,42,.16);
+  --pnl-flat:var(--grey-500);
+  --side-long:var(--phos-400);
+  --side-short:var(--arcade-red);
+
+  /* ---- semantic: status ---- */
+  --status-live:var(--phos-400);
+  --status-warn:var(--arcade-yellow);
+  --status-danger:var(--arcade-red);
+  --status-info:var(--arcade-cyan);
+  --status-agent:var(--arcade-magenta);
+
+  /* ---- semantic: gamepad face buttons (mapped to sprite palette) ---- */
+  --pad-a:var(--phos-400);
+  --pad-b:var(--arcade-red);
+  --pad-x:var(--arcade-cyan);
+  --pad-y:var(--arcade-yellow);
+  --pad-shoulder:var(--grey-300);
+}

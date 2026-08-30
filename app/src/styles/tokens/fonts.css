@@ -1,0 +1,5 @@
+/* EVGamePad webfonts.
+   NOTE: no font binaries were supplied with the brief. These are Google Fonts
+   stand-ins chosen for the Matrix/Contra direction. Swap the @import for local
+   @font-face rules if licensed files arrive. */
+@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=VT323&display=swap");

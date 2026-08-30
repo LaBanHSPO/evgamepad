@@ -1,0 +1,50 @@
+:root{
+  /* radii — the system is square. Rounding is an exception, not a default. */
+  --radius-none:0;
+  --radius-xs:1px;
+  --radius-sm:2px;
+  --radius-md:3px;
+  --radius-pill:999px;   /* status dots and pad glyphs only */
+
+  /* borders */
+  --border-hairline:1px solid var(--line-hairline);
+  --border-strong:1px solid var(--line-strong);
+  --border-solid:1px solid var(--line-solid);
+  --border-neutral:1px solid var(--line-neutral);
+  --border-w:1px; /* @kind spacing */
+  --border-w-thick:2px; /* @kind spacing */
+
+  /* glow — the only "shadow" the brand uses for emphasis */
+  --glow-xs:0 0 4px rgba(0,255,65,.30);
+  --glow-sm:0 0 8px rgba(0,255,65,.28);
+  --glow-md:0 0 16px rgba(0,255,65,.26);
+  --glow-lg:0 0 32px rgba(0,255,65,.22);
+  --glow-red:0 0 12px rgba(232,32,42,.35);
+  --glow-text:0 0 6px rgba(0,255,65,.55);
+
+  /* hard arcade offset shadow — sprite drop, never blurred */
+  --sprite-shadow:2px 2px 0 var(--black-0);
+  --sprite-shadow-lg:4px 4px 0 var(--black-0);
+
+  /* inset well */
+  --inset-well:inset 0 0 0 1px rgba(0,255,65,.10), inset 0 2px 8px rgba(0,0,0,.6); /* @kind shadow */
+
+  /* overlay veils */
+  --veil-scanline:repeating-linear-gradient(180deg,rgba(0,0,0,0) 0 2px,rgba(0,0,0,.22) 2px 3px); /* @kind other */
+  --veil-grid:linear-gradient(rgba(0,255,65,.05) 1px,transparent 1px) 0 0/100% 24px,linear-gradient(90deg,rgba(0,255,65,.05) 1px,transparent 1px) 0 0/24px 100%; /* @kind other */
+  --veil-vignette:radial-gradient(120% 90% at 50% 0%,transparent 40%,rgba(0,0,0,.72) 100%); /* @kind other */
+  --protect-bottom:linear-gradient(180deg,transparent 0%,rgba(0,0,0,.85) 100%); /* @kind other */
+
+  /* blur */
+  --blur-overlay:blur(6px); /* @kind other */
+  --blur-heavy:blur(14px); /* @kind other */
+
+  /* focus */
+  --focus-ring:0 0 0 1px var(--black-1),0 0 0 2px var(--phos-400); /* @kind shadow */
+
+  /* z */
+  --z-hud:20; /* @kind other */
+  --z-dropdown:40; /* @kind other */
+  --z-overlay:60; /* @kind other */
+  --z-toast:80; /* @kind other */
+}

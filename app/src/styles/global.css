@@ -1,0 +1,77 @@
+@import "./tokens/fonts.css";
+@import "./tokens/colors.css";
+@import "./tokens/typography.css";
+@import "./tokens/spacing.css";
+@import "./tokens/effects.css";
+@import "./tokens/motion.css";
+
+/* Prototype body baseline — Prototype.dc.html <style> block. */
+body {
+  margin: 0;
+  background: #040604;
+  color: #e8efe8;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+a {
+  color: #3dff6e;
+  text-decoration: none;
+}
+a:hover {
+  color: #8cffac;
+}
+button {
+  font-family: inherit;
+}
+
+/* Screen-local keyframes authored in the prototype's own <style> block.
+   ev-blink / ev-flicker / ev-scan / ev-pulse come from tokens/motion.css. */
+@keyframes ev-shake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-2px, 1px); }
+  40% { transform: translate(2px, -1px); }
+  60% { transform: translate(-1px, -2px); }
+  80% { transform: translate(1px, 2px); }
+}
+@keyframes ev-alert {
+  0%, 49% { opacity: 0.55; }
+  50%, 100% { opacity: 0; }
+}
+@keyframes ev-tracer {
+  0% { transform: translate(-40%, 40%); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translate(120%, -120%); opacity: 0; }
+}
+@keyframes ev-burst {
+  0% { transform: scale(0.2); opacity: 1; }
+  60% { opacity: 0.9; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+@keyframes ev-muzzle {
+  0%, 100% { opacity: 0; }
+  45% { opacity: 0; }
+  50% { opacity: 1; }
+  55% { opacity: 0.3; }
+}
+@keyframes ev-hpdrain {
+  0% { width: 64%; }
+  100% { width: 58%; }
+}
+@keyframes ev-scanv {
+  0% { transform: translateY(0); opacity: 0.15; }
+  50% { opacity: 0.7; }
+  100% { transform: translateY(268px); opacity: 0.15; }
+}
+@keyframes ev-hazard {
+  0% { background-position: 0 0; }
+  100% { background-position: 56px 0; }
+}
+
+/* Sidebar nav hover — the prototype's style-hover attribute. */
+.ev-nav-item:hover {
+  background: var(--surface-hover) !important;
+  color: var(--phos-300) !important;
+}
+.ev-bgm-btn:hover {
+  color: var(--phos-200) !important;
+  border-color: var(--line-strong) !important;
+}

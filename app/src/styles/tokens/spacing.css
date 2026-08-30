@@ -1,0 +1,34 @@
+:root{
+  /* 4px grid with a 2px sub-step for arcade hairline work */
+  --space-0:0;
+  --space-px:1px;
+  --space-2:2px;
+  --space-4:4px;
+  --space-6:6px;
+  --space-8:8px;
+  --space-12:12px;
+  --space-16:16px;
+  --space-20:20px;
+  --space-24:24px;
+  --space-32:32px;
+  --space-40:40px;
+  --space-48:48px;
+  --space-64:64px;
+  --space-96:96px;
+
+  /* component metrics */
+  --control-h-sm:24px;
+  --control-h-md:32px;
+  --control-h-lg:40px;
+  --control-pad-x:12px;
+  --row-h:36px;
+  --sidebar-w:216px;
+  --rail-w:52px;
+  --panel-pad:16px;
+  --hud-h:44px;
+
+  /* layout */
+  --max-content:1280px;
+  --max-prose:64ch;
+  --grid-gap:16px;
+}
