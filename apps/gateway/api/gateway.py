@@ -17,6 +17,7 @@ from ..broker.conversion import AssetGraph
 from ..broker.factory import build_broker
 from ..config import Config
 from ..journal.tape.ring import TapeRing
+from .candles import Bar, CandleBook, payload as candle_payload
 from ..journal.writer import DuplicateCid, JournalWriter
 from ..protocol import now_ms
 from ..protocol.catalog import IntentClose, IntentModify, IntentOpen, IntentPanic
@@ -66,6 +67,7 @@ class Gateway:
         self.journal = journal or JournalWriter(cfg.db_path)
         self.session = SessionWindow(cfg.session, cfg.timezone)
         self.tape = TapeRing(cfg.tape.ring_minutes, cfg.tape.dt_s)
+        self.candles = CandleBook()
         self.state = LiveState()
         self.token = os.environ.get(cfg.gateway.token_env, "")
         #: Live sockets. Quotes, fills and P/L are pushed to all of them; the
@@ -100,6 +102,33 @@ class Gateway:
             # gets a reason instead of a dead container.
             self.containment.report("startup", str(exc))
             self.state.locked = True
+            return
+        await self.seed_candles()
+
+    async def seed_candles(self, timeframe: str = "M5") -> None:
+        """One history call per symbol per session.
+
+        Sequential, not gathered: the Open API's history limit is around five
+        requests a second, and a burst of four on connect is the easiest way to
+        get throttled on the one call the chart cannot start without.
+        """
+        trendbars = getattr(self.broker, "trendbars", None)
+        if trendbars is None:
+            return
+        for sym in self.cfg.symbol_names:
+            if self.candles.is_seeded(sym, timeframe):
+                continue
+            try:
+                rows = await trendbars(sym, timeframe)
+            except Exception as exc:
+                # A missing chart seed is a cosmetic failure. Live bars still
+                # build from the spot stream, so this must not stop the session.
+                self.containment.report("trendbars", f"{sym}: {exc}")
+                continue
+            self.candles.seed(
+                sym, timeframe,
+                [Bar(ts=ts, o=o, h=h, l=lo, c=c) for ts, o, h, lo, c in rows],
+            )
 
     def _on_spot(self, sym: str, bid_raw: int, ask_raw: int, ts_ms: int) -> None:
         """The raw spot tap: tape ring first, then the derived state.
@@ -111,8 +140,15 @@ class Gateway:
         digits = spec.digits if spec else 5
         self.tape.on_tick(sym, bid_raw, ask_raw, ts_ms, digits=digits)
         scale = 10 ** 5
+        bid = bid_raw / scale
         self.state.spreads[sym] = (ask_raw - bid_raw) / scale
-        self.state.last_quote[sym] = (bid_raw / scale, ask_raw / scale, ts_ms)
+        self.state.last_quote[sym] = (bid, ask_raw / scale, ts_ms)
+
+        # Only *closed* bars are pushed here. The forming bar changes on every
+        # tick and is sent on a timer instead, so the chart never becomes a
+        # second quote-rate stream on the socket carrying order acks.
+        for tf, bar in self.candles.on_price(sym, round(bid, digits), ts_ms):
+            self.broadcast_candle(sym, tf, bar)
 
     def _on_execution(self, update: Any) -> None:
         """Journal every broker fact, then tell the sockets.
@@ -217,6 +253,12 @@ class Gateway:
             "pnl": pnl,
             "rMultiple": (pnl / r_usd) if r_usd else None,
         }
+
+    def broadcast_candle(self, sym: str, tf: str, bar: Any) -> None:
+        for session in list(self.sessions):
+            enqueue = getattr(session, "enqueue_candle", None)
+            if enqueue is not None:
+                enqueue(candle_payload(sym, tf, bar))
 
     def broadcast(self, update: Any) -> None:
         for session in list(self.sessions):

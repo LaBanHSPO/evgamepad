@@ -58,6 +58,10 @@ Send = Callable[[str], Awaitable[None]]
 #: sending it would compete with the order acks this socket exists to deliver.
 QUOTE_HZ = 15.0
 
+#: The forming bar only needs to move often enough to look alive. Closed bars
+#: are pushed the moment they close, so nothing is lost by being slow here.
+CANDLE_HZ = 2.0
+
 #: Frames kept for replay after a `resync`. A reconnect that has fallen further
 #: behind than this gets a fresh snapshot instead of a partial history, which is
 #: the honest answer -- a gap silently stitched over is worse than a resnap.
@@ -74,6 +78,9 @@ class WsSession:
         self.subs: set[str] = set()
         self._replay: deque[tuple[int, str]] = deque(maxlen=REPLAY_DEPTH)
         self._last_quote_sent: dict[str, float] = {}
+        self._last_candle_sent = 0.0
+        #: What the chart is showing. Set by `sub`; only this series is pushed.
+        self.chart: tuple[str, str] = ("XAUUSD", "M5")
         self._pending: deque[tuple[str, Any, str | None]] = deque(maxlen=256)
 
     # -- outbound -----------------------------------------------------------
@@ -97,6 +104,26 @@ class WsSession:
         frame = _execution_frame(update, self.gw.lots_for(update))
         if frame is not None:
             self._pending.append(frame)
+
+    def enqueue_candle(self, payload: dict) -> None:
+        """A closed bar. Pushed immediately -- a bar that closes late redraws
+        the chart's last candle under the player."""
+        if (payload["sym"], payload["tf"]) != self.chart:
+            return
+        self._pending.append(("candle", payload, None))
+
+    def enqueue_forming(self, now_ms_: int) -> None:
+        """The right-hand candle, throttled to CANDLE_HZ."""
+        if now_ms_ - self._last_candle_sent < 1000 / CANDLE_HZ:
+            return
+        sym, tf = self.chart
+        bar = self.gw.candles.forming(sym, tf)
+        if bar is None:
+            return
+        self._last_candle_sent = now_ms_
+        from .candles import payload as candle_payload
+
+        self._pending.append(("candle", candle_payload(sym, tf, bar), None))
 
     def enqueue_quote(self, sym: str, bid: float, ask: float, ts: int, digits: int) -> None:
         """Conflate to QUOTE_HZ. The ring already has every tick."""
@@ -174,6 +201,19 @@ class WsSession:
 
     async def _on_sub(self, frame: Any, p: Sub) -> None:
         self.subs.add(p.ch)
+        if p.ch != "quotes":
+            return
+        # A `sub` on quotes also selects the chart series, and replays its
+        # history so the chart is populated within a frame of subscribing
+        # rather than filling in one bar at a time.
+        sym = p.syms[0] if p.syms else self.chart[0]
+        tf = p.tf or self.chart[1]
+        self.chart = (sym, tf)
+        self._last_candle_sent = 0.0
+        from .candles import payload as candle_payload
+
+        for bar in self.gw.candles.history(sym, tf, limit=300):
+            await self.emit("candle", candle_payload(sym, tf, bar))
 
     async def _on_resync(self, frame: Any, p: Resync) -> None:
         pending = [raw for seq, raw in self._replay if seq > p.fromSeq]

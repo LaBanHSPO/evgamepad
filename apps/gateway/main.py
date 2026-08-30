@@ -155,6 +155,7 @@ async def _pump(session: WsSession, gw: Gateway) -> None:
         for sym, (bid, ask, ts) in list(gw.state.last_quote.items()):
             spec = gw.broker.symbol_spec(sym)
             session.enqueue_quote(sym, bid, ask, ts, spec.digits if spec else 5)
+        session.enqueue_forming(int(asyncio.get_running_loop().time() * 1000))
         try:
             await session.flush()
         except Exception:

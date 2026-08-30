@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CHANNEL_OF } from "../protocol/types";
 import { FIRE_TIMEOUT_MS, Gateway, newCid, type PendingFire } from "./ws";
 
 describe("cid", () => {
@@ -79,5 +80,29 @@ describe("token handling", () => {
     ].join("|");
     expect(dump).not.toContain("super-secret-token");
     expect(globalThis.localStorage?.length ?? 0).toBe(0);
+  });
+});
+
+describe("the envelope channel", () => {
+  it("comes from the catalog, not the caller", () => {
+    // `sub` rides `session` while subscribing *to* `quotes`. Sending it on
+    // `quotes` gets it rejected as wrong_channel — and a rejection arrives as
+    // an `error` frame, not an exception, so it fails silently.
+    expect(CHANNEL_OF["sub"]).toBe("session");
+    expect(CHANNEL_OF["intent.open"]).toBe("orders");
+    expect(CHANNEL_OF["pad.telemetry"]).toBe("session");
+    expect(CHANNEL_OF["voice.begin"]).toBe("voice");
+  });
+
+  it("refuses a message type the catalog does not know", () => {
+    const gw = new Gateway("ws://localhost/ws");
+    expect(() => gw.send("intent.teleport", {})).toThrow(/unknown message type/);
+  });
+
+  it("covers every type the client sends", () => {
+    for (const t of ["hello", "ping", "sub", "resync", "snap", "pad.telemetry",
+                     "intent.open", "intent.close", "intent.modify", "intent.panic"]) {
+      expect(CHANNEL_OF[t]).toBeTruthy();
+    }
   });
 });

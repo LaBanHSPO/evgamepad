@@ -584,6 +584,50 @@ class CTraderBroker(Broker):
             req.takeProfit = tp
         return await self._order_call(req, cid)
 
+    async def trendbars(
+        self, sym: str, timeframe: str = "M5", count: int = 200
+    ) -> list[tuple[int, float, float, float, float]]:
+        """M5 history for the chart seed, as ``(ts_s, o, h, l, c)``.
+
+        ``ProtoOATrendbar`` is **delta encoded**: ``low`` is the only absolute
+        price, and open/high/close are unsigned offsets *above* it. Reading
+        ``deltaOpen`` as a price is the bug that draws a chart pinned near zero.
+        Timestamps arrive as minutes since the epoch, not milliseconds.
+
+        Seeded once per symbol per session -- the history endpoint is limited to
+        roughly 5 req/s and live bars cover everything after the seed.
+        """
+        spec = self._specs.get(sym)
+        if spec is None:
+            raise BrokerFault(f"{sym} is not a resolved symbol")
+        period = _PERIODS.get(timeframe)
+        if period is None:
+            raise BrokerFault(f"{timeframe} is not a supported trendbar period")
+
+        seconds = _PERIOD_SECONDS[timeframe]
+        now_ms_ = int(time.time() * 1000)
+        req = msgs.ProtoOAGetTrendbarsReq(
+            ctidTraderAccountId=self.account_id,
+            symbolId=spec.symbol_id,
+            period=period,
+            fromTimestamp=now_ms_ - count * seconds * 1000,
+            toTimestamp=now_ms_,
+        )
+        res = await self._call(req, f"trendbars {sym} {timeframe}")
+
+        bars: list[tuple[int, float, float, float, float]] = []
+        for tb in res.trendbar:
+            low = tb.low
+            bars.append((
+                tb.utcTimestampInMinutes * 60,
+                _px(low + tb.deltaOpen, spec.digits),
+                _px(low + tb.deltaHigh, spec.digits),
+                _px(low, spec.digits),
+                _px(low + tb.deltaClose, spec.digits),
+            ))
+        bars.sort(key=lambda b: b[0])
+        return bars
+
     async def reconcile(self) -> list[BrokerPosition]:
         """cTrader is the source of truth after any reconnect. The local book is
         replaced, never merged -- a merge would resurrect a position the broker
@@ -711,6 +755,25 @@ class CTraderBroker(Broker):
         return BrokerResult(
             ok=True, cid=cid, order_id=update.order_id, position_id=update.position_id
         )
+
+
+#: Trendbar periods the HUD offers, mapped to the Open API enum.
+_PERIODS: dict[str, int] = {
+    "M1": model.M1,
+    "M5": model.M5,
+    "M15": model.M15,
+    "H1": model.H1,
+    "H4": model.H4,
+    "D1": model.D1,
+}
+
+_PERIOD_SECONDS: dict[str, int] = {
+    "M1": 60, "M5": 300, "M15": 900, "H1": 3600, "H4": 14_400, "D1": 86_400,
+}
+
+
+def _px(raw: int, digits: int) -> float:
+    return round(raw / RELATIVE_UNITS_PER_PRICE, digits)
 
 
 def _unscale(price: float) -> int:

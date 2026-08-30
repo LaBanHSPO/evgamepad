@@ -27,6 +27,7 @@ import { PadReader, rumble, startPolling, type RawFrame } from "../pad/poll";
 import { beginPtt, endPtt, initialPtt, onClutchDuringPtt, type PttState } from "../pad/ptt";
 import { TelemetryCollector } from "../pad/telemetry";
 import type { ServerFrame } from "../protocol/types";
+import type { CandleFrame } from "./Chart";
 import { StandDownCounter, type MarketContext, type PnlUnit } from "./process";
 
 export const SYMBOLS = ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY"] as const;
@@ -74,6 +75,8 @@ export type GameView = {
 export type GameApi = {
   view: GameView;
   quotes: React.MutableRefObject<Map<string, Quote>>;
+  /** Chart frames, drained by the chart's own rAF loop. */
+  candles: React.MutableRefObject<CandleFrame[]>;
   connect: (token: string) => void;
   setPnlUnit: (unit: PnlUnit) => void;
   /** Keyboard/click Flatten. Works with no pad, and bypasses the dead-man. */
@@ -88,6 +91,7 @@ const WS_URL = `${location.protocol === "https:" ? "wss" : "ws"}://${location.ho
 export function useGame(): GameApi {
   const gatewayRef = useRef<Gateway | null>(null);
   const quotes = useRef<Map<string, Quote>>(new Map());
+  const candles = useRef<CandleFrame[]>([]);
   const fsmRef = useRef<Fsm>(initialFsm());
   const prevInputs = useRef<Inputs>(NO_INPUT);
   const chordRef = useRef<ChordState>(initialChord());
@@ -150,6 +154,10 @@ export function useGame(): GameApi {
           quotes.current.set(p.sym, { bid: p.bid, ask: p.ask, ts: p.ts, digits: p.digits });
           break;
         }
+        case "candle":
+          // Into a ref, like quotes. The chart drains it on its own frame.
+          candles.current.push(frame.p as CandleFrame);
+          break;
         case "welcome":
           patch({ connDetail: "" });
           break;
@@ -343,6 +351,16 @@ export function useGame(): GameApi {
     return () => clearInterval(id);
   }, [patch]);
 
+  // Re-subscribe whenever the chart series changes: the gateway replays that
+  // series' history on `sub`, so the chart fills in one frame rather than one
+  // bar at a time.
+  useEffect(() => {
+    const gw = gatewayRef.current;
+    if (!gw || gw.state !== "open") return;
+    candles.current.length = 0;
+    gw.send("sub", { ch: "quotes", syms: [view.sym], tf: view.timeframe });
+  }, [view.sym, view.timeframe, view.conn]);
+
   const flatten = useCallback(() => {
     // Available with no pad and never gated: a safety exit must not depend on
     // hardware the player may have just unplugged.
@@ -356,6 +374,7 @@ export function useGame(): GameApi {
   return {
     view,
     quotes,
+    candles,
     connect,
     setPnlUnit: (pnlUnit) => patch({ pnlUnit }),
     flatten,

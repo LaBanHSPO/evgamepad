@@ -16,7 +16,7 @@
  * somewhere it outlives the evening.
  */
 
-import { PROTOCOL_VERSION, type ServerFrame } from "../protocol/types";
+import { CHANNEL_OF, PROTOCOL_VERSION, type ServerFrame } from "../protocol/types";
 
 export type ConnState = "idle" | "connecting" | "open" | "closed" | "refused";
 
@@ -102,8 +102,10 @@ export class Gateway {
     ws.onopen = () => {
       this.retry = 0;
       this.setState("open");
-      this.send("hello", "session", { token: this.#token, lastSeq: this.seq, protocolVersion: PROTOCOL_VERSION });
-      this.send("sub", "session", { ch: "quotes", syms: [] });
+      this.send("hello", { token: this.#token, lastSeq: this.seq, protocolVersion: PROTOCOL_VERSION });
+      // No `sub` here. The chart owns the quotes subscription, because a `sub`
+      // also selects the series and replays its history -- two subscribers
+      // means two replays, and the second lands behind the live bars.
       this.resendPending();
     };
 
@@ -155,7 +157,7 @@ export class Gateway {
 
     // A gap means frames were lost. Ask for them before acting on this one.
     if (frame.seq > this.seq + 1 && this.seq > 0) {
-      this.send("resync", "session", { fromSeq: this.seq });
+      this.send("resync", { fromSeq: this.seq });
     }
     this.seq = Math.max(this.seq, frame.seq);
 
@@ -172,7 +174,16 @@ export class Gateway {
     this.ws.send(JSON.stringify(payload));
   }
 
-  send(t: string, ch: string, p: unknown, cid?: string): void {
+  /**
+   * Send one frame. The envelope channel comes from the generated catalog map,
+   * never from the caller: `sub` rides `session` while subscribing *to*
+   * `quotes`, and passing the wrong one gets the frame rejected as
+   * `wrong_channel` — as an `error` frame, not an exception, so it fails
+   * silently unless someone is watching the socket.
+   */
+  send(t: string, p: unknown, cid?: string): void {
+    const ch = CHANNEL_OF[t];
+    if (!ch) throw new Error(`unknown message type ${t}`);
     this.outSeq += 1;
     this.raw({ v: PROTOCOL_VERSION, t, seq: this.outSeq, ts: Date.now(), ch, cid: cid ?? null, p });
   }
@@ -183,11 +194,11 @@ export class Gateway {
    * clutch-down is not refused by a stale ping.
    */
   ping(): void {
-    this.send("ping", "session", { clutch: this.flags.clutch });
+    this.send("ping", { clutch: this.flags.clutch });
   }
 
   telemetry(batch: unknown): void {
-    this.send("pad.telemetry", "session", batch);
+    this.send("pad.telemetry", batch);
   }
 
   /**
@@ -200,7 +211,7 @@ export class Gateway {
     cid = newCid(),
   ): string {
     this.pending.set(cid, { cid, sentAt: Date.now(), kind });
-    this.send(`intent.${kind}`, "orders", { ...payload, clutch: true }, cid);
+    this.send(`intent.${kind}`, { ...payload, clutch: true }, cid);
     return cid;
   }
 

@@ -17,7 +17,7 @@ EV_WS_TOKEN=dev EV_CONFIG=config/mock.yaml uv run python -m apps.gateway.main
 # the HUD, in another shell
 pnpm -C app install
 pnpm -C app dev        # 5173, proxies /ws and /api to 127.0.0.1:8444
-pnpm -C app test       # 101 tests
+pnpm -C app test       # 110 tests
 pnpm -C app build      # emits app/dist, which the gateway serves at /
 ```
 
@@ -118,10 +118,29 @@ live ARM.
 font would violate the CSP and leave the installed PWA without its typeface
 whenever the network is gone. Latin subsets only.
 
+## The chart
+
+Lightweight Charts, seeded once per symbol per session from
+`ProtoOAGetTrendbarsReq` and continued from the same raw spot tap the tape ring
+uses. `ProtoOATrendbar` is **delta encoded** — `low` is the only absolute price
+and open/high/close are unsigned offsets above it, so reading `deltaOpen` as a
+price draws a chart pinned near zero. The mock encodes it the same way, which is
+what lets a test catch that.
+
+Only *closed* bars go out on the socket the moment they close; the forming bar
+is pushed on a 2 Hz timer, so the chart never becomes a second quote-rate stream
+competing with order acks. The 20 EMA is recomputed on a close, not on the
+forming bar, and is seeded from the average of the first 20 closes — seeding
+from one price makes the line start away from the data and drift into place,
+which reads as a signal when it is only the seed.
+
+A history replay can legitimately land behind the live edge (a reconnect, a
+re-subscribe). The chart keeps its bars in a map and rebuilds with `setData`
+when that happens, rather than letting an out-of-order `update()` be refused.
+
 ## Not done in phase 3
 
-No Lightweight Charts candle chart yet — the price tape is live, the chart is
-not. The sentinel strip and copilot desk are labelled shells until phase 4, the
+The sentinel strip and copilot desk are labelled shells until phase 4, the
 confirm overlay says `grading unavailable` until phase 7, and the Memo tab is
 disabled until phase 8. The manual 8BitDo pass (dongle, wired, installed PWA
 window) needs real hardware and has not been run.

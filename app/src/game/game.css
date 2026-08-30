@@ -44,6 +44,7 @@
 
 .hud__main {
   display: grid;
+  min-width: 0;
   gap: var(--space-5, 20px);
   padding: var(--space-5, 20px);
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
@@ -196,14 +197,15 @@
 }
 
 /*
- * Anchored to the right edge, clear of both bars. It must never overlap the
- * footer: Flatten lives there, and a journal prompt sitting on top of the panic
- * button is the one place a skippable panel becomes dangerous.
+ * Lower right, above the footer and below the chart. It must never overlap the
+ * footer -- Flatten lives there, and a journal prompt on top of the panic
+ * button is the one place a skippable panel becomes dangerous -- and it should
+ * not sit over chart data either, which is what the reader is actually here for.
  */
 .checkin {
   position: fixed;
   right: var(--space-5, 20px);
-  top: 22vh;
+  bottom: 5.5rem;
   background: var(--bg-raised, #0d1114);
   border: 1px solid var(--line, #1b2420);
   padding: var(--space-4, 16px);
@@ -223,4 +225,29 @@
   text-decoration: underline;
   cursor: pointer;
   justify-self: start;
+}
+
+/* The chart owns its own canvas; React renders this container once. */
+.chart {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--space-2, 8px);
+  /* Both needed: a grid item defaults to min-content width, so the chart's
+     own canvas width would push the column wider every resize. */
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.chart__label {
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted, #7d8a80);
+}
+.chart__canvas {
+  height: clamp(14rem, 34vh, 26rem);
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line, #1b2420);
 }

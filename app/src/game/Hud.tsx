@@ -12,6 +12,7 @@
 import { useMemo } from "react";
 import { Badge, Button, GamepadKey, MeterBar, Tag } from "../ds";
 import { CLUTCH_ON } from "../pad/map";
+import { Chart } from "./Chart";
 import { ConfirmOverlay } from "./ConfirmOverlay";
 import { PriceTape } from "./PriceTape";
 import { adherenceCues, formatOpenPnl } from "./process";
@@ -42,6 +43,8 @@ export function Hud({ game, onOpenOverlay }: { game: GameApi; onOpenOverlay: () 
 
       <main className="hud__main">
         <PriceTape quotes={quotes} sym={view.sym} />
+
+        <Chart candles={game.candles} sym={view.sym} tf={view.timeframe} />
 
         <section className="hud__state">
           <div className="hud__fsm" data-state={view.fsm}>

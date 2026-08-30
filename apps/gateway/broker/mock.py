@@ -51,6 +51,11 @@ class MockSymbol:
 
 ASSETS = {840: "USD", 978: "EUR", 826: "GBP", 392: "JPY", 41: "XAU"}
 
+_PERIOD_SECONDS: dict[int, int] = {
+    model.M1: 60, model.M5: 300, model.M15: 900,
+    model.H1: 3600, model.H4: 14_400, model.D1: 86_400,
+}
+
 # One gold lot is 100 oz -> 10_000 cents of a unit. One FX lot is 100_000 units
 # -> 10_000_000. The three-orders-of-magnitude gap between them is the whole
 # reason lots are never converted with a hardcoded constant.
@@ -255,6 +260,50 @@ class MockTransport:
     def _on_ProtoOASubscribeSpotsReq(self, req: Any) -> Any:
         self._subscribed.update(req.symbolId)
         return msgs.ProtoOASubscribeSpotsRes(ctidTraderAccountId=req.ctidTraderAccountId)
+
+    def _on_ProtoOAGetTrendbarsReq(self, req: Any) -> Any:
+        """Synthetic history, delta-encoded exactly as the real API sends it.
+
+        Encoding it properly here is the point: a gateway that read `deltaOpen`
+        as an absolute price would draw a chart pinned near zero, and only a
+        mock that delta-encodes can catch that.
+        """
+        import random
+
+        s = self._by_id.get(req.symbolId)
+        if s is None:
+            return _error("SYMBOL_NOT_FOUND", str(req.symbolId))
+
+        seconds = _PERIOD_SECONDS.get(req.period, 300)
+        span_ms = max(req.toTimestamp - req.fromTimestamp, seconds * 1000)
+        count = min(int(span_ms // (seconds * 1000)), 500)
+
+        res = msgs.ProtoOAGetTrendbarsRes(
+            ctidTraderAccountId=req.ctidTraderAccountId,
+            period=req.period,
+            symbolId=req.symbolId,
+        )
+        tick = 10 ** -s.digits
+        close = s.bid
+        start_minute = req.fromTimestamp // 60_000
+        for i in range(count):
+            o = close
+            c = round(o + tick * random.randint(-30, 30), s.digits)
+            hi = round(max(o, c) + tick * random.randint(0, 20), s.digits)
+            lo = round(min(o, c) - tick * random.randint(0, 20), s.digits)
+            close = c
+
+            bar = res.trendbar.add()
+            bar.utcTimestampInMinutes = int(start_minute + i * (seconds // 60))
+            bar.period = req.period
+            bar.volume = random.randint(50, 500)
+            # low is the absolute base; everything else is an offset above it.
+            low_raw = int(round(lo * RELATIVE_UNITS_PER_PRICE))
+            bar.low = low_raw
+            bar.deltaOpen = int(round(o * RELATIVE_UNITS_PER_PRICE)) - low_raw
+            bar.deltaHigh = int(round(hi * RELATIVE_UNITS_PER_PRICE)) - low_raw
+            bar.deltaClose = int(round(c * RELATIVE_UNITS_PER_PRICE)) - low_raw
+        return res
 
     def _on_ProtoOATraderReq(self, req: Any) -> Any:
         res = msgs.ProtoOATraderRes(ctidTraderAccountId=req.ctidTraderAccountId)
