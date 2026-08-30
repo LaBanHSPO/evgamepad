@@ -101,6 +101,26 @@ def create_app(cfg: Config) -> FastAPI:
         gw.journal.write_check_in(session_id, phase, rating, ts, body.get("note"))
         return JSONResponse({"ok": True, "sessionId": session_id, "skipped": rating is None})
 
+    @app.get("/api/replay/index")
+    async def replay_index(limit: int = 50, session: int | None = None) -> JSONResponse:
+        """The trade list that drives LB/RB stepping through replays."""
+        rows = gw.journal.replay_index(limit=limit, session_id=session)
+        return JSONResponse({"ok": True, "trades": rows})
+
+    @app.get("/api/replay/{cid}")
+    async def replay(cid: str) -> JSONResponse:
+        """One trade's whole window: bars, events, and the closed-trade facts.
+
+        A single row read and one gunzip. There is deliberately no "slice one
+        trade's tape" query -- replay always wants the whole window, so a
+        per-sample table would buy thousands of rows an evening and an index
+        for nothing.
+        """
+        payload = gw.journal.replay(cid)
+        if payload is None:
+            return JSONResponse({"ok": False, "reason": "no tape for that trade"}, 404)
+        return JSONResponse({"ok": True, **payload})
+
     @app.get("/api/score/session/{session_id}")
     async def score_session(session_id: int) -> JSONResponse:
         """The settled Process Score for one session.

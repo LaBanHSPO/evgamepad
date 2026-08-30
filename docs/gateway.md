@@ -178,5 +178,13 @@ once, at session close, and is read by the deck at
 `GET /api/score/session/{id}` — there is deliberately no live score to watch
 mid-session.
 
-Phases 4, 6, 8, 10, and 12-14 are untouched: `ai.ask` answers `{disabled: true}`, and
+Phase 10's serving half is in: `GET /api/replay/{cid}` returns one trade's
+whole window in a single row read and one gunzip, columnar and as the
+protocol's scaled integers, with both sides of the book, the closed-trade
+facts, the grade, and the events that make it coaching rather than charting.
+`GET /api/replay/index` lists only trades that actually have a tape. The replay
+*surface* — the route, the pad scrub bindings, and the hard `LOCKED` FSM on it —
+is not built.
+
+Phases 4, 6, 8, and 12-14 are untouched: `ai.ask` answers `{disabled: true}`, and
 the voice, replay, and score messages are accepted and dropped.

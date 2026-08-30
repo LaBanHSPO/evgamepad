@@ -501,6 +501,87 @@ class JournalWriter:
         row = self._run("SELECT 1 FROM trade_tape LIMIT 1").fetchone()
         return row is not None
 
+    # -- phase 10: replay ---------------------------------------------------
+
+    def replay_index(
+        self, limit: int = 50, session_id: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Closed trades that actually have a tape to scrub.
+
+        Joined on trade_tape rather than listing every closed trade: a row the
+        replay route would 404 on has no business in the list that drives
+        stepping between replays.
+        """
+        sql = (
+            "SELECT c.cid, c.position_id, c.sym, c.side, c.lots, c.opened_at, "
+            "c.closed_at, c.entry, c.exit, c.net_pnl, c.r_multiple, c.mfe_r, "
+            "c.mae_r, c.exit_reason, t.n "
+            "FROM trade_closed c JOIN trade_tape t ON t.position_id = c.position_id "
+        )
+        params: tuple[Any, ...] = ()
+        if session_id is not None:
+            sql += "WHERE c.session_id = ? "
+            params = (session_id,)
+        sql += "ORDER BY c.closed_at DESC LIMIT ?"
+        rows = self._run(sql, (*params, limit)).fetchall()
+        return [dict(r) for r in rows]
+
+    def replay(self, cid: str) -> dict[str, Any] | None:
+        import json
+
+        from .tape.freeze import unpack_bars
+
+        tape = self._run(
+            "SELECT * FROM trade_tape WHERE cid = ? OR position_id = "
+            "(SELECT position_id FROM cid_ledger WHERE cid = ?)",
+            (cid, cid),
+        ).fetchone()
+        if tape is None:
+            return None
+
+        closed = self._run(
+            "SELECT * FROM trade_closed WHERE position_id = ?", (tape["position_id"],)
+        ).fetchone()
+        grade = self._run("SELECT * FROM trade_grade WHERE cid = ?", (cid,)).fetchone()
+        events = self._run(
+            "SELECT ts, kind, price, lots, sl, tp, detail FROM position_event "
+            "WHERE position_id = ? ORDER BY ts",
+            (tape["position_id"],),
+        ).fetchall()
+
+        bars = unpack_bars(tape["bars_gz"])
+        return {
+            "cid": cid,
+            "positionId": tape["position_id"],
+            "sym": tape["sym"],
+            "fromTs": tape["from_ts"],
+            "toTs": tape["to_ts"],
+            "dtS": tape["dt_s"],
+            "digits": tape["digits"],
+            # Columnar, as stored: the same shape goes over the wire, so the
+            # chart gets arrays rather than thousands of objects to allocate.
+            "bars": {
+                "ts": [b.ts_s for b in bars],
+                "bid_o": [b.bid_o for b in bars], "bid_h": [b.bid_h for b in bars],
+                "bid_l": [b.bid_l for b in bars], "bid_c": [b.bid_c for b in bars],
+                "ask_o": [b.ask_o for b in bars], "ask_h": [b.ask_h for b in bars],
+                "ask_l": [b.ask_l for b in bars], "ask_c": [b.ask_c for b in bars],
+                "n_ticks": [b.n_ticks for b in bars],
+            },
+            "events": (
+                json.loads(tape["events_json"])
+                + [dict(e) for e in events]
+            ),
+            "trade": dict(closed) if closed else None,
+            "grade": {
+                "playbookId": grade["playbook_id"],
+                "required_pass": grade["required_pass"],
+                "required_total": grade["required_total"],
+                "clean": bool(grade["clean"]),
+                "results": json.loads(grade["results_json"]),
+            } if grade else None,
+        }
+
     def day_loss_usd(self, session_id: int) -> float:
         """Realised loss so far today, as a positive number. Feeds the
         ``max_daily_loss`` rule."""
