@@ -384,6 +384,50 @@ class JournalWriter:
             (playbook_id, session_id),
         )
 
+    # -- phase 9: tilt ------------------------------------------------------
+
+    def append_tilt(self, session_id: int | None, ts: int, tilt: Any) -> None:
+        """A sample for the deck. Scoped to a session on purpose -- tilt is
+        never stored as a property of the player."""
+        import json
+
+        self._run(
+            "INSERT INTO tilt_sample (session_id, ts, score, band, top_json, "
+            "components_json, cooldown_until) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                session_id, ts, tilt.score, tilt.band,
+                json.dumps(list(tilt.top), separators=(",", ":")),
+                json.dumps({c.key: round(c.score, 4) for c in tilt.components},
+                           separators=(",", ":")),
+                tilt.cooldown_until_ms,
+            ),
+        )
+
+    def recent_grade_breaks(self, session_id: int | None, limit: int = 3) -> list[bool]:
+        """Did each of the last few fires break a required rule? Phase 7's
+        grades, read rather than recomputed."""
+        rows = self._run(
+            "SELECT required_pass, required_total FROM trade_grade "
+            "WHERE session_id IS ? AND phase != 'arm' "
+            "ORDER BY evaluated_at DESC LIMIT ?",
+            (session_id, limit),
+        ).fetchall()
+        return [r["required_pass"] < r["required_total"] for r in reversed(rows)]
+
+    def session_lots(self, session_id: int | None) -> list[float]:
+        rows = self._run(
+            "SELECT lots FROM trade_plan WHERE session_id IS ?", (session_id,)
+        ).fetchall()
+        return [float(r["lots"]) for r in rows]
+
+    def last_losing_close_ms(self, session_id: int | None) -> int | None:
+        row = self._run(
+            "SELECT closed_at FROM trade_closed WHERE session_id IS ? AND net_pnl < 0 "
+            "ORDER BY closed_at DESC LIMIT 1",
+            (session_id,),
+        ).fetchone()
+        return int(row["closed_at"]) if row else None
+
     def day_loss_usd(self, session_id: int) -> float:
         """Realised loss so far today, as a positive number. Feeds the
         ``max_daily_loss`` rule."""

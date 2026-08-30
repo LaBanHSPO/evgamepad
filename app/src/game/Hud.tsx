@@ -80,6 +80,22 @@ export function Hud({ game, onOpenOverlay }: { game: GameApi; onOpenOverlay: () 
           {view.pttActive && <Tag color="var(--warn)">● memo</Tag>}
         </section>
 
+        {/* The tilt pip. Always a sentence, never a bare number: a number
+            invites arguing with the number instead of noticing the behaviour.
+            There is deliberately no streak here — consecutive losses are an
+            input signal and are never rendered as one. */}
+        <section className="hud__tilt" data-band={view.tilt?.band ?? "cool"}>
+          <span className="hud__tilt-pip" aria-hidden="true" />
+          <span className="hud__tilt-band">{view.tilt?.band ?? "cool"}</span>
+          {view.tilt?.top?.[0] && <span className="hud__tilt-driver">{view.tilt.top[0]}</span>}
+          {view.tilt?.band === "hot" && <span className="hud__tilt-note">hold RT to fire</span>}
+          {view.tilt?.band === "scorched" && (
+            <span className="hud__tilt-note">
+              opens paused — log a memo (LB+RB) to shorten it
+            </span>
+          )}
+        </section>
+
         <section className="hud__pnl">
           <button
             type="button"

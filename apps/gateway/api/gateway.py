@@ -22,6 +22,7 @@ from ..journal.tape.scheduler import FreezeScheduler, PendingFreeze
 from ..method.grading import GradeContext, grade as grade_fire
 from ..method.indicators import ATR_PERIOD, EMA_PERIOD, OHLC, atr, ema
 from ..method.playbook import PlaybookStore
+from ..method import tilt as tilt_model
 from .candles import Bar, CandleBook, payload as candle_payload
 from ..journal.writer import DuplicateCid, JournalWriter
 from ..protocol import now_ms
@@ -61,6 +62,14 @@ class LiveState:
     grade_answers: dict[str, dict[str, bool]] = field(default_factory=dict)
     #: Symbol of the most recent grade, so a settled re-grade has a context.
     last_graded_sym: str | None = None
+    #: Per-session only. Tilt is never persisted as a property of the player.
+    arms: list[Any] = field(default_factory=list)
+    btn_rates: list[float] = field(default_factory=list)
+    tilt_score: float = 0.0
+    tilt_band: str = "cool"
+    confirm_hold_ms: int = 0
+    #: A memo or an explicit acknowledge halves the recency terms.
+    recency_halved: bool = False
     last_quote: dict[str, tuple[float, float, int]] = field(default_factory=dict)
 
 
@@ -391,6 +400,83 @@ class Gateway:
                 phase, result, ts,
             )
         return result, book
+
+    # -- tilt ---------------------------------------------------------------
+
+    def observe_telemetry(self, batch: dict[str, Any]) -> Any | None:
+        """Fold one 1 Hz telemetry batch into the tilt inputs.
+
+        Only ARM batches carry the hesitation and flip signals; a heartbeat
+        still updates the button-rate baseline, which is what makes
+        "faster than usual" mean the player's own usual.
+        """
+        rate = float(batch.get("btnRateHz") or 0.0)
+        if rate > 0:
+            self.state.btn_rates.append(rate)
+        if batch.get("to") == "ARMED":
+            self.state.arms.append(
+                tilt_model.ArmSample(
+                    ts=int(batch.get("ts") or now_ms()),
+                    clutch_cycles=int(batch.get("clutchCycles") or 0),
+                    arm_flips=int(batch.get("armFlips") or 0),
+                    btn_rate_hz=rate,
+                    lots=batch.get("lots"),
+                )
+            )
+        return self.recompute_tilt(pending_lots=batch.get("lots"))
+
+    def recompute_tilt(self, pending_lots: float | None = None, ts: int | None = None):
+        """Recompute, apply friction, and record a sample.
+
+        Friction is set here but bites in exactly two places: the registry's
+        OPEN_ONLY `risk.cooldown` rule, and the client's fire predicate, which
+        exempts a close and a panic itself.
+        """
+        if not self.cfg.tilt.enabled:
+            return None
+        ts = now_ms() if ts is None else ts
+        session_id = self.state.session_id
+
+        inputs = tilt_model.TiltInputs(
+            now_ms=ts,
+            pending_lots=pending_lots,
+            session_lots=self.journal.session_lots(session_id),
+            last_loss_ms=self.journal.last_losing_close_ms(session_id),
+            recent_rule_breaks=self.journal.recent_grade_breaks(session_id),
+            recent_arms=self.state.arms,
+            session_btn_rates=self.state.btn_rates,
+            recency_halved=self.state.recency_halved,
+        )
+        bands = tilt_model.Bands(
+            warm=self.cfg.tilt.warm, hot=self.cfg.tilt.hot, scorched=self.cfg.tilt.scorched
+        )
+        result = tilt_model.compute(inputs, bands)
+
+        cooldown = tilt_model.cooldown_for(result.band, ts, self.cfg.tilt.cooldown_s)
+        if cooldown is not None:
+            # Extend rather than restart: a scorched band that keeps re-firing
+            # should not reset the clock every second.
+            self.state.cooldown_until_ms = max(self.state.cooldown_until_ms or 0, cooldown)
+        result = tilt_model.Tilt(
+            score=result.score, band=result.band, components=result.components,
+            cooldown_until_ms=self.state.cooldown_until_ms,
+        )
+
+        self.state.tilt_score = result.score
+        self.state.tilt_band = result.band
+        self.state.confirm_hold_ms = tilt_model.confirm_hold_ms(
+            result.band, self.cfg.tilt.confirm_hold_ms
+        )
+        self.journal.append_tilt(session_id, ts, result)
+        return result
+
+    def acknowledge_tilt(self) -> None:
+        """A memo, or an explicit acknowledge. Halves the recency terms.
+
+        Narrating it is the intervention, so the productive alternative is
+        rewarded rather than the door merely being locked.
+        """
+        self.state.recency_halved = True
 
     def lots_for(self, update: Any) -> float:
         """Protocol volume back into the lots the HUD speaks."""

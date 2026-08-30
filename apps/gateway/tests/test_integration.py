@@ -571,6 +571,106 @@ async def test_a_checklist_answer_regrades_without_blocking(stack):
     assert gw.journal.grade_row(cid)["phase"] == "settled"
 
 
+# -- phase 9: tilt ----------------------------------------------------------
+
+
+def telemetry(seq=6, **over):
+    body = {"ts": now_ms(), "clutchMs": 400, "armMs": 10, "btnRateHz": 3.0}
+    body.update(over)
+    return frame("pad.telemetry", body, seq=seq)
+
+
+async def test_telemetry_produces_a_tilt_message(stack):
+    gw, session, client = stack
+    await session.handle(telemetry())
+    tilt = client.last("tilt")
+    assert tilt is not None
+    assert tilt["p"]["band"] == "cool"
+    assert gw.journal.conn.execute(
+        "SELECT COUNT(*) c FROM tilt_sample").fetchone()["c"] == 1
+
+
+async def test_a_calm_evening_applies_no_friction(stack):
+    gw, session, client = stack
+    for i in range(3):
+        await session.handle(telemetry(seq=6 + i, **{"to": "ARMED", "sym": "XAUUSD",
+                                                     "clutchCycles": 1, "armFlips": 0}))
+    assert gw.state.confirm_hold_ms == 0
+    assert gw.state.cooldown_until_ms is None
+
+
+async def test_a_scorched_band_soft_blocks_opens_but_never_an_exit(stack):
+    """The whole feature, in one test."""
+    gw, session, client = stack
+    # A calm start establishes the player's own baseline...
+    for i in range(3):
+        await session.handle(telemetry(seq=6 + i, btnRateHz=3.0))
+    # ...then an escalation measured against it.
+    for i in range(3):
+        await session.handle(telemetry(seq=9 + i, **{
+            "to": "ARMED", "sym": "XAUUSD", "clutchCycles": 9, "armFlips": 9,
+            "btnRateHz": 12.0,
+        }))
+    assert gw.state.tilt_band == "scorched", gw.state.tilt_score
+    assert gw.state.cooldown_until_ms is not None
+    assert gw.state.confirm_hold_ms == 750
+
+    gw.state.last_order_ms = None
+    await session.handle(fire())
+    await settle(session)
+    assert client.last("order.reject")["p"]["reason"] == "cooldown"
+
+    # A close is untouched by all of it.
+    await session.handle(frame("intent.close", {"positionId": 1, "clutch": True,
+                                                "armedAt": now_ms()}, new_cid()))
+    await settle(session)
+    reasons = [f["p"]["reason"] for f in client.all("order.reject")]
+    assert "cooldown" in reasons
+    assert reasons[-1] != "cooldown"
+
+
+async def test_a_memo_halves_the_recency_terms(stack):
+    """Narrating it is the intervention."""
+    gw, session, client = stack
+    gw.journal.write_closed({
+        "position_id": 1, "cid": None, "session_id": gw.ensure_session(now_ms()),
+        "sym": "XAUUSD", "side": "buy", "lots": 0.01,
+        "opened_at": now_ms() - 60_000, "closed_at": now_ms() - 20_000,
+        "entry": 2340.0, "exit": 2339.0, "gross_pnl": -1.0, "net_pnl": -1.0,
+        "r_usd": 2.0, "r_multiple": -0.5,
+    })
+    await session.handle(telemetry())
+    before = client.last("tilt")["p"]["score"]
+    assert before > 0
+
+    await session.handle(frame("voice.begin", {"voiceId": new_cid()}, seq=9))
+    after = client.last("tilt")["p"]["score"]
+    assert after == pytest.approx(before / 2, rel=1e-6)
+
+
+async def test_tilt_is_never_stored_against_the_player(stack):
+    """Samples are scoped to a session; nobody is 'a tilty trader'."""
+    gw, session, client = stack
+    await session.handle(telemetry())
+    columns = [r[1] for r in gw.journal.conn.execute("PRAGMA table_info(tilt_sample)")]
+    assert "session_id" in columns
+    tables = {r["name"] for r in gw.journal.conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")}
+    assert not any("player" in t or "trader" in t for t in tables)
+
+
+async def test_the_driver_is_a_sentence(stack):
+    gw, session, client = stack
+    for i in range(3):
+        await session.handle(telemetry(seq=6 + i, **{
+            "to": "ARMED", "sym": "XAUUSD", "clutchCycles": 5, "armFlips": 3,
+        }))
+    top = client.last("tilt")["p"]["top"]
+    assert top
+    assert any(ch.isalpha() for ch in top[0])
+    assert "clutching" in top[0] or "flipping" in top[0]
+
+
 async def test_a_broker_that_will_not_start_leaves_the_socket_serving(tmp_path, monkeypatch):
     """One process is one blast radius, so a dead broker must degrade the
     gateway rather than kill it."""

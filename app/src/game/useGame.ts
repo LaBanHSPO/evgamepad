@@ -68,6 +68,21 @@ export type PlaybookSummary = {
   requiredCount: number;
 };
 
+export type TiltView = {
+  score: number;
+  band: "cool" | "warm" | "hot" | "scorched";
+  top: string[];
+  cooldownUntil?: number | null;
+};
+
+/**
+ * Friction 1's duration. The band arrives from the gateway; the duration is a
+ * feel constant and lives here, matching `tilt.confirm_hold_ms` in the server
+ * config. Deriving it from the band rather than sending it keeps the frozen
+ * protocol frozen.
+ */
+export const TILT_CONFIRM_HOLD_MS = 750;
+
 export type GameView = {
   conn: ConnState;
   connDetail: string;
@@ -92,6 +107,7 @@ export type GameView = {
   grade: GradeView | null;
   playbooks: PlaybookSummary[];
   playbookId: string | null;
+  tilt: TiltView | null;
 };
 
 export type GameApi = {
@@ -151,6 +167,7 @@ export function useGame(): GameApi {
     grade: null,
     playbooks: [],
     playbookId: null,
+    tilt: null,
   });
   const viewRef = useRef(view);
   const patch = useCallback((next: Partial<GameView>) => {
@@ -184,6 +201,9 @@ export function useGame(): GameApi {
         case "candle":
           // Into a ref, like quotes. The chart drains it on its own frame.
           candles.current.push(frame.p as CandleFrame);
+          break;
+        case "tilt":
+          patch({ tilt: frame.p as TiltView });
           break;
         case "grade":
           // Straight from the gateway. The browser never grades a trade: a
@@ -317,7 +337,14 @@ export function useGame(): GameApi {
       };
 
       const blocked = gw?.blocked ?? false;
-      const result = step(fsmRef.current, prevInputs.current, next, now, { fireBlocked: blocked });
+      // Friction 1. The FSM exempts a close and a panic itself, so raising
+      // this can never stand between the player and a safety exit.
+      const band = viewRef.current.tilt?.band;
+      const confirmHoldMs = band === "hot" || band === "scorched" ? TILT_CONFIRM_HOLD_MS : 0;
+      const result = step(fsmRef.current, prevInputs.current, next, now, {
+        fireBlocked: blocked,
+        confirmHoldMs,
+      });
       const before = fsmRef.current.state;
       fsmRef.current = result.fsm;
       prevInputs.current = next;

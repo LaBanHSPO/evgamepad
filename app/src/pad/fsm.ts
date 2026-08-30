@@ -258,9 +258,14 @@ function canFire(
   confirmHoldMs: number,
 ): boolean {
   if (!next.clutch || !fsm.side) return false;
-  if (confirmHoldMs <= 0) return rose(prev.confirm, next.confirm);
+  // Friction applies to opening risk only. Phase 9 raises confirmHoldMs when
+  // the player is tilting; making them hold the trigger to *close* would put
+  // the tilt meter between them and a safety exit, which is the one thing this
+  // product refuses to do.
+  const hold = isSafetyExit(fsm.side) ? 0 : confirmHoldMs;
+  if (hold <= 0) return rose(prev.confirm, next.confirm);
   if (!next.confirm || confirmDownAt === null) return false;
-  return now - confirmDownAt >= confirmHoldMs;
+  return now - confirmDownAt >= hold;
 }
 
 /** Safety exits. Never gated by tilt, dead-man, or the daily loss. */

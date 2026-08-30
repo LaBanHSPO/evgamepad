@@ -280,6 +280,10 @@ class WsSession:
         # protocol has no `arm` message -- it was frozen in phase 1 -- so the
         # telemetry batch's own `to` field is the signal, and the client
         # flushes a batch on the transition rather than waiting for its second.
+        tilt = self.gw.observe_telemetry(p.model_dump(by_alias=True, exclude_none=False))
+        if tilt is not None:
+            await self.emit("tilt", tilt.as_message())
+
         if p.to == "ARMED" and p.sym:
             await self._preview_grade(p.sym, p.from_, p.lots)
 
@@ -304,6 +308,13 @@ class WsSession:
         )
 
     async def _on_voice_begin(self, frame: Any, p: Any) -> None:
+        # Phase 8 records the memo. What phase 9 needs from it is here already:
+        # starting one during a cooldown is the acknowledgement that halves the
+        # recency terms, because narrating it is the intervention.
+        self.gw.acknowledge_tilt()
+        tilt = self.gw.recompute_tilt()
+        if tilt is not None:
+            await self.emit("tilt", tilt.as_message())
         await self.emit(
             "voice.transcript",
             {"voiceId": p.voiceId, "ok": False, "reason": "disabled", "durMs": 0, "sttMs": 0},

@@ -276,3 +276,28 @@
 .overlay__playbooks button[data-active="true"] { border-left-color: var(--pnl-up, #00ff41); }
 .overlay__playbooks button span { color: var(--text-muted, #7d8a80); font-size: 0.75rem; }
 .overlay__note { color: var(--text-muted, #7d8a80); font-size: 0.75rem; margin-top: var(--space-2, 8px); }
+
+/* The tilt pip. A sentence, never a bare number. */
+.hud__tilt {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  font-size: 0.78rem;
+  color: var(--text-muted, #7d8a80);
+}
+.hud__tilt-pip {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--pnl-up, #00ff41);
+  flex: none;
+}
+.hud__tilt-band { letter-spacing: 0.14em; text-transform: uppercase; }
+.hud__tilt[data-band="warm"] .hud__tilt-pip { background: var(--warn, #ffd400); }
+.hud__tilt[data-band="hot"] .hud__tilt-pip,
+.hud__tilt[data-band="scorched"] .hud__tilt-pip { background: var(--pnl-down, #e8202a); }
+.hud__tilt[data-band="hot"], .hud__tilt[data-band="scorched"] { color: var(--pnl-down, #e8202a); }
+.hud__tilt[data-band="warm"] { color: var(--warn, #ffd400); }
+.hud__tilt-driver { color: inherit; }
+.hud__tilt-note { margin-left: auto; letter-spacing: 0.08em; }

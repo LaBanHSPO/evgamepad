@@ -221,6 +221,29 @@ describe("unresolved fires", () => {
   });
 });
 
+describe("tilt friction never reaches a safety exit", () => {
+  it.each([
+    ["close", { armClose: true }],
+    ["panic", { armPanic: true }],
+  ])("a %s fires on a rising edge even at 750ms friction", (_label, arm) => {
+    const { transitions } = run(
+      [...UNLOCK, { clutch: true }, { clutch: true, ...arm }, { clutch: true, confirm: true }],
+      initialFsm(),
+      { confirmHoldMs: 750 },
+    );
+    expect(transitions.filter((t) => t.kind === "fire")).toHaveLength(1);
+  });
+
+  it("an open at the same friction still has to be held", () => {
+    const { transitions } = run(
+      [...UNLOCK, { clutch: true }, { clutch: true, armBuy: true }, { clutch: true, confirm: true }],
+      initialFsm(),
+      { confirmHoldMs: 750 },
+    );
+    expect(transitions.filter((t) => t.kind === "fire")).toHaveLength(0);
+  });
+});
+
 describe("safety exits", () => {
   it("close and panic are the exits", () => {
     expect(isSafetyExit("close")).toBe(true);

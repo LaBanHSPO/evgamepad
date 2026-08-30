@@ -156,5 +156,16 @@ function over context, keyed on the cid so a declined fire is gradeable too, and
 an unanswered manual rule is *unknown* rather than failed, so skipping the
 post-trade checklist costs nothing.
 
-Phases 4, 6, and 8-14 are untouched: `ai.ask` answers `{disabled: true}`, and
-the voice, tilt, replay, and score messages are accepted and dropped.
+Phase 9 is in: tilt is composed only from behaviours you can name, each
+measured against the player's own rolling baseline. A missing component
+redistributes its weight rather than scoring zero — absent evidence is not calm.
+Friction is exactly two things: a 750 ms confirm hold from `hot` upward, and a
+soft block on **opens** at `scorched`. A close and a panic are exempt in both
+directions — the cooldown reaches the order path only as the registry's
+OPEN_ONLY `risk.cooldown` rule, and the client's fire predicate zeroes the hold
+for a safety exit itself. Starting a memo halves the recency terms, because
+narrating it is the intervention. No keyword scoring, no affect classification,
+no LLM in the score, and tilt is never stored against the player.
+
+Phases 4, 6, 8, and 10-14 are untouched: `ai.ask` answers `{disabled: true}`, and
+the voice, replay, and score messages are accepted and dropped.
