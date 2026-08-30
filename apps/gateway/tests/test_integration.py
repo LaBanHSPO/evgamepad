@@ -189,6 +189,42 @@ async def test_a_close_writes_a_closed_trade_with_a_non_null_r_multiple(stack):
     assert row["r_multiple"] == pytest.approx(-1.60, abs=0.02)
 
 
+async def test_pos_snap_carries_lots_and_the_gateway_s_own_r(stack):
+    """The HUD must never divide a constant into the dollars to get R. It is
+    sent the R the gateway computed, or null."""
+    gw, session, client = stack
+    await session.handle(fire(relativeSl=200_000))
+    await settle(session)
+    await session.handle(frame("snap", {"what": ["pos"]}, seq=9))
+    await settle(session)
+
+    snap = client.last("pos.snap")["p"]["positions"][0]
+    assert snap["lots"] == pytest.approx(0.01)
+    assert snap["sym"] == "XAUUSD"
+
+
+async def test_a_reconciled_position_reports_a_null_r_rather_than_a_guess(stack):
+    """A position this gateway did not open has no plan, so no R. Null is the
+    honest answer; the HUD falls back to dollars."""
+    gw, session, client = stack
+    from apps.gateway.broker.mock import MockPosition
+    from ctrader_open_api.messages import OpenApiModelMessages_pb2 as model
+
+    gw.broker.transport.state.positions[9_001] = MockPosition(
+        position_id=9_001, symbol_id=41, side=model.BUY, volume=100,
+        entry=2340.0, opened_at=now_ms(),
+    )
+    await gw.broker.reconcile()
+    await session.handle(frame("snap", {"what": ["pos"]}, seq=9))
+    await settle(session)
+
+    snap = client.last("pos.snap")["p"]["positions"][0]
+    # Null is dropped from the wire by exclude_none, so the HUD sees an absent
+    # key. formatOpenPnl treats absent and null alike and shows dollars.
+    assert snap.get("rMultiple") is None
+    assert snap["lots"] == pytest.approx(0.01)
+
+
 async def test_every_broker_fact_lands_in_position_event(stack):
     gw, session, client = stack
     await session.handle(fire())

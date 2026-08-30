@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 from apps.gateway.api.gateway import Gateway  # noqa: E402
 from apps.gateway.api.ws import WsSession  # noqa: E402
 from apps.gateway.config import Config, load  # noqa: E402
-from apps.gateway.protocol import PROTOCOL_VERSION  # noqa: E402
+from apps.gateway.protocol import PROTOCOL_VERSION, now_ms  # noqa: E402
 from apps.gateway.risk import rules  # noqa: E402
 
 log = logging.getLogger("ev.main")
@@ -80,10 +80,41 @@ def create_app(cfg: Config) -> FastAPI:
             }
         )
 
+    @app.post("/api/session/checkin")
+    async def check_in(body: dict) -> JSONResponse:
+        """The pre/post 1-5 self rating.
+
+        Skippable by design: a null rating is recorded as a deliberate skip, and
+        this endpoint never blocks the session starting or closing -- a bad
+        answer here must not cost the player their evening.
+        """
+        phase = body.get("phase")
+        if phase not in {"pre", "post"}:
+            return JSONResponse({"ok": False, "reason": "phase must be pre or post"}, 400)
+        rating = body.get("rating")
+        if rating is not None and not (isinstance(rating, int) and 1 <= rating <= 5):
+            return JSONResponse({"ok": False, "reason": "rating must be 1-5 or null"}, 400)
+
+        ts = now_ms()
+        session_id = gw.ensure_session(ts)
+        gw.journal.write_check_in(session_id, phase, rating, ts, body.get("note"))
+        return JSONResponse({"ok": True, "sessionId": session_id, "skipped": rating is None})
+
+    @app.post("/api/session/standdown")
+    async def stand_down(body: dict) -> JSONResponse:
+        """The evening's stand-down tally, with the conditions each one met.
+        Phase 11's Selectivity axis reads these rather than counting its own."""
+        events = body.get("events")
+        if not isinstance(events, list):
+            return JSONResponse({"ok": False, "reason": "events must be a list"}, 400)
+        session_id = gw.ensure_session(now_ms())
+        gw.journal.record_stand_downs(session_id, events)
+        return JSONResponse({"ok": True, "count": len(events)})
+
     @app.websocket(cfg.gateway.ws_path)
     async def ws(sock: WebSocket) -> None:
         origin = sock.headers.get("origin")
-        if origin and not _origin_allowed(origin, cfg):
+        if origin and not _origin_allowed(origin, cfg, sock.headers.get("host")):
             await sock.close(code=4403)
             return
         await sock.accept()
@@ -131,20 +162,23 @@ async def _pump(session: WsSession, gw: Gateway) -> None:
         await asyncio.sleep(1.0 / 30.0)
 
 
-def _origin_allowed(origin: str, cfg: Config) -> bool:
-    """Same origin as the HUD, plus localhost in dev. The HUD and the socket
-    are served from one origin precisely so this list stays short."""
+def _origin_allowed(origin: str, cfg: Config, host_header: str | None = None) -> bool:
+    """Same origin as the HUD, plus the Vite dev server in dev.
+
+    Same-origin is decided against the request's own ``Host`` header, not
+    against the configured port: the gateway may be reached on a different port
+    than ``gateway.listen`` names (a tunnel, a proxy, a test server), and
+    refusing the page's own origin would break the HUD it just served.
+    """
+    origin = origin.rstrip("/")
+    if host_header and urlparse(origin).netloc == host_header:
+        return True
+
     allowed = {cfg.gateway.public_origin.rstrip("/")}
     if cfg.dev:
-        host = urlparse(cfg.gateway.public_origin).hostname or "localhost"
-        allowed |= {
-            f"http://{cfg.gateway.listen}",
-            f"http://localhost:{cfg.gateway.port}",
-            f"http://127.0.0.1:{cfg.gateway.port}",
-            f"http://{host}:5173",
-            "http://localhost:5173",
-        }
-    return origin.rstrip("/") in allowed
+        # Vite serves the HUD on 5173 and proxies /ws here.
+        allowed |= {"http://localhost:5173", "http://127.0.0.1:5173"}
+    return origin in allowed
 
 
 def run() -> None:

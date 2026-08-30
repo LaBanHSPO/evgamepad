@@ -1,0 +1,226 @@
+/* The evening HUD. Dark, few colours, nothing that competes with the price. */
+
+.gate {
+  display: grid;
+  gap: var(--space-4, 16px);
+  max-width: 32rem;
+  margin: 12vh auto;
+  padding: var(--space-6, 24px);
+  font-family: var(--font-mono, monospace);
+  color: var(--text, #d6e0d8);
+}
+.gate h1 { font-size: 1.4rem; margin: 0; }
+.gate p, .gate small { color: var(--text-muted, #7d8a80); line-height: 1.5; }
+
+.hud {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  font-family: var(--font-mono, monospace);
+  color: var(--text, #d6e0d8);
+  background: var(--bg, #07090b);
+}
+
+.hud__bar,
+.hud__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3, 12px);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  border-bottom: 1px solid var(--line, #1b2420);
+}
+.hud__footer {
+  border-bottom: 0;
+  border-top: 1px solid var(--line, #1b2420);
+  margin-top: auto;
+  /* Above the check-in panel, so a safety exit is never covered. */
+  position: relative;
+  z-index: 50;
+  background: var(--bg, #07090b);
+}
+.hud__conn { display: flex; gap: var(--space-2, 8px); }
+.hud__legal { color: var(--text-muted, #7d8a80); font-size: 0.7rem; letter-spacing: 0.08em; }
+
+.hud__main {
+  display: grid;
+  gap: var(--space-5, 20px);
+  padding: var(--space-5, 20px);
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  align-content: start;
+}
+
+/* The price owns its own DOM node; React never re-renders it. */
+.price-tape { grid-column: 1 / -1; }
+.price-tape__sym { color: var(--text-muted, #7d8a80); letter-spacing: 0.18em; font-size: 0.8rem; }
+.price-tape__pair {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3, 12px);
+  font-size: clamp(2.5rem, 8vw, 5rem);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.price-tape__bid[data-dir="up"] { color: var(--pnl-up, #39ff14); }
+.price-tape__bid[data-dir="down"] { color: var(--pnl-down, #ff3b30); }
+.price-tape__ask { color: var(--text-muted, #7d8a80); }
+.price-tape__sep { color: var(--line, #1b2420); }
+.price-tape__spread { color: var(--text-muted, #7d8a80); font-size: 0.8rem; }
+
+.hud__state { display: grid; gap: var(--space-3, 12px); }
+.hud__fsm { font-size: 1.1rem; letter-spacing: 0.12em; }
+.hud__fsm[data-state="ARMED"] { color: var(--warn, #ffb000); }
+.hud__fsm[data-state="LOCKED"] { color: var(--text-muted, #7d8a80); }
+.hud__fsm[data-state="CLUTCH"] { color: var(--pnl-up, #39ff14); }
+.hud__size { display: flex; gap: var(--space-4, 16px); color: var(--text-muted, #7d8a80); }
+
+.hud__process { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--space-2, 8px); }
+
+.hud__pnl-toggle {
+  background: none;
+  border: 1px solid var(--line, #1b2420);
+  color: inherit;
+  font: inherit;
+  font-size: 2rem;
+  font-variant-numeric: tabular-nums;
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+}
+.hud__pnl-toggle small { font-size: 0.65rem; color: var(--text-muted, #7d8a80); letter-spacing: 0.1em; }
+
+.hud__positions { grid-column: 1 / -1; display: grid; gap: var(--space-2, 8px); }
+.hud__position { display: flex; justify-content: space-between; align-items: center; }
+.hud__flat { color: var(--text-muted, #7d8a80); margin: 0; }
+
+.hud__sentinel[data-stub] {
+  grid-column: 1 / -1;
+  color: var(--text-muted, #7d8a80);
+  border: 1px dashed var(--line, #1b2420);
+  padding: var(--space-3, 12px);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+}
+
+.hud__reject {
+  padding: var(--space-3, 12px) var(--space-5, 20px);
+  color: var(--pnl-down, #ff3b30);
+}
+
+/* Unresolved fires must be impossible to miss: opens stay blocked. */
+.hud__unknown {
+  margin: 0 var(--space-5, 20px);
+  padding: var(--space-4, 16px);
+  border: 1px solid var(--warn, #ffb000);
+  color: var(--warn, #ffb000);
+  display: grid;
+  gap: var(--space-2, 8px);
+}
+.hud__unknown p { margin: 0; color: var(--text-muted, #7d8a80); }
+
+.confirm {
+  position: fixed;
+  inset: auto 0 12vh 0;
+  margin-inline: auto;
+  width: min(36rem, 92vw);
+  background: var(--bg-raised, #0d1114);
+  border: 2px solid var(--warn, #ffb000);
+  padding: var(--space-5, 20px);
+  display: grid;
+  gap: var(--space-3, 12px);
+  z-index: 40;
+}
+.confirm[data-side="panic"], .confirm[data-side="close"] { border-color: var(--pnl-down, #ff3b30); }
+.confirm__headline { font-size: 1.3rem; }
+.confirm__grid { display: flex; gap: var(--space-5, 20px); margin: 0; }
+.confirm__grid dt { color: var(--text-muted, #7d8a80); font-size: 0.7rem; letter-spacing: 0.1em; }
+.confirm__grid dd { margin: 0; font-variant-numeric: tabular-nums; }
+.confirm__grade[data-state="unavailable"] {
+  color: var(--text-muted, #7d8a80);
+  font-size: 0.75rem;
+  border-top: 1px solid var(--line, #1b2420);
+  padding-top: var(--space-2, 8px);
+}
+.confirm__hint { color: var(--text-muted, #7d8a80); font-size: 0.75rem; }
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(7, 9, 11, 0.97);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  z-index: 60;
+  font-family: var(--font-mono, monospace);
+  color: var(--text, #d6e0d8);
+}
+.overlay__head, .overlay__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  padding: var(--space-4, 16px) var(--space-5, 20px);
+  border-bottom: 1px solid var(--line, #1b2420);
+}
+.overlay__foot { border-bottom: 0; border-top: 1px solid var(--line, #1b2420); }
+.overlay__body { display: grid; grid-template-columns: 14rem 1fr; min-height: 0; }
+.overlay__nav { display: grid; align-content: start; border-right: 1px solid var(--line, #1b2420); }
+.overlay__nav button {
+  background: none;
+  border: 0;
+  border-left: 2px solid transparent;
+  color: var(--text-muted, #7d8a80);
+  font: inherit;
+  text-align: left;
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  cursor: pointer;
+}
+.overlay__nav button[data-active="true"] { color: var(--pnl-up, #39ff14); border-left-color: var(--pnl-up, #39ff14); }
+.overlay__panel { padding: var(--space-5, 20px); overflow: auto; }
+.overlay__tabs { display: flex; gap: var(--space-2, 8px); flex-wrap: wrap; }
+.overlay__tabs button {
+  background: none;
+  border: 1px solid var(--line, #1b2420);
+  color: inherit;
+  font: inherit;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.overlay__tabs button[data-disabled="true"] { opacity: 0.4; cursor: not-allowed; }
+.overlay__tabs button[aria-selected="true"] { border-color: var(--pnl-up, #39ff14); }
+.overlay__pending, .overlay__settings, .overlay__system { color: var(--text-muted, #7d8a80); }
+.overlay__staged {
+  margin-top: var(--space-4, 16px);
+  border: 1px solid var(--warn, #ffb000);
+  color: var(--warn, #ffb000);
+  padding: var(--space-3, 12px);
+}
+
+/*
+ * Anchored to the right edge, clear of both bars. It must never overlap the
+ * footer: Flatten lives there, and a journal prompt sitting on top of the panic
+ * button is the one place a skippable panel becomes dangerous.
+ */
+.checkin {
+  position: fixed;
+  right: var(--space-5, 20px);
+  top: 22vh;
+  background: var(--bg-raised, #0d1114);
+  border: 1px solid var(--line, #1b2420);
+  padding: var(--space-4, 16px);
+  display: grid;
+  gap: var(--space-3, 12px);
+  z-index: 30;
+  font-family: var(--font-mono, monospace);
+  color: var(--text, #d6e0d8);
+}
+.checkin__ask { margin: 0; }
+.checkin__scale { display: flex; gap: var(--space-2, 8px); }
+.checkin__skip {
+  background: none;
+  border: 0;
+  color: var(--text-muted, #7d8a80);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  justify-self: start;
+}

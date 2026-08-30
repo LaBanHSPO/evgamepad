@@ -33,10 +33,10 @@ def build_broker(
     from .ctrader import CTraderBroker
 
     if cfg.broker.transport == "mock":
-        from .mock import MockTransport
+        from .mock import MockState, MockTransport
 
         log.warning(MOCK_BANNER, "mock")
-        transport = MockTransport()
+        transport = MockTransport(MockState(tick=cfg.broker.mock_ticks))
         env = dict(env or {})
         # The mock authenticates against itself, so the operator does not need
         # credentials to run it. Anything the real transport needs is still

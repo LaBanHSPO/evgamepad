@@ -7,21 +7,54 @@ import pytest
 from apps.gateway.db import migrate as M
 
 
+#: Which migration owns which tables. Each phase adds its own row; a table
+#: appearing in the wrong one means a phase stopped owning its own migration.
+OWNERSHIP = {
+    "001": {"cid_ledger", "session", "session_equity", "trade_plan",
+            "position_event", "trade_closed", "trade_tape"},
+    "002": {"pad_event", "session_process"},
+}
+
+
 def test_shipped_migrations_apply_once(tmp_path):
     conn = M.connect(tmp_path / "ev.sqlite3")
     first = M.migrate(conn)
-    assert [m.id for m in first] == ["001"]
+    assert [m.id for m in first] == ["001", "002"]
     assert M.migrate(conn) == []
 
     tables = {
         r["name"]
         for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
     }
-    assert {"cid_ledger", "session", "trade_plan", "position_event",
-            "trade_closed", "trade_tape", "schema_migration"} <= tables
-    # 001 owns the phase 2 core only. A table from a later phase appearing here
-    # means a phase stopped owning its own migration.
+    for owned in OWNERSHIP.values():
+        assert owned <= tables
+    assert "schema_migration" in tables
+    # Nothing a later phase owns has leaked in early.
     assert not tables & {"playbook", "voice_memo", "tilt_sample", "score_session"}
+
+
+def test_each_migration_creates_only_what_it_owns(tmp_path):
+    """Applied one at a time, each migration adds exactly its own tables."""
+    conn = M.connect(tmp_path / "ev.sqlite3")
+    seen: set[str] = set()
+    for migration in M.discover():
+        M.migrate(conn, _only(migration))
+        tables = {
+            r["name"]
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        added = tables - seen - {"schema_migration", "sqlite_sequence"}
+        assert added == OWNERSHIP[migration.id], migration.id
+        seen = tables
+
+
+def _only(migration):
+    """A directory view containing just this migration, for stepwise apply."""
+    import types
+
+    directory = types.SimpleNamespace()
+    directory.glob = lambda _pattern: [migration.path]
+    return directory
 
 
 def test_failed_migration_rolls_back_and_is_not_recorded(tmp_path):

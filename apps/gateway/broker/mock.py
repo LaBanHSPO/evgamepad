@@ -79,6 +79,12 @@ class MockPosition:
 class MockState:
     """Everything a test may want to steer, in one place."""
 
+    #: Emit a synthetic tick stream while connected. Off by default so tests
+    #: stay deterministic; the dev config turns it on so the HUD has a tape to
+    #: render. It is a random walk, not a market -- nothing about its shape
+    #: means anything.
+    tick: bool = False
+    tick_hz: float = 8.0
     account_id: int = 5_100_001
     is_live: bool = False
     balance_cents: int = 1_000_000  # 10,000.00 at moneyDigits 2
@@ -104,15 +110,41 @@ class MockTransport:
         self._by_id = {s.symbol_id: s for s in SYMBOLS}
         self._by_name = {s.name: s for s in SYMBOLS}
         self._subscribed: set[int] = set()
+        self._ticker: asyncio.Task | None = None
 
     # -- transport ----------------------------------------------------------
 
     async def connect(self) -> None:
         self.connected = True
         log.warning("broker.transport=mock -- NO ORDER REACHES ANY BROKER")
+        if self.state.tick and self._ticker is None:
+            self._ticker = asyncio.create_task(self._tick_loop())
 
     async def disconnect(self) -> None:
         self.connected = False
+        if self._ticker is not None:
+            self._ticker.cancel()
+            self._ticker = None
+
+    async def _tick_loop(self) -> None:
+        """A random walk, so the HUD has something to render. Deliberately not
+        a market model: it exists to prove the pipe, not to be traded."""
+        import random
+
+        prices = {s.name: (s.bid, s.ask) for s in SYMBOLS}
+        try:
+            while self.connected:
+                await asyncio.sleep(1.0 / max(self.state.tick_hz, 1.0))
+                for sym, (bid, ask) in list(prices.items()):
+                    spec = self._by_name[sym]
+                    step = (10 ** -spec.digits) * random.choice([-2, -1, 0, 1, 2])
+                    spread = ask - bid
+                    bid = round(bid + step, spec.digits)
+                    prices[sym] = (bid, round(bid + spread, spec.digits))
+                    # Feed the live book too, so entries move with the tape.
+                    self.push_spot(sym, bid=bid, ask=prices[sym][1])
+        except asyncio.CancelledError:
+            return
 
     def set_message_sink(self, sink: MessageSink) -> None:
         self._sink = sink

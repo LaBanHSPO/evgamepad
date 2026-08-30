@@ -56,6 +56,9 @@ class BrokerCfg(Base):
     #: for the acceptance run against a real demo account. ``none`` is the
     #: phase 1 stub that refuses every broker-changing call.
     transport: Literal["real", "mock", "none"] = "real"
+    #: With ``transport: mock``, emit a synthetic tick stream so the HUD has a
+    #: tape. Ignored for every other transport.
+    mock_ticks: bool = True
     host: str = "demo.ctraderapi.com"
     port: int = 5035
     proto: Literal["protobuf"] = "protobuf"

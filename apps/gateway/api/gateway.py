@@ -185,6 +185,39 @@ class Gateway:
 
         return volume_to_lots(update.volume, spec)
 
+    def position_payload(self, position: Any) -> dict[str, Any]:
+        """One open position, as the HUD reads it.
+
+        ``rMultiple`` comes from the plan's stored R, never from a constant the
+        HUD divides into the dollars -- a second R definition in the browser is
+        how the HUD and the journal end up disagreeing about one trade. It is
+        null for a position this gateway did not open (one reconciled from
+        cTrader after a restart), and the HUD then shows dollars rather than a
+        number it cannot justify.
+        """
+        spec = self.broker.symbol_spec(position.sym)
+        lots = 0.0
+        if spec is not None:
+            from ..broker.volume import volume_to_lots
+
+            lots = volume_to_lots(position.volume, spec)
+
+        plan = self.journal.plan_for_position(position.position_id)
+        r_usd = plan["r_usd"] if plan else None
+        pnl = getattr(position, "pnl", 0.0)
+        return {
+            "positionId": position.position_id,
+            "sym": position.sym,
+            "side": position.side,
+            "lots": lots,
+            "entry": position.entry,
+            "sl": position.sl,
+            "tp": position.tp,
+            "openedAt": position.opened_at,
+            "pnl": pnl,
+            "rMultiple": (pnl / r_usd) if r_usd else None,
+        }
+
     def broadcast(self, update: Any) -> None:
         for session in list(self.sessions):
             enqueue = getattr(session, "enqueue_execution", None)

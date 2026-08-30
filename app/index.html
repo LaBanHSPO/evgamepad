@@ -3,7 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EVGamePad — arcade screens</title>
+    <!--
+      default-src 'self' holds because the gateway serves this bundle and the
+      socket from one origin. connect-src covers ws: for the dev proxy and wss:
+      in production; there is no CORS carve-out and no third-party origin.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="theme-color" content="#07090b" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/icon-192.png" />
+    <title>Evening Forex Gold Gamepad</title>
   </head>
   <body>
     <div id="root"></div>

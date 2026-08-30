@@ -15,6 +15,7 @@ db_path: "var/mock.sqlite3"
 broker:
   adapter: ctrader              # only value
   transport: mock               # real | mock | none -- mock requires dev: true
+  mock_ticks: true              # synthetic tape so the HUD has something to draw
   host: "demo.ctraderapi.com"   # a live host exits
   port: 5035
   proto: protobuf

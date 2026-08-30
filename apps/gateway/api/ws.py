@@ -203,9 +203,12 @@ class WsSession:
         )
 
     async def _on_pad_telemetry(self, frame: Any, p: Any) -> None:
-        # Phase 9 consumes this. Accepted and dropped until then so the client
-        # can ship the batch now without a protocol change later.
-        return
+        # Stored, not dropped. Phase 9 reads these rows, and telemetry that was
+        # never written cannot be recovered from a session that already ended.
+        session_id = self.gw.ensure_session(now_ms())
+        self.gw.journal.append_pad_event(
+            session_id, p.model_dump(by_alias=True, exclude_none=False)
+        )
 
     async def _on_voice_begin(self, frame: Any, p: Any) -> None:
         await self.emit(
@@ -278,19 +281,7 @@ class WsSession:
                 "pos.snap",
                 {
                     "ts": ts,
-                    "positions": [
-                        {
-                            "positionId": p.position_id,
-                            "sym": p.sym,
-                            "side": p.side,
-                            "lots": 0.0,
-                            "entry": p.entry,
-                            "sl": p.sl,
-                            "tp": p.tp,
-                            "openedAt": p.opened_at,
-                        }
-                        for p in positions
-                    ],
+                    "positions": [self.gw.position_payload(p) for p in positions],
                 },
             )
         if "risk" in want:

@@ -238,6 +238,83 @@ class JournalWriter:
             ),
         )
 
+    # -- phase 3: client session ------------------------------------------
+
+    def append_pad_event(self, session_id: int | None, batch: dict[str, Any]) -> None:
+        """One row per 1 Hz telemetry batch.
+
+        Phase 9 reads these. Nothing does yet, which is exactly why they are
+        written now -- an evening that was not recorded cannot be replayed.
+        """
+        self._run(
+            "INSERT INTO pad_event (session_id, ts, from_state, to_state, sym, "
+            "lots, reason, clutch_ms, arm_ms, clutch_cycles, arm_flips, "
+            "btn_rate_hz, lot_steps, ttf_ms) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                session_id,
+                batch.get("ts", 0),
+                batch.get("from"),
+                batch.get("to"),
+                batch.get("sym"),
+                batch.get("lots"),
+                batch.get("reason"),
+                batch.get("clutchMs", 0),
+                batch.get("armMs", 0),
+                batch.get("clutchCycles", 0),
+                batch.get("armFlips", 0),
+                batch.get("btnRateHz", 0.0),
+                batch.get("lotStepsSince", 0),
+                batch.get("ttfMs"),
+            ),
+        )
+
+    def ensure_process(self, session_id: int) -> None:
+        self._run(
+            "INSERT OR IGNORE INTO session_process (session_id) VALUES (?)",
+            (session_id,),
+        )
+
+    def write_check_in(
+        self,
+        session_id: int,
+        phase: str,
+        rating: int | None,
+        at: int,
+        note: str | None = None,
+    ) -> None:
+        """The pre/post 1-5 self rating.
+
+        ``rating`` may be ``None``: the check-in is skippable, and a skip is
+        recorded as a skip rather than as a missing row, so phase 6 can tell
+        "declined" from "never asked".
+        """
+        if phase not in {"pre", "post"}:
+            raise ValueError(f"phase must be pre or post, got {phase!r}")
+        self.ensure_process(session_id)
+        self._run(
+            f"UPDATE session_process SET {phase}_rating = ?, {phase}_at = ?, "
+            f"{phase}_note = ? WHERE session_id = ?",
+            (rating, at, note, session_id),
+        )
+
+    def record_stand_downs(self, session_id: int, events: list[dict[str, Any]]) -> None:
+        """The evening's stand-down tally. Phase 11's Selectivity axis reads
+        this rather than counting its own."""
+        import json
+
+        self.ensure_process(session_id)
+        self._run(
+            "UPDATE session_process SET stand_downs = ?, stand_down_json = ? "
+            "WHERE session_id = ?",
+            (len(events), json.dumps(events, separators=(",", ":")), session_id),
+        )
+
+    def process_row(self, session_id: int) -> sqlite3.Row | None:
+        return self._run(
+            "SELECT * FROM session_process WHERE session_id = ?", (session_id,)
+        ).fetchone()
+
     def day_loss_usd(self, session_id: int) -> float:
         """Realised loss so far today, as a positive number. Feeds the
         ``max_daily_loss`` rule."""
