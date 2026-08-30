@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "protocol:gen": "node scripts/gen-protocol-types.mjs",
+    "protocol:check": "node scripts/gen-protocol-types.mjs --check",
+    "build": "pnpm protocol:check && tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit"
   },

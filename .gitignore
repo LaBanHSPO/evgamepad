@@ -2,3 +2,20 @@
 _templates/
 .helpsoft_env
 .siyuan_sync_state.json
+
+# Secrets. The gateway boot-fails without these; they never reach git, a log,
+# an image, the browser, or a backup archive.
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Runtime state: SQLite journal, frozen tape, voice audio, whisper models,
+# refreshed cTrader tokens.
+var/

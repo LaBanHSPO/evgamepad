@@ -1,0 +1,124 @@
+"""ev-gateway entrypoint. One process owns WS, REST, risk, journal, static HUD,
+and the broker link.
+
+Import order matters here and only here: the Twisted asyncio reactor has to be
+installed before anything can import ``twisted.internet.reactor`` transitively.
+"""
+
+from __future__ import annotations
+
+from apps.gateway.broker import reactor_setup  # noqa: F401  (must be first)
+
+reactor_setup.install()
+
+import logging  # noqa: E402
+import os  # noqa: E402
+from contextlib import asynccontextmanager  # noqa: E402
+from pathlib import Path  # noqa: E402
+from urllib.parse import urlparse  # noqa: E402
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+
+from apps.gateway.api.gateway import Gateway  # noqa: E402
+from apps.gateway.api.ws import WsSession  # noqa: E402
+from apps.gateway.config import Config, load  # noqa: E402
+from apps.gateway.protocol import PROTOCOL_VERSION  # noqa: E402
+from apps.gateway.risk import rules  # noqa: E402
+
+log = logging.getLogger("ev.main")
+
+
+def create_app(cfg: Config) -> FastAPI:
+    # Cheap enough to assert at boot, and it is the one property the whole
+    # safety story rests on: a close or a panic is never gated.
+    assert rules.safety_exits_are_ungated(), "a safety exit became gateable"
+
+    gw = Gateway(cfg)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        log.info(
+            "ev-gateway up on %s (%s, %s)", cfg.gateway.listen, cfg.mode, cfg.timezone
+        )
+        yield
+        gw.shutdown()
+
+    app = FastAPI(title="ev-gateway", version="0.1.0", lifespan=lifespan)
+    app.state.gw = gw
+
+    @app.get("/healthz")
+    async def healthz() -> JSONResponse:
+        health = await gw.broker.health()
+        return JSONResponse(
+            {
+                "ok": True,
+                "mode": cfg.mode,
+                "protocol": PROTOCOL_VERSION,
+                "tz": cfg.timezone,
+                "broker": {
+                    "adapter": cfg.broker.adapter,
+                    "connected": health.connected,
+                    "detail": health.detail,
+                },
+                "faults": gw.containment.faults,
+            }
+        )
+
+    @app.websocket(cfg.gateway.ws_path)
+    async def ws(sock: WebSocket) -> None:
+        origin = sock.headers.get("origin")
+        if origin and not _origin_allowed(origin, cfg):
+            await sock.close(code=4403)
+            return
+        await sock.accept()
+        session = WsSession(gw, sock.send_text)
+        try:
+            while True:
+                raw = await sock.receive_text()
+                await session.handle(raw)
+        except WebSocketDisconnect:
+            return
+
+    static_dir = Path(cfg.gateway.static_dir)
+    if static_dir.is_dir():
+        app.mount("/", StaticFiles(directory=static_dir, html=True), name="hud")
+    else:
+        log.warning(
+            "static_dir %s does not exist; build the HUD with "
+            "`pnpm -C app build` or the gateway serves no UI",
+            static_dir,
+        )
+    return app
+
+
+def _origin_allowed(origin: str, cfg: Config) -> bool:
+    """Same origin as the HUD, plus localhost in dev. The HUD and the socket
+    are served from one origin precisely so this list stays short."""
+    allowed = {cfg.gateway.public_origin.rstrip("/")}
+    if cfg.dev:
+        host = urlparse(cfg.gateway.public_origin).hostname or "localhost"
+        allowed |= {
+            f"http://{cfg.gateway.listen}",
+            f"http://localhost:{cfg.gateway.port}",
+            f"http://127.0.0.1:{cfg.gateway.port}",
+            f"http://{host}:5173",
+            "http://localhost:5173",
+        }
+    return origin.rstrip("/") in allowed
+
+
+def run() -> None:
+    import uvicorn
+
+    logging.basicConfig(
+        level=os.environ.get("EV_LOG_LEVEL", "INFO"),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+    cfg = load(os.environ.get("EV_CONFIG", "config/default.yaml"), secrets=True)
+    uvicorn.run(create_app(cfg), host=cfg.gateway.host, port=cfg.gateway.port)
+
+
+if __name__ == "__main__":
+    run()

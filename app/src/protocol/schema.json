@@ -1,0 +1,2160 @@
+{
+  "$defs": {
+    "AiAdvice": {
+      "additionalProperties": false,
+      "properties": {
+        "disabled": {
+          "default": false,
+          "title": "Disabled",
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "research",
+            "plan",
+            "advise",
+            "news",
+            "coach"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "title": "Text",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "ts"
+      ],
+      "title": "AiAdvice",
+      "type": "object"
+    },
+    "AiAsk": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "research",
+            "plan",
+            "advise",
+            "news",
+            "coach"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "sym": {
+          "anyOf": [
+            {
+              "enum": [
+                "XAUUSD",
+                "EURUSD",
+                "GBPUSD",
+                "USDJPY"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sym"
+        },
+        "tf": {
+          "anyOf": [
+            {
+              "enum": [
+                "M1",
+                "M5",
+                "M15",
+                "H1",
+                "H4",
+                "D1"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tf"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "AiAsk",
+      "type": "object"
+    },
+    "Candle": {
+      "additionalProperties": false,
+      "properties": {
+        "c": {
+          "title": "C",
+          "type": "number"
+        },
+        "closed": {
+          "default": false,
+          "title": "Closed",
+          "type": "boolean"
+        },
+        "h": {
+          "title": "H",
+          "type": "number"
+        },
+        "l": {
+          "title": "L",
+          "type": "number"
+        },
+        "o": {
+          "title": "O",
+          "type": "number"
+        },
+        "sym": {
+          "enum": [
+            "XAUUSD",
+            "EURUSD",
+            "GBPUSD",
+            "USDJPY"
+          ],
+          "title": "Sym",
+          "type": "string"
+        },
+        "tf": {
+          "enum": [
+            "M1",
+            "M5",
+            "M15",
+            "H1",
+            "H4",
+            "D1"
+          ],
+          "title": "Tf",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sym",
+        "tf",
+        "ts",
+        "o",
+        "h",
+        "l",
+        "c"
+      ],
+      "title": "Candle",
+      "type": "object"
+    },
+    "ErrorMsg": {
+      "additionalProperties": false,
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "title": "ErrorMsg",
+      "type": "object"
+    },
+    "GradeAnswer": {
+      "additionalProperties": false,
+      "properties": {
+        "answer": {
+          "title": "Answer",
+          "type": "boolean"
+        },
+        "cid": {
+          "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+          "title": "Cid",
+          "type": "string"
+        },
+        "ruleId": {
+          "title": "Ruleid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cid",
+        "ruleId",
+        "answer"
+      ],
+      "title": "GradeAnswer",
+      "type": "object"
+    },
+    "GradeMsg": {
+      "additionalProperties": false,
+      "properties": {
+        "cid": {
+          "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+          "title": "Cid",
+          "type": "string"
+        },
+        "clean": {
+          "default": false,
+          "title": "Clean",
+          "type": "boolean"
+        },
+        "playbookId": {
+          "title": "Playbookid",
+          "type": "string"
+        },
+        "required_pass": {
+          "default": 0,
+          "title": "Required Pass",
+          "type": "integer"
+        },
+        "required_total": {
+          "default": 0,
+          "title": "Required Total",
+          "type": "integer"
+        },
+        "results": {
+          "items": {
+            "$ref": "#/$defs/GradeResult"
+          },
+          "title": "Results",
+          "type": "array"
+        }
+      },
+      "required": [
+        "cid",
+        "playbookId"
+      ],
+      "title": "GradeMsg",
+      "type": "object"
+    },
+    "GradeResult": {
+      "additionalProperties": false,
+      "properties": {
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "passed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Passed"
+        },
+        "required": {
+          "title": "Required",
+          "type": "boolean"
+        },
+        "ruleId": {
+          "title": "Ruleid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ruleId",
+        "required"
+      ],
+      "title": "GradeResult",
+      "type": "object"
+    },
+    "Hello": {
+      "additionalProperties": false,
+      "properties": {
+        "lastSeq": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Lastseq",
+          "type": "integer"
+        },
+        "protocolVersion": {
+          "default": 1,
+          "title": "Protocolversion",
+          "type": "integer"
+        },
+        "token": {
+          "title": "Token",
+          "type": "string"
+        },
+        "ua": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ua"
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "title": "Hello",
+      "type": "object"
+    },
+    "IntentClose": {
+      "additionalProperties": false,
+      "properties": {
+        "armedAt": {
+          "description": "Unix ms the pad entered ARM",
+          "minimum": 0,
+          "title": "Armedat",
+          "type": "integer"
+        },
+        "clutch": {
+          "const": true,
+          "title": "Clutch",
+          "type": "boolean"
+        },
+        "positionId": {
+          "title": "Positionid",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "clutch",
+        "armedAt",
+        "positionId"
+      ],
+      "title": "IntentClose",
+      "type": "object"
+    },
+    "IntentModify": {
+      "additionalProperties": false,
+      "description": "Absolute SL/TP on an existing position. Broker-changing, so it needs the\nsame gate as an open.",
+      "properties": {
+        "armedAt": {
+          "description": "Unix ms the pad entered ARM",
+          "minimum": 0,
+          "title": "Armedat",
+          "type": "integer"
+        },
+        "clutch": {
+          "const": true,
+          "title": "Clutch",
+          "type": "boolean"
+        },
+        "positionId": {
+          "title": "Positionid",
+          "type": "integer"
+        },
+        "sl": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sl"
+        },
+        "tp": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tp"
+        }
+      },
+      "required": [
+        "clutch",
+        "armedAt",
+        "positionId"
+      ],
+      "title": "IntentModify",
+      "type": "object"
+    },
+    "IntentOpen": {
+      "additionalProperties": false,
+      "properties": {
+        "armedAt": {
+          "description": "Unix ms the pad entered ARM",
+          "minimum": 0,
+          "title": "Armedat",
+          "type": "integer"
+        },
+        "clutch": {
+          "const": true,
+          "title": "Clutch",
+          "type": "boolean"
+        },
+        "lots": {
+          "exclusiveMinimum": 0,
+          "title": "Lots",
+          "type": "number"
+        },
+        "relativeSl": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Relativesl"
+        },
+        "relativeTp": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Relativetp"
+        },
+        "side": {
+          "enum": [
+            "buy",
+            "sell"
+          ],
+          "title": "Side",
+          "type": "string"
+        },
+        "sym": {
+          "enum": [
+            "XAUUSD",
+            "EURUSD",
+            "GBPUSD",
+            "USDJPY"
+          ],
+          "title": "Sym",
+          "type": "string"
+        },
+        "type": {
+          "const": "market",
+          "default": "market",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "clutch",
+        "armedAt",
+        "sym",
+        "side",
+        "lots"
+      ],
+      "title": "IntentOpen",
+      "type": "object"
+    },
+    "IntentPanic": {
+      "additionalProperties": false,
+      "description": "Flatten every position, then lock.",
+      "properties": {
+        "armedAt": {
+          "description": "Unix ms the pad entered ARM",
+          "minimum": 0,
+          "title": "Armedat",
+          "type": "integer"
+        },
+        "clutch": {
+          "const": true,
+          "title": "Clutch",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "clutch",
+        "armedAt"
+      ],
+      "title": "IntentPanic",
+      "type": "object"
+    },
+    "JournalMemoLink": {
+      "additionalProperties": false,
+      "properties": {
+        "cid": {
+          "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+          "title": "Cid",
+          "type": "string"
+        },
+        "voiceId": {
+          "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+          "title": "Voiceid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "voiceId",
+        "cid"
+      ],
+      "title": "JournalMemoLink",
+      "type": "object"
+    },
+    "Maint": {
+      "additionalProperties": false,
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "until": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Until"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "title": "Maint",
+      "type": "object"
+    },
+    "NewsItem": {
+      "additionalProperties": false,
+      "properties": {
+        "currency": {
+          "title": "Currency",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "impact": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Impact",
+          "type": "string"
+        },
+        "sym": {
+          "anyOf": [
+            {
+              "enum": [
+                "XAUUSD",
+                "EURUSD",
+                "GBPUSD",
+                "USDJPY"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sym"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "title",
+        "impact",
+        "currency"
+      ],
+      "title": "NewsItem",
+      "type": "object"
+    },
+    "OrderAck": {
+      "additionalProperties": false,
+      "properties": {
+        "cid": {
+          "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+          "title": "Cid",
+          "type": "string"
+        },
+        "lots": {
+          "title": "Lots",
+          "type": "number"
+        },
+        "orderId": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Orderid"
+        },
+        "positionId": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Positionid"
+        },
+        "price": {
+          "title": "Price",
+          "type": "number"
+        },
+        "side": {
+          "enum": [
+            "buy",
+            "sell"
+          ],
+          "title": "Side",
+          "type": "string"
+        },
+        "sym": {
+          "enum": [
+            "XAUUSD",
+            "EURUSD",
+            "GBPUSD",
+            "USDJPY"
+          ],
+          "title": "Sym",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cid",
+        "sym",
+        "side",
+        "lots",
+        "price",
+        "ts"
+      ],
+      "title": "OrderAck",
+      "type": "object"
+    },
+    "OrderReject": {
+      "additionalProperties": false,
+      "properties": {
+        "cid": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cid"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "reason": {
+          "enum": [
+            "not_wired",
+            "no_clutch",
+            "stale_arm",
+            "duplicate_cid",
+            "locked",
+            "session_closed",
+            "dead_man",
+            "max_positions",
+            "max_daily_loss",
+            "max_lots",
+            "lot_step",
+            "unknown_symbol",
+            "spread_too_wide",
+            "rate_limited",
+            "cooldown",
+            "broker_error",
+            "broker_down"
+          ],
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "title": "OrderReject",
+      "type": "object"
+    },
+    "OrderUpd": {
+      "additionalProperties": false,
+      "properties": {
+        "cid": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cid"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "orderId": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Orderid"
+        },
+        "positionId": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Positionid"
+        },
+        "status": {
+          "enum": [
+            "filled",
+            "closed",
+            "amended",
+            "cancelled",
+            "expired"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "status",
+        "ts"
+      ],
+      "title": "OrderUpd",
+      "type": "object"
+    },
+    "PadTelemetry": {
+      "additionalProperties": false,
+      "description": "1 Hz batch, never per-frame. Phase 9 consumes it; phase 1 freezes it.",
+      "properties": {
+        "armFlips": {
+          "default": 0,
+          "title": "Armflips",
+          "type": "integer"
+        },
+        "armMs": {
+          "default": 0,
+          "title": "Armms",
+          "type": "integer"
+        },
+        "btnRateHz": {
+          "default": 0.0,
+          "title": "Btnratehz",
+          "type": "number"
+        },
+        "clutchCycles": {
+          "default": 0,
+          "title": "Clutchcycles",
+          "type": "integer"
+        },
+        "clutchMs": {
+          "default": 0,
+          "title": "Clutchms",
+          "type": "integer"
+        },
+        "from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "From"
+        },
+        "lotStepsSince": {
+          "default": 0,
+          "title": "Lotstepssince",
+          "type": "integer"
+        },
+        "lots": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lots"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "sym": {
+          "anyOf": [
+            {
+              "enum": [
+                "XAUUSD",
+                "EURUSD",
+                "GBPUSD",
+                "USDJPY"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sym"
+        },
+        "to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "To"
+        },
+        "ts": {
+          "minimum": 0,
+          "title": "Ts",
+          "type": "integer"
+        },
+        "ttfMs": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ttfms"
+        }
+      },
+      "required": [
+        "ts"
+      ],
+      "title": "PadTelemetry",
+      "type": "object"
+    },
+    "Ping": {
+      "additionalProperties": false,
+      "properties": {
+        "clutch": {
+          "default": false,
+          "title": "Clutch",
+          "type": "boolean"
+        },
+        "padSeq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Padseq"
+        }
+      },
+      "title": "Ping",
+      "type": "object"
+    },
+    "PlaybookList": {
+      "additionalProperties": false,
+      "properties": {
+        "playbooks": {
+          "items": {
+            "$ref": "#/$defs/PlaybookSummary"
+          },
+          "title": "Playbooks",
+          "type": "array"
+        }
+      },
+      "title": "PlaybookList",
+      "type": "object"
+    },
+    "PlaybookSelect": {
+      "additionalProperties": false,
+      "properties": {
+        "playbookId": {
+          "title": "Playbookid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "playbookId"
+      ],
+      "title": "PlaybookSelect",
+      "type": "object"
+    },
+    "PlaybookSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "playbookId": {
+          "title": "Playbookid",
+          "type": "string"
+        },
+        "requiredCount": {
+          "title": "Requiredcount",
+          "type": "integer"
+        },
+        "ruleCount": {
+          "title": "Rulecount",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "playbookId",
+        "name",
+        "ruleCount",
+        "requiredCount"
+      ],
+      "title": "PlaybookSummary",
+      "type": "object"
+    },
+    "Pnl": {
+      "additionalProperties": false,
+      "properties": {
+        "balance": {
+          "title": "Balance",
+          "type": "number"
+        },
+        "dayPnl": {
+          "default": 0.0,
+          "title": "Daypnl",
+          "type": "number"
+        },
+        "equity": {
+          "title": "Equity",
+          "type": "number"
+        },
+        "openPnl": {
+          "default": 0.0,
+          "title": "Openpnl",
+          "type": "number"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ts",
+        "balance",
+        "equity"
+      ],
+      "title": "Pnl",
+      "type": "object"
+    },
+    "Pong": {
+      "additionalProperties": false,
+      "properties": {
+        "clutch": {
+          "default": false,
+          "title": "Clutch",
+          "type": "boolean"
+        },
+        "serverTs": {
+          "title": "Serverts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "serverTs"
+      ],
+      "title": "Pong",
+      "type": "object"
+    },
+    "PosSnap": {
+      "additionalProperties": false,
+      "properties": {
+        "positions": {
+          "items": {
+            "$ref": "#/$defs/Position"
+          },
+          "title": "Positions",
+          "type": "array"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ts"
+      ],
+      "title": "PosSnap",
+      "type": "object"
+    },
+    "Position": {
+      "additionalProperties": false,
+      "properties": {
+        "entry": {
+          "title": "Entry",
+          "type": "number"
+        },
+        "lots": {
+          "title": "Lots",
+          "type": "number"
+        },
+        "openedAt": {
+          "title": "Openedat",
+          "type": "integer"
+        },
+        "pnl": {
+          "default": 0.0,
+          "title": "Pnl",
+          "type": "number"
+        },
+        "positionId": {
+          "title": "Positionid",
+          "type": "integer"
+        },
+        "rMultiple": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rmultiple"
+        },
+        "side": {
+          "enum": [
+            "buy",
+            "sell"
+          ],
+          "title": "Side",
+          "type": "string"
+        },
+        "sl": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sl"
+        },
+        "sym": {
+          "enum": [
+            "XAUUSD",
+            "EURUSD",
+            "GBPUSD",
+            "USDJPY"
+          ],
+          "title": "Sym",
+          "type": "string"
+        },
+        "tp": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tp"
+        }
+      },
+      "required": [
+        "positionId",
+        "sym",
+        "side",
+        "lots",
+        "entry",
+        "openedAt"
+      ],
+      "title": "Position",
+      "type": "object"
+    },
+    "Quote": {
+      "additionalProperties": false,
+      "properties": {
+        "ask": {
+          "title": "Ask",
+          "type": "number"
+        },
+        "bid": {
+          "title": "Bid",
+          "type": "number"
+        },
+        "digits": {
+          "title": "Digits",
+          "type": "integer"
+        },
+        "sym": {
+          "enum": [
+            "XAUUSD",
+            "EURUSD",
+            "GBPUSD",
+            "USDJPY"
+          ],
+          "title": "Sym",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sym",
+        "bid",
+        "ask",
+        "ts",
+        "digits"
+      ],
+      "title": "Quote",
+      "type": "object"
+    },
+    "Resync": {
+      "additionalProperties": false,
+      "properties": {
+        "fromSeq": {
+          "minimum": 0,
+          "title": "Fromseq",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "fromSeq"
+      ],
+      "title": "Resync",
+      "type": "object"
+    },
+    "RiskState": {
+      "additionalProperties": false,
+      "properties": {
+        "dayLossUsd": {
+          "default": 0.0,
+          "title": "Daylossusd",
+          "type": "number"
+        },
+        "locked": {
+          "title": "Locked",
+          "type": "boolean"
+        },
+        "maxDailyLossUsd": {
+          "default": 0.0,
+          "title": "Maxdailylossusd",
+          "type": "number"
+        },
+        "maxPositions": {
+          "default": 1,
+          "title": "Maxpositions",
+          "type": "integer"
+        },
+        "positions": {
+          "default": 0,
+          "title": "Positions",
+          "type": "integer"
+        },
+        "reasons": {
+          "items": {
+            "enum": [
+              "not_wired",
+              "no_clutch",
+              "stale_arm",
+              "duplicate_cid",
+              "locked",
+              "session_closed",
+              "dead_man",
+              "max_positions",
+              "max_daily_loss",
+              "max_lots",
+              "lot_step",
+              "unknown_symbol",
+              "spread_too_wide",
+              "rate_limited",
+              "cooldown",
+              "broker_error",
+              "broker_down"
+            ],
+            "type": "string"
+          },
+          "title": "Reasons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "locked"
+      ],
+      "title": "RiskState",
+      "type": "object"
+    },
+    "ScoreSession": {
+      "additionalProperties": false,
+      "properties": {
+        "axes": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Axes",
+          "type": "object"
+        },
+        "na": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Na",
+          "type": "array"
+        },
+        "total": {
+          "default": 0.0,
+          "title": "Total",
+          "type": "number"
+        },
+        "weightsVersion": {
+          "default": "1",
+          "title": "Weightsversion",
+          "type": "string"
+        }
+      },
+      "title": "ScoreSession",
+      "type": "object"
+    },
+    "SentinelTick": {
+      "additionalProperties": false,
+      "properties": {
+        "band": {
+          "enum": [
+            "green",
+            "amber",
+            "red"
+          ],
+          "title": "Band",
+          "type": "string"
+        },
+        "newsOk": {
+          "title": "Newsok",
+          "type": "boolean"
+        },
+        "sessionOk": {
+          "title": "Sessionok",
+          "type": "boolean"
+        },
+        "spread": {
+          "title": "Spread",
+          "type": "number"
+        },
+        "spreadOk": {
+          "title": "Spreadok",
+          "type": "boolean"
+        },
+        "sym": {
+          "enum": [
+            "XAUUSD",
+            "EURUSD",
+            "GBPUSD",
+            "USDJPY"
+          ],
+          "title": "Sym",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ts",
+        "sym",
+        "spread",
+        "spreadOk",
+        "sessionOk",
+        "newsOk",
+        "band"
+      ],
+      "title": "SentinelTick",
+      "type": "object"
+    },
+    "SessionLock": {
+      "additionalProperties": false,
+      "properties": {},
+      "title": "SessionLock",
+      "type": "object"
+    },
+    "SessionState": {
+      "additionalProperties": false,
+      "properties": {
+        "endsAt": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Endsat"
+        },
+        "opensAllowed": {
+          "title": "Opensallowed",
+          "type": "boolean"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "startsAt": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Startsat"
+        },
+        "state": {
+          "enum": [
+            "closed",
+            "open",
+            "locked",
+            "cooldown"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "tz": {
+          "title": "Tz",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "opensAllowed",
+        "tz"
+      ],
+      "title": "SessionState",
+      "type": "object"
+    },
+    "SessionUnlock": {
+      "additionalProperties": false,
+      "properties": {},
+      "title": "SessionUnlock",
+      "type": "object"
+    },
+    "SignalItem": {
+      "additionalProperties": false,
+      "description": "TradingView webhook. Advisory only -- ``auto_trade`` is a boot-fail.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "source": {
+          "const": "tradingview",
+          "default": "tradingview",
+          "title": "Source",
+          "type": "string"
+        },
+        "sym": {
+          "enum": [
+            "XAUUSD",
+            "EURUSD",
+            "GBPUSD",
+            "USDJPY"
+          ],
+          "title": "Sym",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "tf": {
+          "anyOf": [
+            {
+              "enum": [
+                "M1",
+                "M5",
+                "M15",
+                "H1",
+                "H4",
+                "D1"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tf"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "sym",
+        "text"
+      ],
+      "title": "SignalItem",
+      "type": "object"
+    },
+    "Snap": {
+      "additionalProperties": false,
+      "properties": {
+        "what": {
+          "items": {
+            "enum": [
+              "pos",
+              "pnl",
+              "session",
+              "risk",
+              "playbook",
+              "tilt"
+            ],
+            "type": "string"
+          },
+          "title": "What",
+          "type": "array"
+        }
+      },
+      "title": "Snap",
+      "type": "object"
+    },
+    "Sub": {
+      "additionalProperties": false,
+      "properties": {
+        "ch": {
+          "enum": [
+            "quotes",
+            "orders",
+            "session",
+            "ai",
+            "voice"
+          ],
+          "title": "Ch",
+          "type": "string"
+        },
+        "syms": {
+          "items": {
+            "enum": [
+              "XAUUSD",
+              "EURUSD",
+              "GBPUSD",
+              "USDJPY"
+            ],
+            "type": "string"
+          },
+          "title": "Syms",
+          "type": "array"
+        },
+        "tf": {
+          "anyOf": [
+            {
+              "enum": [
+                "M1",
+                "M5",
+                "M15",
+                "H1",
+                "H4",
+                "D1"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tf"
+        }
+      },
+      "required": [
+        "ch"
+      ],
+      "title": "Sub",
+      "type": "object"
+    },
+    "TiltMsg": {
+      "additionalProperties": false,
+      "properties": {
+        "band": {
+          "enum": [
+            "cool",
+            "warm",
+            "hot",
+            "scorched"
+          ],
+          "title": "Band",
+          "type": "string"
+        },
+        "cooldownUntil": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cooldownuntil"
+        },
+        "score": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Score",
+          "type": "number"
+        },
+        "top": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Top",
+          "type": "array"
+        }
+      },
+      "required": [
+        "score",
+        "band"
+      ],
+      "title": "TiltMsg",
+      "type": "object"
+    },
+    "VoiceBegin": {
+      "additionalProperties": false,
+      "properties": {
+        "cid": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cid"
+        },
+        "voiceId": {
+          "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+          "title": "Voiceid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "voiceId"
+      ],
+      "title": "VoiceBegin",
+      "type": "object"
+    },
+    "VoiceCancel": {
+      "additionalProperties": false,
+      "properties": {
+        "voiceId": {
+          "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+          "title": "Voiceid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "voiceId"
+      ],
+      "title": "VoiceCancel",
+      "type": "object"
+    },
+    "VoiceStateMsg": {
+      "additionalProperties": false,
+      "properties": {
+        "busy": {
+          "default": false,
+          "title": "Busy",
+          "type": "boolean"
+        },
+        "queued": {
+          "default": 0,
+          "title": "Queued",
+          "type": "integer"
+        }
+      },
+      "title": "VoiceStateMsg",
+      "type": "object"
+    },
+    "VoiceTranscript": {
+      "additionalProperties": false,
+      "properties": {
+        "cid": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cid"
+        },
+        "durMs": {
+          "default": 0,
+          "title": "Durms",
+          "type": "integer"
+        },
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "sttMs": {
+          "default": 0,
+          "title": "Sttms",
+          "type": "integer"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text"
+        },
+        "voiceId": {
+          "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+          "title": "Voiceid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "voiceId",
+        "ok"
+      ],
+      "title": "VoiceTranscript",
+      "type": "object"
+    },
+    "Welcome": {
+      "additionalProperties": false,
+      "properties": {
+        "features": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "title": "Features",
+          "type": "object"
+        },
+        "protocolVersion": {
+          "default": 1,
+          "title": "Protocolversion",
+          "type": "integer"
+        },
+        "resumed": {
+          "default": false,
+          "title": "Resumed",
+          "type": "boolean"
+        },
+        "seq": {
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "serverTs": {
+          "title": "Serverts",
+          "type": "integer"
+        },
+        "sessionId": {
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "symbols": {
+          "items": {
+            "enum": [
+              "XAUUSD",
+              "EURUSD",
+              "GBPUSD",
+              "USDJPY"
+            ],
+            "type": "string"
+          },
+          "title": "Symbols",
+          "type": "array"
+        },
+        "tz": {
+          "title": "Tz",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId",
+        "seq",
+        "serverTs",
+        "tz",
+        "symbols"
+      ],
+      "title": "Welcome",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "channels": [
+    "quotes",
+    "orders",
+    "session",
+    "ai",
+    "voice"
+  ],
+  "maxFrameBytes": 65536,
+  "messages": {
+    "ai.advice": {
+      "channel": "ai",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/AiAdvice"
+      }
+    },
+    "ai.ask": {
+      "channel": "ai",
+      "direction": "c2s",
+      "payload": {
+        "$ref": "#/$defs/AiAsk"
+      }
+    },
+    "candle": {
+      "channel": "quotes",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/Candle"
+      }
+    },
+    "error": {
+      "channel": "session",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/ErrorMsg"
+      }
+    },
+    "grade": {
+      "channel": "session",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/GradeMsg"
+      }
+    },
+    "grade.answer": {
+      "channel": "session",
+      "direction": "c2s",
+      "payload": {
+        "$ref": "#/$defs/GradeAnswer"
+      }
+    },
+    "hello": {
+      "channel": "session",
+      "direction": "c2s",
+      "payload": {
+        "$ref": "#/$defs/Hello"
+      }
+    },
+    "intent.close": {
+      "channel": "orders",
+      "direction": "c2s",
+      "payload": {
+        "$ref": "#/$defs/IntentClose"
+      }
+    },
+    "intent.modify": {
+      "channel": "orders",
+      "direction": "c2s",
+      "payload": {
+        "$ref": "#/$defs/IntentModify"
+      }
+    },
+    "intent.open": {
+      "channel": "orders",
+      "direction": "c2s",
+      "payload": {
+        "$ref": "#/$defs/IntentOpen"
+      }
+    },
+    "intent.panic": {
+      "channel": "orders",
+      "direction": "c2s",
+      "payload": {
+        "$ref": "#/$defs/IntentPanic"
+      }
+    },
+    "journal.memo.link": {
+      "channel": "voice",
+      "direction": "c2s",
+      "payload": {
+        "$ref": "#/$defs/JournalMemoLink"
+      }
+    },
+    "maint": {
+      "channel": "session",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/Maint"
+      }
+    },
+    "news.item": {
+      "channel": "ai",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/NewsItem"
+      }
+    },
+    "order.ack": {
+      "channel": "orders",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/OrderAck"
+      }
+    },
+    "order.reject": {
+      "channel": "orders",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/OrderReject"
+      }
+    },
+    "order.upd": {
+      "channel": "orders",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/OrderUpd"
+      }
+    },
+    "pad.telemetry": {
+      "channel": "session",
+      "direction": "c2s",
+      "payload": {
+        "$ref": "#/$defs/PadTelemetry"
+      }
+    },
+    "ping": {
+      "channel": "session",
+      "direction": "c2s",
+      "payload": {
+        "$ref": "#/$defs/Ping"
+      }
+    },
+    "playbook.list": {
+      "channel": "session",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/PlaybookList"
+      }
+    },
+    "playbook.select": {
+      "channel": "session",
+      "direction": "c2s",
+      "payload": {
+        "$ref": "#/$defs/PlaybookSelect"
+      }
+    },
+    "pnl": {
+      "channel": "orders",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/Pnl"
+      }
+    },
+    "pong": {
+      "channel": "session",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/Pong"
+      }
+    },
+    "pos.snap": {
+      "channel": "orders",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/PosSnap"
+      }
+    },
+    "quote": {
+      "channel": "quotes",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/Quote"
+      }
+    },
+    "resync": {
+      "channel": "session",
+      "direction": "c2s",
+      "payload": {
+        "$ref": "#/$defs/Resync"
+      }
+    },
+    "risk": {
+      "channel": "session",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/RiskState"
+      }
+    },
+    "score.session": {
+      "channel": "session",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/ScoreSession"
+      }
+    },
+    "sentinel.tick": {
+      "channel": "ai",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/SentinelTick"
+      }
+    },
+    "session": {
+      "channel": "session",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/SessionState"
+      }
+    },
+    "session.lock": {
+      "channel": "session",
+      "direction": "c2s",
+      "payload": {
+        "$ref": "#/$defs/SessionLock"
+      }
+    },
+    "session.unlock": {
+      "channel": "session",
+      "direction": "c2s",
+      "payload": {
+        "$ref": "#/$defs/SessionUnlock"
+      }
+    },
+    "signal.item": {
+      "channel": "ai",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/SignalItem"
+      }
+    },
+    "snap": {
+      "channel": "session",
+      "direction": "c2s",
+      "payload": {
+        "$ref": "#/$defs/Snap"
+      }
+    },
+    "sub": {
+      "channel": "session",
+      "direction": "c2s",
+      "payload": {
+        "$ref": "#/$defs/Sub"
+      }
+    },
+    "tilt": {
+      "channel": "session",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/TiltMsg"
+      }
+    },
+    "voice.begin": {
+      "channel": "voice",
+      "direction": "c2s",
+      "payload": {
+        "$ref": "#/$defs/VoiceBegin"
+      }
+    },
+    "voice.cancel": {
+      "channel": "voice",
+      "direction": "c2s",
+      "payload": {
+        "$ref": "#/$defs/VoiceCancel"
+      }
+    },
+    "voice.state": {
+      "channel": "voice",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/VoiceStateMsg"
+      }
+    },
+    "voice.transcript": {
+      "channel": "voice",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/VoiceTranscript"
+      }
+    },
+    "welcome": {
+      "channel": "session",
+      "direction": "s2c",
+      "payload": {
+        "$ref": "#/$defs/Welcome"
+      }
+    }
+  },
+  "protocolVersion": 1,
+  "title": "ev-gateway protocol v1"
+}

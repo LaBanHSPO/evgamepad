@@ -1,0 +1,39 @@
+# Exactly one service. An execution sidecar, a second broker hop, and a separate
+# copilot container are all explicit non-goals -- the gateway is one Python
+# process that owns the socket, the risk checks, the journal, the HUD, and the
+# cTrader link.
+
+services:
+  ev-gateway:
+    build:
+      context: .
+      dockerfile: apps/gateway/Dockerfile
+    image: ev-gateway:0.1.0
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      EV_CONFIG: /srv/config/default.yaml
+      EV_LOG_LEVEL: INFO
+    # Loopback only. The box's existing TLS on :443 proxies to this; publishing
+    # it any wider is a boot-fail in config, not just a bad idea here.
+    ports:
+      - "127.0.0.1:8444:8444"
+    volumes:
+      # SQLite journal, frozen tape, voice audio, and the refreshed cTrader
+      # token (mode 0600). Never baked into the image, never in a backup.
+      - ev-data:/srv/var
+      # whisper models fetched by deploy/fetch-models.sh; the image carries
+      # only the tiny.en floor.
+      - ev-models:/opt/models
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8444/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    stop_grace_period: 20s
+
+volumes:
+  ev-data:
+  ev-models:

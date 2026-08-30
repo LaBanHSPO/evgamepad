@@ -20,7 +20,10 @@ backup, restore, and deliberate deletion.
 > **The end goal is confidence and enjoyment — improving decision quality, not the money.**
 > Demo only. Not advice. Entertainment, not alpha.
 
-**Status:** planning complete, implementation not started. The authority for everything below is
+**Status:** phase 1 landed; phase 2 is wired except for the broker itself. The gateway boots, serves
+the HUD, accepts a WebSocket, enforces every risk rule, and journals — with `NotWiredBroker` in place
+of cTrader until credentials exist. See [`docs/gateway.md`](./docs/gateway.md). The authority for
+everything below is
 [`plans/260824-1506-evening-forex-gold-gamepad/plan.md`](./plans/260824-1506-evening-forex-gold-gamepad/plan.md).
 
 ---
@@ -163,8 +166,8 @@ acceptance gates follow migration, navigation, and evidence contracts from `1` t
 
 | # | Phase | Effort | Status |
 |---|-------|--------|--------|
-| 1 | [Repo, protocol, Docker config](./plans/260824-1506-evening-forex-gold-gamepad/phase-01-repo-protocol-docker-config.md) | 12h | Pending |
-| 2 | [cTrader exec and socket gateway](./plans/260824-1506-evening-forex-gold-gamepad/phase-02-ctrader-exec-and-socket-gateway.md) | 22h | Pending |
+| 1 | [Repo, protocol, Docker config](./plans/260824-1506-evening-forex-gold-gamepad/phase-01-repo-protocol-docker-config.md) | 12h | **Done** |
+| 2 | [cTrader exec and socket gateway](./plans/260824-1506-evening-forex-gold-gamepad/phase-02-ctrader-exec-and-socket-gateway.md) | 22h | **Partial** — everything but the OpenApiPy link |
 | 3 | [Web game and 8BitDo client agent](./plans/260824-1506-evening-forex-gold-gamepad/phase-03-web-game-and-8bitdo-client-agent.md) | 18h | Pending |
 | 4 | [AI desk: sentinel, news, Volman, advise](./plans/260824-1506-evening-forex-gold-gamepad/phase-04-ai-desk-sentinel-news-volman.md) | 18h | Pending |
 | 5 | [Ubuntu Docker deploy](./plans/260824-1506-evening-forex-gold-gamepad/phase-05-ubuntu-docker-deploy.md) | 7h | Pending |
@@ -180,12 +183,13 @@ acceptance gates follow migration, navigation, and evidence contracts from `1` t
 
 Total: 203h ≈ 26 working days.
 
-## Planned repo layout
+## Repo layout
 
 ```text
+app/              React PWA, built to app/dist/ and served by the gateway.
+                  Node is build-time only. TS protocol types are generated
+                  from the gateway catalog into app/src/protocol/.
 apps/
-  web/            React PWA (Vite + TanStack Router/Query), built to dist/ and
-                  served by the gateway. Node is build-time only.
   gateway/        Python — one process, one container:
     protocol/     Frozen v1 envelope + Pydantic message catalog
     broker/       cTrader Open API via ctrader-open-api (OpenApiPy/Twisted)
@@ -202,7 +206,8 @@ plans/            Plan of record, phase files, research, journals
 
 ## Getting started
 
-Nothing is implemented yet — phase 1 scaffolds the workspace. Once it lands the setup is:
+The gateway runs today. Phase 2's remaining piece is the cTrader link itself, which needs
+credentials before it can be written honestly.
 
 **Prerequisites**
 
@@ -227,13 +232,19 @@ into an image, exported, or included in backups.
 **Run**
 
 ```bash
-uv sync                   # gateway deps, including ctrader-open-api
-uv run pytest             # protocol round-trips, risk rules, volume conversion
-pnpm -C apps/web install
-pnpm -C apps/web build    # emits apps/web/dist, baked into the gateway image
+uv sync --all-extras      # gateway deps, including ctrader-open-api
+uv run pytest             # protocol round-trips, risk rules, R, volume, tape
+uv run python -m apps.gateway.db.migrate     # applies 001-core-trading
+pnpm -C app install
+pnpm -C app build         # checks protocol types, emits app/dist
 docker compose build
 docker compose up -d      # ev-gateway on 127.0.0.1:8444 — the only service
 ```
+
+Without Docker, `uv run python -m apps.gateway.main` serves the same thing on
+`127.0.0.1:8444`. Until phase 2 wires OpenApiPy, quotes are absent and every
+broker-changing intent is refused with `not_wired` — the rest of the path
+(protocol, risk, cid reservation, journal, reject frame) runs for real.
 
 Then open `https://YOUR_DOMAIN` in a focused Chrome tab, connect the pad, and the HUD and socket come
 from the same origin.
