@@ -28,6 +28,9 @@ REQUIRED_ENV = ("CT_CLIENT_ID", "CT_CLIENT_SECRET", "CT_ACCESS_TOKEN", "CT_REFRE
 
 SCORE_WEIGHT_TOLERANCE = 1e-9
 
+# The provider caps its web-search domain filter at five entries.
+MAX_ALLOWED_DOMAINS = 5
+
 
 class ConfigError(ValueError):
     """A configuration the gateway refuses to run. Always fatal, never a warning."""
@@ -210,12 +213,36 @@ class CopilotConfig(Base):
 
     enabled: bool = True
     on_hot_path: bool = False
+    model: str = ""
+    allowed_domains: list[str] = Field(default_factory=list)
+
+    @field_validator("allowed_domains")
+    @classmethod
+    def _provider_caps_the_filter(cls, v: list[str]) -> list[str]:
+        if len(v) > MAX_ALLOWED_DOMAINS:
+            raise ValueError(
+                f"copilot.allowed_domains has {len(v)} entries; the provider caps the search "
+                f"filter at {MAX_ALLOWED_DOMAINS}"
+            )
+        return v
 
     @model_validator(mode="after")
     def _never_on_hot_path(self) -> CopilotConfig:
         if self.on_hot_path:
             raise ValueError("copilot.on_hot_path: true — the desk may never sit on the order path")
         return self
+
+
+class CalendarSignalConfig(Base):
+    source: Literal["ff_weekly", "off"] = "ff_weekly"
+    min_impact: Literal["Low", "Medium", "High"] = "High"
+
+
+class SignalsConfig(Base):
+    """Trusted signal sources. An empty `x_accounts` means x_search is never enabled at all."""
+
+    calendar: CalendarSignalConfig = Field(default_factory=CalendarSignalConfig)
+    x_accounts: list[str] = Field(default_factory=list)
 
 
 class TradingViewConfig(Base):
@@ -234,6 +261,10 @@ class PathsConfig(Base):
     """Everything durable lives under one volume, so backup and restore have one root."""
 
     data_dir: str = "/data"
+
+    @property
+    def data_dir_path(self) -> Path:
+        return Path(self.data_dir)
 
     @property
     def db(self) -> Path:
@@ -269,6 +300,7 @@ class AppConfig(Base):
     score: ScoreConfig
     playbook: PlaybookConfig
     copilot: CopilotConfig = Field(default_factory=CopilotConfig)
+    signals: SignalsConfig = Field(default_factory=SignalsConfig)
     tradingview: TradingViewConfig = Field(default_factory=TradingViewConfig)
 
     @field_validator("timezone")

@@ -27,7 +27,7 @@ log = logging.getLogger(__name__)
 
 Send = Callable[[str], Awaitable[None]]
 
-# `ai.ask` is answered but inert until phase 4 wires the desk.
+# What `ai.ask` says when no desk is attached at all (phase 1-3 shape, kept for the tests).
 AI_DISABLED = {"disabled": True, "reason": "copilot lands in phase 4"}
 
 
@@ -72,6 +72,10 @@ class GameSocket:
     max_day_loss_usd: float
     min_seconds_between_orders: float
     heartbeat_dead_s: float
+
+    # Phase 4. Both optional: the socket must work with the desk absent, offline, or unconfigured.
+    desk: Any | None = None
+    sentinel: Any | None = None
 
     seq: int = 0
     subscriptions: set[str] = field(default_factory=set)
@@ -313,12 +317,27 @@ class GameSocket:
         await self.emit("session", "session", self._session_payload())
 
     async def _ai_ask(self, envelope: Envelope) -> None:
+        """The desk answers off the hot path. An unreachable desk is an answer, not a failure."""
+        kind = str(envelope.p.get("kind", "advise"))
+        if self.desk is None:
+            text, citations = str(AI_DISABLED["reason"]), []
+        else:
+            answer = await self.desk.ask(kind, question=envelope.p.get("sym"))
+            text, citations = answer.text, answer.sources
         await self.emit(
             "ai.advice", "ai",
-            {"cid": envelope.cid, "kind": envelope.p.get("kind", "advise"),
-             "text": AI_DISABLED["reason"], "citations": [], "ts": self.now_ms()},
+            {"cid": envelope.cid, "kind": kind, "text": text, "citations": citations,
+             "ts": self.now_ms()},
             cid=envelope.cid,
         )
+
+    async def push_sentinel(self, tick: Any) -> None:
+        """The strip, painted from local state. It never waits on the desk."""
+        await self.emit("sentinel.tick", "ai", tick.payload())
+
+    async def push_signal(self, signal: dict[str, Any]) -> None:
+        """A method tag, a calendar guard, or a TradingView hint. Never an order."""
+        await self.emit("signal.item", "ai", signal)
 
     async def _pad_telemetry(self, envelope: Envelope) -> None:
         """Accepted and journalled now; phase 9 turns it into a tilt score.

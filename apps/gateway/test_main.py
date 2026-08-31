@@ -143,3 +143,64 @@ def test_standing_down_increments_a_counter_that_reads_as_a_win(client: TestClie
     second = client.post("/api/journal/stand-down", json={"conditions": ["spread_wide"]}).json()
     assert first["stoodDown"] == 1
     assert second["stoodDown"] == 2
+
+
+def test_the_desk_answers_ai_ask_offline_without_blocking_the_socket(client: TestClient,
+                                                                     monkeypatch) -> None:
+    """No key and no model: the desk still answers, and the socket keeps taking frames."""
+    import json
+
+    cfg = client.app.state.config
+    monkeypatch.setenv(cfg.gateway.token_env, "tok")
+    with client.websocket_connect(
+        "/ws?token=tok", headers={"origin": cfg.gateway.public_origin}
+    ) as ws:
+        ws.send_text(json.dumps({"v": 1, "t": "hello", "seq": 1, "ts": 1, "ch": "session",
+                                 "p": {"token": "tok"}}))
+        ws.receive_text()
+
+        ws.send_text(json.dumps({"v": 1, "t": "ai.ask", "seq": 2, "ts": 1, "ch": "ai",
+                                 "cid": "01JKQ8ZC9N7Y2WX4T6VB3MHRAE",
+                                 "p": {"kind": "advise", "sym": "XAUUSD"}}))
+        advice = json.loads(ws.receive_text())
+        assert advice["t"] == "ai.advice"
+        assert "coach offline" in advice["p"]["text"]
+
+        ws.send_text(json.dumps({"v": 1, "t": "ping", "seq": 3, "ts": 1, "ch": "session",
+                                 "p": {"visible": True, "pad": True, "clutch": False}}))
+        assert json.loads(ws.receive_text())["t"] == "pong"
+
+
+def test_the_tv_webhook_is_off_until_it_is_switched_on(client: TestClient, monkeypatch) -> None:
+    cfg = client.app.state.config
+    monkeypatch.setenv(cfg.tradingview.webhook_secret_env, "shh")
+    client.app.state.tv_guard.secret = "shh"
+
+    body = {"secret": "shh", "setup": "range break", "sym": "XAUUSD", "side": "buy"}
+    assert client.post("/hooks/tv", json=body).status_code == 404, "intake is disabled by default"
+
+
+def test_a_tv_alert_with_the_wrong_secret_is_refused(client: TestClient) -> None:
+    client.app.state.tv_guard.secret = "shh"
+    body = {"secret": "wrong", "setup": "range break", "sym": "XAUUSD"}
+    assert client.post("/hooks/tv", json=body).status_code == 401
+
+
+def test_an_accepted_tv_alert_becomes_a_hint_and_not_an_order(client: TestClient) -> None:
+    client.app.state.config.tradingview.enabled = True
+    client.app.state.tv_guard.secret = "shh"
+
+    body = {"secret": "shh", "setup": "range break", "sym": "xauusd", "side": "buy", "tf": "M5"}
+    signal = client.post("/hooks/tv", json=body).json()["signal"]
+    assert signal["kind"] == "tv"
+    assert signal["sym"] == "XAUUSD"
+    assert "lots" not in signal and "volume" not in signal
+    client.app.state.config.tradingview.enabled = False
+
+
+def test_an_alert_carrying_an_order_field_is_refused_outright(client: TestClient) -> None:
+    client.app.state.config.tradingview.enabled = True
+    client.app.state.tv_guard.secret = "shh"
+    body = {"secret": "shh", "setup": "x", "sym": "XAUUSD", "lots": 0.5}
+    assert client.post("/hooks/tv", json=body).status_code == 422
+    client.app.state.config.tradingview.enabled = False

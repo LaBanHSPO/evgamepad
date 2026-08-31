@@ -65,6 +65,22 @@ def test_unsafe_shapes_are_refused(tmp_path: Path, name: str, mutate: Any, match
         load_config(path, env=dict(VALID_ENV))
 
 
+def test_more_than_five_search_domains_is_a_boot_fail(tmp_path: Path) -> None:
+    """The provider caps its search filter at five; a sixth would fail mid-session, not at boot."""
+    def mutate(c: dict) -> None:
+        c["copilot"]["allowed_domains"] = [f"d{i}.example" for i in range(6)]
+
+    path = write_config(tmp_path, mutate)
+    with pytest.raises(ConfigError, match="caps the search"):
+        load_config(path, env=dict(VALID_ENV))
+
+
+def test_the_calendar_source_has_exactly_two_values(tmp_path: Path) -> None:
+    path = write_config(tmp_path, lambda c: c["signals"]["calendar"].__setitem__("source", "scrape"))
+    with pytest.raises(ConfigError, match="source"):
+        load_config(path, env=dict(VALID_ENV))
+
+
 def test_score_weights_must_sum_to_one(tmp_path: Path) -> None:
     """0.95 is the failure the plan names: a silently mis-weighted score."""
     def mutate(c: dict) -> None:

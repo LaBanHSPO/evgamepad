@@ -118,6 +118,19 @@ playbook:                     # phase 7
 copilot:                      # phase 4
   enabled: true
   on_hot_path: false          # true exits: the desk may never sit on the order path
+  model: ""                   # set from https://docs.x.ai/developers/models — empty = desk offline
+  allowed_domains:            # max 5; a longer list exits (the provider caps the filter at five)
+    - reuters.com
+    - bloomberg.com
+    - ft.com
+    - wsj.com
+    - forexfactory.com
+
+signals:                      # phase 4
+  calendar:
+    source: ff_weekly         # ff_weekly | off — `off` reads signals/calendar.yaml instead
+    min_impact: High          # Low | Medium | High
+  x_accounts: []              # empty by default; x_search is enabled only for named handles
 
 tradingview:                  # phase 4
   enabled: false

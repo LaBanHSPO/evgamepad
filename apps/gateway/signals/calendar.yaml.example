@@ -1,0 +1,13 @@
+# Local calendar fallback, used when `signals.calendar.source: off` or the feed is unreachable.
+# The same shape as one row of the Forex Factory weekly JSON, so both paths parse identically.
+events:
+  - title: "Non-Farm Payrolls"
+    country: "USD"
+    date: "2026-09-04T12:30:00Z"
+    impact: "High"
+    forecast: "165K"
+    previous: "142K"
+  - title: "ECB Press Conference"
+    country: "EUR"
+    date: "2026-09-10T12:45:00Z"
+    impact: "High"

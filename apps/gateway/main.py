@@ -24,7 +24,7 @@ _LOOP = asyncio.new_event_loop()
 asyncio.set_event_loop(_LOOP)
 _REACTOR = reactor_setup.install(_LOOP)
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect  # noqa: E402
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 
@@ -34,12 +34,18 @@ from broker import Broker, StubBroker  # noqa: E402
 from broker.ctrader import CTraderBroker  # noqa: E402
 from broker.events import normalise_execution  # noqa: E402
 from config import AppConfig, ConfigError, load_config  # noqa: E402
+from copilot.client import SpaceXaiClient  # noqa: E402
+from copilot.loops import DeskLoops  # noqa: E402
+from copilot.tools import build_registry  # noqa: E402
 from db.migrate import connect, migrate  # noqa: E402
 from journal.recorder import TradeRecorder  # noqa: E402
 from journal.tape import TapeRing  # noqa: E402
 from journal.writer import JournalWriter  # noqa: E402
 from protocol import PROTOCOL_VERSION  # noqa: E402
 from risk.session import SessionWindow  # noqa: E402
+from sentinel.engine import SentinelEngine  # noqa: E402
+from signals.calendar import CalendarCache, currencies_for  # noqa: E402
+from signals.tv_webhook import TvAlert, WebhookGuard, to_signal  # noqa: E402
 
 log = logging.getLogger("ev-gateway")
 
@@ -57,6 +63,45 @@ class CheckInRequest(BaseModel):
 
     phase: Literal["pre", "post"]
     rating: int | None = Field(default=None, ge=1, le=5)
+
+
+def build_desk(config: AppConfig, sentinel: SentinelEngine, broker: Broker) -> DeskLoops:
+    """Assemble the desk from read-only tools.
+
+    Everything it can see is passed in through the registry; it has no reference to the broker's
+    order methods and no way to acquire one.
+    """
+    client = SpaceXaiClient(
+        api_key=os.environ.get("XAI_API_KEY"),
+        model=config.copilot.model,
+        allowed_domains=list(config.copilot.allowed_domains),
+    )
+    symbols = [s.name for s in config.symbols]
+
+    def sentinel_state() -> dict[str, object]:
+        first = symbols[0]
+        setup = sentinel.tracker(first).current
+        return {"symbol": first, "setup": setup.kind if setup else None}
+
+    tools = build_registry(
+        get_sentinel=sentinel_state,
+        get_positions=lambda: [],
+        get_account=lambda: {"note": "account figures are read at session open and close"},
+        get_calendar=lambda: [
+            {"title": e.title, "currency": e.currency, "local": e.local}
+            for e in (sentinel.calendar.upcoming(int(time.time() * 1000),
+                                                 currencies=currencies_for(symbols))
+                      if sentinel.calendar else [])
+        ],
+        get_setup=lambda: sentinel_state(),
+        get_progress=lambda: {"note": "process figures land in phase 6"},
+    )
+
+    async def publish(_t: str, _ch: str, _payload: dict) -> None:
+        """Phase 4 keeps desk output on the ask path; the news rail lands with the desk HUD."""
+        return None
+
+    return DeskLoops(client=client, tools=tools, publish=publish, symbols=symbols)
 
 
 class StandDownRequest(BaseModel):
@@ -186,6 +231,19 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
     ring = TapeRing(ring_minutes=config.tape.ring_minutes, dt_s=int(config.tape.dt_s))
     conflator = Conflator()
 
+    calendar = CalendarCache(
+        cache_path=config.paths.data_dir_path / "calendar" / "ff_weekly.json",
+        timezone=config.timezone,
+        source=config.signals.calendar.source,
+        fallback_path=Path(__file__).parent / "signals" / "calendar.yaml",
+    )
+    sentinel = SentinelEngine(
+        timezone=config.timezone,
+        spread_caps={s.name: s.max_spread for s in config.symbols if s.max_spread},
+        calendar=calendar,
+    )
+    desk = build_desk(config, sentinel, broker)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         applied = migrate(config.paths.db)
@@ -225,6 +283,11 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
     app.state.broker = broker
     app.state.ring = ring
     app.state.conflator = conflator
+    app.state.sentinel = sentinel
+    app.state.desk = desk
+    app.state.calendar = calendar
+    app.state.tv_guard = WebhookGuard(secret=os.environ.get(config.tradingview.webhook_secret_env, ""))
+    app.state.last_tv_signal = None
 
     @app.get("/healthz")
     def healthz() -> dict[str, object]:
@@ -240,6 +303,25 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
             config.timezone, config.session.days, config.session.start, config.session.end
         )
         return window.local(int(time.time() * 1000)).strftime("%Y-%m-%d")
+
+    @app.post("/hooks/tv")
+    def tradingview_webhook(alert: TvAlert) -> dict[str, object]:
+        """A VIP alert becomes a hint on the desk. It can never become an order.
+
+        The route is public because TradingView posts to it, so it is rate limited before the
+        secret is compared, and the secret is compared in constant time.
+        """
+        guard: WebhookGuard = app.state.tv_guard
+        if not guard.allow():
+            raise HTTPException(status_code=429, detail="slow down")
+        if not guard.verify(alert.secret):
+            raise HTTPException(status_code=401, detail="bad secret")
+        if not config.tradingview.enabled:
+            raise HTTPException(status_code=404, detail="tradingview intake is off")
+
+        signal = to_signal(alert, ts_ms=int(time.time() * 1000))
+        app.state.last_tv_signal = signal
+        return {"ok": True, "signal": signal}
 
     @app.post("/api/journal/checkin")
     def checkin(body: CheckInRequest) -> dict[str, object]:
@@ -313,6 +395,8 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
             max_day_loss_usd=config.risk.max_daily_loss_usd,
             min_seconds_between_orders=config.risk.min_seconds_between_orders,
             heartbeat_dead_s=config.gateway.heartbeat_dead_s,
+            desk=desk,
+            sentinel=sentinel,
         )
         try:
             while True:

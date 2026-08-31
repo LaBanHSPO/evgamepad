@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: AI desk — sentinel, news, Volman, research / plan / advise"
-status: todo
+status: in-progress
 phase: 4
 priority: P1
 effort: 18h
@@ -179,21 +179,21 @@ emit an order intent. View remains session lock/unlock.
 
 ## Todo
 
-- [ ] Volman M5 detectors + tests
+- [x] Volman M5 detectors + tests
 - [ ] Sentinel engine + SentinelBar
-- [ ] Calendar cache + `signal.item`
+- [x] Calendar cache + `signal.item`
 - [ ] SpaceXAI `web_search` allowlist + NewsRail
 - [ ] Four LLM loops + typed session plan
-- [ ] Tool allowlist test (no order / no write), including the four new journal tools
-- [ ] Numeric opportunity quality + components (bucket fallback documented)
+- [x] Tool allowlist test (no order / no write), including the four new journal tools
+- [x] Numeric opportunity quality + components (bucket fallback documented)
 - [ ] `ai.ask kind=coach` + `speak` field
 - [ ] Five-tab Desk HUD + GameOverlay navigation; Memo disabled until phase 8
-- [ ] `003-copilot-signals.sql`
-- [ ] Offline LLM and offline calendar degradation
+- [x] `003-copilot-signals.sql`
+- [x] Offline LLM and offline calendar degradation
 
 ## Success Criteria
 
-- [ ] Sentinel strip updates without an API key
+- [x] Sentinel strip updates without an API key
 - [ ] Session start shows a **plan** that mentions tonight’s high-impact events (or “calendar offline”) **and** a Volman bias on M5
 - [ ] `ai.ask kind=research` returns notes with `sources[]` URLs from the allowlist
 - [ ] `ai.ask kind=news` fills the news rail; items have `url`
@@ -208,6 +208,61 @@ emit an order intent. View remains session lock/unlock.
       tool availability or trading behaviour; no phase 8 transcript is required for this test
 - [ ] Missing API key → coach offline, pad still trades
 - [ ] Menu/desk navigation emits no open/modify intent and never bypasses the phase 3 new-open lock
+
+## Verification Status
+
+Gateway: **209 passed, 1 skipped**, `ruff check` clean. The gateway boots, applies
+`003-copilot-signals.sql`, and answers `ai.ask` with no key and no model configured.
+
+### Verified
+
+**Volman detectors (13 tests).** EMA with no warm-up hole, bias against the average, range
+detection that rejects a trending run, range break, false break in both directions, buildup,
+pullback to the EMA, and a setup tracker that announces a setup being born and dying exactly once
+each. Fixtures are geometry we invented to exercise our own detectors — no book text anywhere.
+
+**Sentinel (9 tests).** The strip updates with no API key and no network. A dead tape scores worse
+than a live one and reads `dead`; every quality component is reported separately so a low score
+can be explained rather than just displayed. A high-impact event inside the 15-minute guard zeroes
+the calendar component, which is how the desk's "wait" becomes a number.
+
+**Calendar (9 tests).** Three documented degradation steps — live fetch, on-disk cache, local
+file — and `offline` as a state rather than a crash. The feed is treated as untrusted: Pydantic
+per row, a 500-row cap, malformed rows dropped rather than fatal.
+
+**Copilot (17 tests).** The structural one first: the suite fails if any trading or writing verb
+ever appears in the tool surface, and the registry refuses to register such a name at all. No key
+is a state; an unreachable provider degrades; more than five search domains is refused at
+construction; only research/news/plan may reach the web (the coach does not browse); a failing
+tool leaves the desk seeing less rather than nothing.
+
+**TradingView webhook.** Rate limited *before* the secret is compared, constant-time comparison,
+extra fields refused outright (an alert carrying `lots` is a 422), intake disabled by default, and
+the resulting `signal.item` carries no order-shaped field at all.
+
+### Deviations from this phase as written
+
+- **`copilot.model` ships empty, not guessed.** Step 1 says to re-fetch the xAI docs and pin the
+  model. The docs page is a JS app that returns no usable HTML to `curl`, and `/v1/models` needs
+  credentials this environment does not have. Rather than invent a model name that would fail
+  mid-session, the id is a config value and an empty one is treated exactly like a missing key:
+  the desk says "coach offline" and everything else runs. **Set it before the desk can speak.**
+  The `search_parameters` shape is coded to the documented allowlist form and is likewise
+  unverified against a live call.
+- **`pine/volman-m5-alerts.pine` not written.** It is a TradingView-side artifact that cannot be
+  validated from here, and nothing in the gateway depends on it.
+- **The desk HUD is not built.** `SentinelBar`, `CopilotDesk`, `NewsRail`, the EMA overlay, and
+  the five-tab GameOverlay navigation are UI work on top of `LiveHudScreen`, and phase 3 already
+  recorded that the prototype screens carry those surfaces. The socket side is wired:
+  `push_sentinel` and `push_signal` exist and `ai.ask` returns real desk answers.
+- **News pulse publishes nothing yet.** The loop runs and answers, but its `publish` hook is a
+  no-op until the news rail exists to receive it.
+
+### Not verified
+
+Everything that needs a live provider: an actual `web_search` call, the citation shape, and
+whether the pinned model accepts `search_parameters` as coded. All of it is behind the same
+`XAI_API_KEY` + `copilot.model` gate, and all of it degrades to "coach offline" when absent.
 
 ## Risk Assessment
 
