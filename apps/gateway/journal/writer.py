@@ -367,3 +367,42 @@ class JournalWriter:
             (cid, position_id, symbol, from_ts, to_ts, dt_s, bars,
              json.dumps(events, sort_keys=True), mfe, mae, created_at),
         )
+
+    # -- process score and review evidence (phase 11) ----------------------------------
+
+    def write_opportunity_quality(self, session_id: str, quality: float | None) -> None:
+        """The evening's mean opportunity quality, from the sentinel.
+
+        A dead tape is a fact about the night, not about the player, so this is stored alongside
+        the score's other inputs rather than being re-derived from a sentinel that has moved on.
+        """
+        if quality is None:
+            return
+        self.conn.execute(
+            "INSERT INTO session_process (session_id, opportunity_quality) VALUES (?, ?) "
+            "ON CONFLICT (session_id) DO UPDATE SET opportunity_quality = excluded.opportunity_quality",
+            (session_id, quality),
+        )
+
+    def write_review_event(self, session_id: str | None, *, kind: str, cid: str | None,
+                           ts_ms: int) -> None:
+        """Reviewing is part of the process being scored, so opening a replay is evidence."""
+        self.conn.execute(
+            "INSERT INTO review_event (session_id, kind, cid, ts) VALUES (?, ?, ?, ?)",
+            (session_id, kind, cid, ts_ms),
+        )
+
+    def write_session_score(self, row: dict[str, Any]) -> None:
+        """One row per evening, holding the axis **inputs** as well as the total.
+
+        Storing the inputs is what makes a weight change recompute history instead of leaving last
+        month scored under a weighting nobody can reconstruct.
+        """
+        self.conn.execute(
+            "INSERT OR REPLACE INTO session_score (session_id, computed_at, weights_version, "
+            "adherence, selectivity, risk_discipline, preparation, review, na_axes, oq_mean, "
+            "n_fires, total, inputs) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (row["session_id"], row["computed_at"], row["weights_version"], row["adherence"],
+             row["selectivity"], row["risk_discipline"], row["preparation"], row["review"],
+             row["na_axes"], row["oq_mean"], row["n_fires"], row["total"], row["inputs"]),
+        )

@@ -1,6 +1,6 @@
 ---
 title: "Phase 11: Process Score and radar deck"
-status: todo
+status: in-progress
 phase: 11
 priority: P1
 effort: 8h
@@ -189,28 +189,93 @@ The displayed total is the axis-weighted sum rounded half-up to an integer. Stor
 
 ## Todo
 
-- [ ] Pure axes + the four worked examples as tests
-- [ ] Vacuous axes drop and renormalise
-- [ ] Selectivity from numeric OQ, bucket fallback
-- [ ] `008-score.sql`; `session_score` stores inputs, not just the total
-- [ ] Radar with dashed n/a ring
-- [ ] Per-playbook stats table
-- [ ] Tilt retrospective (not an input)
-- [ ] `get_progress` returns axes, still no order tool
-- [ ] Month-over-month distribution with n
+- [x] Pure axes + the four worked examples as tests
+- [x] Vacuous axes drop and renormalise
+- [x] Selectivity from numeric OQ *(the bucket fallback was not needed — see Deviations)*
+- [x] `008-score.sql`; `session_score` stores inputs, not just the total
+- [x] Radar with dashed n/a ring
+- [x] Per-playbook stats table
+- [x] Tilt retrospective (not an input)
+- [x] `get_progress` returns axes, still no order tool
+- [x] Month-over-month distribution with n
 
 ## Success Criteria
 
-- [ ] The dead-tape zero-trade evening scores **100** and the active good evening scores **98** —
+- [x] The dead-tape zero-trade evening scores **100** and the active good evening scores **98** —
       reproduced exactly by the unit tests
-- [ ] Freezing in a rich tape scores 70; overtrading a dead tape scores 65
-- [ ] A zero-trade evening shows Adherence and Risk Discipline as a dashed **n/a** ring, not a zero spoke
-- [ ] Changing `score.weights` in config recomputes historical scores from stored inputs
-- [ ] `score.weights` not summing to 1.0 refuses to boot
-- [ ] No dollar figure appears on the ProcessPanel, radar included
-- [ ] Nothing in the schema accumulates across sessions — no streak, no level, no "days since"
-- [ ] Tilt appears as a retrospective and is absent from the score inputs
-- [ ] Copilot can coach a named axis and still has no `place` / `close` / write tool
+- [x] Freezing in a rich tape scores 70; overtrading a dead tape scores 65
+- [x] A zero-trade evening shows Adherence and Risk Discipline as a dashed **n/a** ring, not a zero spoke
+- [x] Changing `score.weights` in config recomputes historical scores from stored inputs
+- [x] `score.weights` not summing to 1.0 refuses to boot
+- [x] No dollar figure appears on the ProcessPanel, radar included
+- [x] Nothing in the schema accumulates across sessions — no streak, no level, no "days since"
+- [x] Tilt appears as a retrospective and is absent from the score inputs
+- [x] Copilot can coach a named axis and still has no `place` / `close` / write tool
+
+## Verification Status
+
+Gateway `uv run pytest -q`: **386 passed, 1 skipped** (the skip is phase 2's broker volume test,
+still waiting on a real cTrader dump); `uv run ruff check .` clean. Web `npm test`: **137 passed**
+(9 new); `npx tsc --noEmit` and `npm run build` clean.
+
+| Claim | Proof |
+|---|---|
+| The four worked calibrations | `score/test_session.py` reproduces 98 / 100 / 70 / 65 exactly, and asserts the *ordering* separately: a correctly-declined evening ≥ a well-traded one, and timidity > recklessness |
+| Vacuous axes drop rather than score | Adherence and Risk Discipline return `None` at zero fires; the dead-tape evening renormalises to exactly 100, not 50. A separate test proves one bad fire gives both a real denominator, so nothing hides behind renormalisation |
+| An unplanned evening has no adherence denominator either | A fire with no playbook evaluates no required rule; dividing by nothing is not a score of nothing |
+| No outcome input | `test_no_outcome_figure_reaches_the_score` reads `session.py` past its own docstring and fails on pnl / profit / win_rate / equity / balance / usd / r_multiple |
+| Tilt is not an input | `test_tilt_is_not_an_input` greps the score module and both input dataclasses. Phase 9's guard was **retargeted** from `deck/metrics.py` to the score itself — see Deviations |
+| Nothing accumulates | `test_the_schema_has_nowhere_to_accumulate_across_sessions` walks every table's every column via `PRAGMA table_info` and fails on streak / level / badge / days_since / consecutive |
+| A weight change recomputes history | A stored evening re-served under a weighting of `adherence: 1.0` returns that axis exactly. The routes recompute on read rather than returning the stored total |
+| Vacuous axes are stored as NULL, not 0 | Asserted against the written row, alongside the `na_axes` JSON |
+| The risk context is the one frozen at the fire | A fire under an 0.02 cap fails `within_lot_cap` even though today's config allows 0.10 |
+| A missing column is not a breach | An unrecorded cap passes rather than inventing a violation |
+| No money on the process side | `score.test.ts` strips comments and fails on usd/pnl/balance/equity/profit, plus any `$` that is not a template placeholder, across the radar, the ProcessPanel and the tilt retro |
+| The n/a ring, not a zero spoke | The polygon uses `axis.value ?? 100`, so a vacuous axis never dips toward the centre, and its ring is dashed and labelled with the axis's own reason |
+| Outcome columns stay behind the click | The process-side effect is asserted not to fetch `playbooks/outcome`; only `openOutcome` does |
+| The desk gains the axes and no tool | `get_progress` folds in `axes_summary`, which is asserted to carry no money word; the phase 4 forbidden-verb test still passes unchanged |
+
+## Deviations
+
+- **Phase 4's opportunity quality was computed but never persisted.** `session_process.opportunity_quality`
+  existed as a column from phase 6 with nothing writing it, so Selectivity had no tape to compare
+  against. Phase 11 adds `score/opportunity.py`, a running mean sampled on the same 1 Hz clock that
+  already drives tilt, written once at session close. An evening that was never sampled reads as
+  `None` and makes Selectivity **vacuous** — an unsampled tape and a dead one must stay
+  distinguishable, and guessing between them would be the exact kind of invented number the axis
+  detail exists to prevent.
+- **The three-bucket fallback was not needed.** The plan allowed falling back to dead/normal/rich if
+  the sentinel's numeric quality resisted normalisation. It did not: phase 4 already produces a
+  weighted `quality` in `[0,1]`, so the numeric path is the one that shipped and the fallback would
+  have been unused code.
+- **Phase 9's tilt guard was retargeted, not relaxed.** It read `deck/metrics.py` and failed on the
+  word "tilt". Phase 11 requires a tilt *retrospective* on the deck, so the old guard would have
+  forbidden a thing the plan asks for. The invariant was always about what the score **consumes**,
+  not what the deck may show, so it now greps `score/session.py` and both input dataclasses — the
+  place the rule actually lives — and a second test asserts the retrospective is set against
+  adherence and carries no money word.
+- **Recording a replay open is a write, so it lives on the score surface.** Phase 10's guarantee is
+  that `/api/replay/*` is read-only, asserted by a test that fails on any statement but `SELECT`.
+  The Review axis needs to know a trade was reviewed, so that write goes to
+  `POST /api/score/evidence/replay` instead. Phase 10's gateway-side guard is untouched; its
+  client-side fetch guard was widened to allow that one target and tightened to assert no order
+  path is ever reached.
+- **Memo evidence is gated on capture being *built*, not just enabled.** `voice.enabled` ships
+  `true`, but phase 8 is deferred and no capture path exists. Treating a memo as a miss would score
+  the install rather than the evening, which the plan explicitly forbids, so `VOICE_CAPTURE_BUILT`
+  in `score/repository.py` is `False` until phase 8 lands and the memo sub-items drop out and
+  renormalise. Phase 8's note records the flip.
+- **The playbook table's `n` and adherence are the process figures; expectancy, MFE, MAE and
+  efficiency ride the outcome tab.** The plan asks for one table with both. Splitting it was the
+  only way to keep phase 6's rule that outcome data is not even *fetched* until the deliberate
+  click. Efficiency is `None` — not zero — for a trade that never went your way: calling that zero
+  would blame the exit for the entry.
+- **The radar is hand-written SVG.** Five points and two rings is less code than configuring a chart
+  library, and the dashed n/a ring is not a thing chart libraries draw. It also keeps the deck out
+  of the lazily-loaded replay chunk that carries Lightweight Charts.
+- **`score/routes.py` is `score/repository.py` plus routes in `main.py`.** The plan names a routes
+  module; the repository pattern is what phases 6, 7 and 10 already use, and every route in this
+  build is registered in `main.py`. Following the existing convention beat adding a fourth shape.
 
 ## Risk Assessment
 

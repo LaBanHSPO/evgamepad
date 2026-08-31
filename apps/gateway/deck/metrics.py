@@ -345,3 +345,74 @@ def opportunity_verdict(quality: float | None, fires: int) -> str:
     if quality < 0.66:
         return "thin tape — few setups worth the spread"
     return "live tape, no fires — worth reviewing why"
+
+
+# -- phase 11 shared helpers ----------------------------------------------------------
+#
+# Kept here rather than in `score/` so the deck and the score read the same arithmetic. The score
+# never calls these — they are for the deck's tables — but duplicating "expectancy in R" in two
+# modules is how two panels start disagreeing about the same evening.
+
+
+@dataclass(frozen=True)
+class PlaybookRow:
+    """One playbook's record. Process figures and outcome figures, kept apart on purpose."""
+
+    playbook_id: str
+    name: str
+    n: int
+    clean_rate: float | None
+    adherence: float | None
+    # Outcome. The deck renders these only behind the deliberate tab click.
+    expectancy_r: float | None
+    avg_mfe: float | None
+    avg_mae: float | None
+    efficiency: float | None
+
+    def process_payload(self) -> dict[str, Any]:
+        return {"playbookId": self.playbook_id, "name": self.name, "n": self.n,
+                "cleanRate": self.clean_rate, "adherence": self.adherence}
+
+    def outcome_payload(self) -> dict[str, Any]:
+        return {**self.process_payload(), "expectancyR": self.expectancy_r,
+                "avgMfe": self.avg_mfe, "avgMae": self.avg_mae, "efficiency": self.efficiency}
+
+
+def capture_efficiency(entry: float | None, exit_price: float | None, mfe: float | None,
+                       side: str) -> float | None:
+    """How much of the favourable excursion the exit actually kept.
+
+    `None` when there was no favourable excursion to capture — a trade that never went your way has
+    no efficiency, and calling that zero would blame the exit for the entry.
+    """
+    if entry is None or exit_price is None or not mfe or mfe <= 0:
+        return None
+    captured = (exit_price - entry) if side.lower() == "buy" else (entry - exit_price)
+    return max(0.0, min(1.0, captured / mfe))
+
+
+def tilt_against_adherence(samples: list[dict[str, Any]], fires: list[Fire]) -> dict[str, Any]:
+    """The tilt retrospective: bands over the evening, and how they sat against adherence.
+
+    Correlated against **adherence**, never against P/L. Tilt is not a score input (phase 9's
+    decision); this is a record of an evening, shown so the player can see the shape of one.
+    """
+    if not samples:
+        return {"samples": [], "bands": {}, "topDrivers": [], "adherence": None}
+
+    bands: dict[str, int] = {}
+    drivers: dict[str, int] = {}
+    for sample in samples:
+        bands[sample["band"]] = bands.get(sample["band"], 0) + 1
+        driver = sample.get("topDriver")
+        if driver:
+            drivers[driver] = drivers.get(driver, 0) + 1
+
+    ranked = sorted(drivers.items(), key=lambda item: item[1], reverse=True)
+    return {
+        "samples": [{"ts": s["ts"], "score": s["score"], "band": s["band"]} for s in samples],
+        "bands": bands,
+        "topDrivers": [{"driver": d, "samples": n} for d, n in ranked[:3]],
+        "adherence": adherence_for(fires).score,
+        "peak": max(s["score"] for s in samples),
+    }

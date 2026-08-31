@@ -251,10 +251,29 @@ def test_the_rolling_baseline_wins_when_it_exists() -> None:
 
 
 def test_tilt_never_reaches_the_process_score() -> None:
-    """Taxing an evening for a bad ten minutes is the punishment this design exists to avoid."""
-    from deck import metrics
+    """Taxing an evening for a bad ten minutes is the punishment this design exists to avoid.
 
-    source = metrics.__file__
-    with open(source, encoding="utf-8") as handle:
-        text = handle.read()
-    assert "tilt" not in text.lower(), "tilt leaked into the deck's metrics"
+    Phase 11 renders tilt on the deck as a **retrospective**, which is why this checks the score
+    itself rather than banning the word from every deck module. The invariant was always about what
+    the score consumes, not about what the deck is allowed to show.
+    """
+    from score import session as score_module
+    from score.session import FireInputs, SessionInputs
+
+    with open(score_module.__file__, encoding="utf-8") as handle:
+        text = handle.read().lower()
+    assert "tilt" not in text, "tilt leaked into the Process Score"
+    for fields in (FireInputs.__dataclass_fields__, SessionInputs.__dataclass_fields__):
+        assert not any("tilt" in name.lower() for name in fields)
+
+
+def test_the_deck_s_tilt_retrospective_is_scored_against_adherence_not_money() -> None:
+    """It is a record of an evening, so what it is placed beside matters."""
+    from deck.metrics import tilt_against_adherence
+
+    retro = tilt_against_adherence(
+        [{"ts": NOW, "score": 0.7, "band": "hot", "topDriver": "size at 2.0x"}], []
+    )
+    assert set(retro) == {"samples", "bands", "topDrivers", "adherence", "peak"}
+    for money in ("pnl", "usd", "equity", "balance", "profit"):
+        assert money not in str(retro).lower()

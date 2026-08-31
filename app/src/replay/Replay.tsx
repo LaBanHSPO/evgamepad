@@ -78,6 +78,14 @@ export function Replay({ cid, onExit }: { cid?: string; onExit?: () => void }): 
         setTransport(initialState(payload.tape
           ? windowOf(payload.tape)
           : { fromMs: payload.trade.openedAt ?? 0, toMs: payload.trade.closedAt }));
+        // Reviewing is part of the process being scored, so opening a trade is evidence for
+        // phase 11's Review axis. It rides the score surface, not `/api/replay/*` — replay itself
+        // stays a read, and the write that says "you reviewed this" belongs to the scorer.
+        void fetch("/api/score/evidence/replay", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ cid: payload.trade.cid, sessionId: payload.trade.sessionId }),
+        }).catch(() => undefined);
       })
       .catch(() => setError("no tape for that trade"));
   }, [current]);

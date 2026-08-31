@@ -1,3 +1,9 @@
+import { PlaybookStats } from "./PlaybookStats";
+import type { PlaybookRow } from "./PlaybookStats";
+import { ScoreRadar } from "./ScoreRadar";
+import type { ScoreView } from "./ScoreRadar";
+import { TiltRetro } from "./TiltRetro";
+import type { TiltRetroView } from "./TiltRetro";
 import type { ProcessView } from "./types";
 import { percent, show, signed } from "./types";
 
@@ -8,13 +14,27 @@ import { percent, show, signed } from "./types";
  * upward, a dead tape is stated as a fact about the night rather than a verdict on the player,
  * and the check-in is plotted against adherence rather than against money.
  */
-export function ProcessPanel({ view }: { view: ProcessView | null }): JSX.Element {
+export function ProcessPanel({ view, score, playbooks, tilt, distribution }: {
+  view: ProcessView | null;
+  score?: ScoreView | null;
+  playbooks?: PlaybookRow[];
+  tilt?: TiltRetroView | null;
+  distribution?: MonthScores[];
+}): JSX.Element {
   if (view === null) return <p>loading the process figures…</p>;
 
   const { current, delta, month, previousMonth } = view.months;
 
   return (
     <>
+      <section style={panel}>
+        <h2 style={heading}>Process Score · last evening</h2>
+        <ScoreRadar view={score ?? null} />
+        <p style={note}>
+          Computed at session close, from process only. The evening it rates highest is the one
+          where the tape offered nothing and you correctly did nothing.
+        </p>
+      </section>
       <section style={panel}>
         <h2 style={heading}>This month{month ? ` · ${month}` : ""}</h2>
         <div style={grid}>
@@ -65,6 +85,21 @@ export function ProcessPanel({ view }: { view: ProcessView | null }): JSX.Elemen
       ) : null}
 
       <section style={panel}>
+        <h2 style={heading}>Score by month</h2>
+        <ScoreDistribution months={distribution ?? []} />
+      </section>
+
+      <section style={panel}>
+        <h2 style={heading}>By playbook</h2>
+        <PlaybookStats rows={playbooks ?? []} />
+      </section>
+
+      <section style={panel}>
+        <h2 style={heading}>Tilt, last evening</h2>
+        <TiltRetro view={tilt ?? null} />
+      </section>
+
+      <section style={panel}>
         <h2 style={heading}>All time</h2>
         <div style={grid}>
           <Stat label="Sessions" value={String(view.allTime.sessions)} />
@@ -76,6 +111,60 @@ export function ProcessPanel({ view }: { view: ProcessView | null }): JSX.Elemen
     </>
   );
 }
+
+/** One month's scores. A distribution with n — deliberately not a streak or a "days since". */
+export interface MonthScores {
+  month: string;
+  n: number;
+  mean: number;
+  min: number;
+  max: number;
+  scores: number[];
+}
+
+function ScoreDistribution({ months }: { months: MonthScores[] }): JSX.Element {
+  if (months.length === 0) return <p style={note}>no scored evenings yet</p>;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {months.map((entry) => (
+        <div key={entry.month} style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <span style={{ width: 64, opacity: 0.75, fontSize: 12 }}>{entry.month}</span>
+          {/* The spread of the month's evenings, so a good month reads as a shape rather than as
+              a number to defend. */}
+          <span style={{ position: "relative", flex: 1, height: 18 }}>
+            <span style={spread(entry)} />
+            {entry.scores.map((value, index) => (
+              <span key={`${value}-${index}`} style={{ ...dot, left: `${value}%` }} />
+            ))}
+          </span>
+          <span style={{ fontFamily: "var(--font-data)", fontSize: 13 }}>
+            {entry.mean.toFixed(0)}
+          </span>
+          <span style={{ opacity: 0.6, fontSize: 12 }}>n={entry.n}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const spread = (entry: MonthScores): React.CSSProperties => ({
+  position: "absolute",
+  top: 8,
+  left: `${entry.min}%`,
+  width: `${Math.max(0.5, entry.max - entry.min)}%`,
+  height: 2,
+  background: "var(--phos-600, #063)",
+});
+
+const dot: React.CSSProperties = {
+  position: "absolute",
+  top: 5,
+  width: 6,
+  height: 6,
+  marginLeft: -3,
+  borderRadius: "50%",
+  background: "var(--phos-300)",
+};
 
 function Stat({ label, value, delta, deltaFormat }: {
   label: string;

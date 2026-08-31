@@ -196,7 +196,7 @@ acceptance gates follow migration, navigation, and evidence contracts from `1` t
 | 8 | [Voice: capture, whisper.cpp, coach](./plans/260824-1506-evening-forex-gold-gamepad/phase-08-voice-capture-whisper-and-coach.md) | 14h | Deferred |
 | 9 | [Tilt telemetry and adaptive friction](./plans/260824-1506-evening-forex-gold-gamepad/phase-09-tilt-telemetry-and-adaptive-friction.md) | 10h | Built |
 | 10 | [Trade replay](./plans/260824-1506-evening-forex-gold-gamepad/phase-10-trade-replay.md) | 12h | Built |
-| 11 | [Process Score and radar deck](./plans/260824-1506-evening-forex-gold-gamepad/phase-11-process-score-and-radar-deck.md) | 8h | Pending |
+| 11 | [Process Score and radar deck](./plans/260824-1506-evening-forex-gold-gamepad/phase-11-process-score-and-radar-deck.md) | 8h | Built |
 | 12 | [Daily journal cockpit and preparation](./plans/260824-1506-evening-forex-gold-gamepad/phase-12-daily-journal-cockpit-and-preparation.md) | 24h | Pending |
 | 13 | [Reports, settings, and data portability](./plans/260824-1506-evening-forex-gold-gamepad/phase-13-reports-settings-and-data-portability.md) | 18h | Pending |
 | 14 | [End-to-end session journey and release gate](./plans/260824-1506-evening-forex-gold-gamepad/phase-14-end-to-end-session-journey-and-release-gate.md) | 14h | Pending |
@@ -366,6 +366,72 @@ the process with them. It cannot see a balance, and it still has no order tool.
 
 Process framing after Brett Steenbarger (*The Daily Trading Coach*, *Trading Psychology 2.0*,
 *Enhancing Trader Performance*) — cited, not reproduced.
+
+## The Process Score
+
+TradeZella's Zella Score gives you one number to chase. That is the right game mechanic pointed at
+the wrong inputs — win rate and profit factor are *outcome*, and chasing an outcome number is the
+anxiety this whole design exists to treat. So the mechanic stays and the inputs change.
+
+Five axes, all process:
+
+| Axis | What it measures | w |
+|---|---|---|
+| **Adherence** | Required playbook rules passed / required rules evaluated, over the evening | 0.30 |
+| **Selectivity** | How well the trade count matched what the tape actually offered | 0.25 |
+| **Risk discipline** | Per fire: lot cap, stop at entry, R within tolerance, position cap, order spacing | 0.20 |
+| **Preparation** | Plan acknowledged before the first fire, pre check-in, a playbook selected | 0.15 |
+| **Review** | Post check-in, checklists answered, a replay opened | 0.10 |
+
+The property the whole thing is built around: **a correctly-declined evening scores at least as well
+as a well-traded one.**
+
+| Evening | Score |
+|---|---|
+| Dead tape, zero trades, three genuine stand-downs | **100** |
+| Busy tape, four fires, executed well | **98** |
+| Rich tape, froze, took nothing | **70** |
+| Dead tape, overtraded it | **65** |
+
+Timidity costs less than recklessness, and both cost something. Those four numbers are the unit
+tests, not an illustration — if they drift, the score has changed meaning.
+
+**Selectivity** is the mechanism. The sentinel scores each evening's opportunity quality; `expected =
+round(OQ x 6)` sets a band of ±1 trade, and each trade outside it costs 25. A genuine stand-down —
+an ARM cancelled while a stand-down condition was live — earns 5 back, capped at 15, using phase 3's
+existing counter rather than a second one. The credit cannot push the axis past 100, so declining is
+never a way to farm a perfect evening.
+
+**Vacuous axes** are the subtle part. With zero fires, Adherence and Risk Discipline have no
+denominator. Scoring them 0 punishes standing down; scoring them 100 is free points for doing
+nothing. Both are wrong, so the axis is **dropped** and its weight renormalises across the axes that
+have evidence — and the radar draws it as a dashed *n/a* ring that names why, never as a zero spoke.
+Axes are vacuous at zero fires only: one bad fire gives both a real denominator, so nothing hides
+behind renormalisation.
+
+What the score deliberately will not do:
+
+- **No outcome input, anywhere.** Not P/L, not R, not win rate. A test reads the module and fails if
+  a money word appears in it.
+- **No live score.** It is computed at session close and lives on the deck. A number you can refresh
+  mid-trade becomes the anxiety the P/L replaced.
+- **Tilt is not an input.** Taxing an evening for a bad ten minutes reintroduces the punishment this
+  design avoids. It renders on the deck as a *retrospective*, set against adherence — never against
+  P/L.
+- **Nothing accumulates across sessions.** No streak, no level, no badge, no "days since". A test
+  walks the whole schema and fails if such a column ever exists. The month view is a **distribution
+  with n**, because a distribution says "this is the shape of your evenings" and a streak says "do
+  not break it", which is pressure to trade a dead tape.
+- **No memo penalty for a feature that is not built.** Voice evidence counts only when capture was
+  actually available; a supported degradation drops the sub-item instead of failing it. Skipping a
+  memo you *could* have recorded is a genuine miss.
+
+Every axis stores its **inputs**, not just its total, so changing `score.weights` recomputes every
+past evening from what was actually measured rather than leaving last month scored under a weighting
+nobody can reconstruct. Weights that do not sum to 1.0 refuse to boot.
+
+Process framing after Brett Steenbarger — markets do not offer equal opportunity every night.
+Cited, not reproduced.
 
 ## Trade replay
 

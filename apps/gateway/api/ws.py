@@ -88,11 +88,16 @@ class GameSocket:
     # here rather than handed to the desk directly so the copilot never holds the tracker.
     tilt_view: dict[str, Any] | None = None
 
+    # Phase 11. The evening's opportunity quality, sampled on the same 1 Hz clock as tilt and
+    # written once at session close. There is no live score anywhere — only this input to it.
+    opportunity: Any | None = None
+
     seq: int = 0
     subscriptions: set[str] = field(default_factory=set)
     _outbox: list[Envelope] = field(default_factory=list, init=False)
     _band: str = field(default="calm", init=False)
     _desk_tasks: set[Any] = field(default_factory=set, init=False)
+    _last_quote: dict[str, tuple[float, float]] = field(default_factory=dict, init=False)
 
     def now_ms(self) -> int:
         return int(time.time() * 1000)
@@ -439,7 +444,33 @@ class GameSocket:
             return
 
         self.tilt.observe_telemetry(sample)
+        self.sample_opportunity()
         await self.push_tilt()
+
+    def sample_opportunity(self) -> None:
+        """One opportunity-quality reading, on the telemetry clock.
+
+        A dead tape is a fact about the night, not about the player, so this is measured whether or
+        not anything was traded. A symbol with no quote yet contributes nothing rather than a zero —
+        an unsampled tape and a dead one must stay distinguishable.
+        """
+        if self.opportunity is None or self.sentinel is None:
+            return
+        for symbol in sorted(self.subscriptions):
+            quote = self._last_quote.get(symbol)
+            if quote is None:
+                continue
+            now = self.now_ms()
+            try:
+                tick = self.sentinel.tick(
+                    symbol=symbol, bid=quote[0], ask=quote[1], now_ms=now,
+                    session_remaining_s=None, locked=self.state.locked,
+                )
+            except Exception:
+                log.exception("sentinel tick failed; the evening is sampled one reading short")
+                return
+            self.opportunity.observe(tick.quality)
+            return
 
     async def push_tilt(self) -> None:
         """Score, record the sample, and tell the HUD. Never touches the FSM."""
@@ -500,6 +531,8 @@ class GameSocket:
         """Called from the conflator's tick, never from the raw spot callback."""
         if symbol not in self.subscriptions:
             return
+        # Kept so the 1 Hz sampler can price a sentinel tick without asking the broker again.
+        self._last_quote[symbol] = (bid, ask)
         await self.emit("quote", "quotes", {"sym": symbol, "bid": bid, "ask": ask, "ts": self.now_ms()})
 
     async def push_maint(self, note: str, until: int | None = None) -> None:

@@ -29,6 +29,10 @@ dependencies: [1, 3, 4, 5]
 > - `arousal.ts` — the `AnalyserNode` RMS on the PTT stream — plus the `speechRate_z` / `loudness_z`
 >   feed into `TiltInputs`. The component and its 5% weight already exist and renormalise away while
 >   absent; only the measurement is missing.
+> - Phase 11's Preparation and Review axes ask for memo evidence. `VOICE_CAPTURE_BUILT` in
+>   `score/repository.py` is `False`, so those sub-items drop out and the axes renormalise rather
+>   than scoring the install. Flip it to `True` when capture lands and they become live evidence —
+>   and a skipped memo becomes a genuine miss, which is the intended behaviour.
 >
 > Phase 10 (replay) added one more, on the same terms — built, tested, unfed:
 >

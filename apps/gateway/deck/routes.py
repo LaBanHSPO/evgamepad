@@ -18,14 +18,18 @@ from .metrics import (
     CITATION,
     DISCLAIMER,
     Fire,
+    PlaybookRow,
     SessionRow,
+    _mean,
     adherence_for,
     by_setup,
+    capture_efficiency,
     month_over_month,
     opportunity_verdict,
     outcome_month,
     process_month,
     sharpe,
+    tilt_against_adherence,
 )
 
 PROCESS_DELTA_KEYS = ["adherence", "declinedRate", "checkinAverage", "opportunityQuality"]
@@ -209,3 +213,79 @@ class DeckRepository:
     def summary(self) -> dict[str, Any]:
         sessions, fires = self._rows()
         return summary_view(sessions, fires)
+
+    # -- phase 11 panels -------------------------------------------------------------
+
+    def playbooks(self, *, outcome: bool = False) -> dict[str, Any]:
+        """Per-playbook record. Process figures by default; outcome only on the deliberate ask."""
+        conn = _connect(self.db_path)
+        try:
+            rows = conn.execute(
+                """
+                SELECT COALESCE(p.playbook_id, '__unplanned__') AS pid,
+                       COALESCE(b.name, 'unplanned')            AS name,
+                       COUNT(*)                                 AS n,
+                       AVG(g.clean)                             AS clean_rate,
+                       SUM(g.required_pass)                     AS passed,
+                       SUM(g.required_total)                    AS evaluated,
+                       AVG(c.r_multiple)                        AS expectancy_r,
+                       AVG(c.mfe)                               AS avg_mfe,
+                       AVG(c.mae)                               AS avg_mae
+                FROM trade_plan p
+                JOIN trade_closed c ON c.cid = p.cid
+                LEFT JOIN trade_grade g ON g.cid = p.cid
+                LEFT JOIN playbook b ON b.id = p.playbook_id
+                GROUP BY pid, name
+                ORDER BY n DESC
+                """
+            ).fetchall()
+            efficiencies = conn.execute(
+                """
+                SELECT COALESCE(p.playbook_id, '__unplanned__') AS pid,
+                       c.entry_price, c.exit_price, c.mfe, c.side
+                FROM trade_plan p JOIN trade_closed c ON c.cid = p.cid
+                """
+            ).fetchall()
+        finally:
+            conn.close()
+
+        captured: dict[str, list[float]] = {}
+        for row in efficiencies:
+            value = capture_efficiency(row["entry_price"], row["exit_price"], row["mfe"],
+                                       row["side"])
+            if value is not None:
+                captured.setdefault(row["pid"], []).append(value)
+
+        playbooks = [
+            PlaybookRow(
+                playbook_id=row["pid"], name=row["name"], n=row["n"],
+                clean_rate=row["clean_rate"],
+                adherence=(row["passed"] / row["evaluated"]) if row["evaluated"] else None,
+                expectancy_r=row["expectancy_r"], avg_mfe=row["avg_mfe"], avg_mae=row["avg_mae"],
+                efficiency=_mean(captured.get(row["pid"], [])),
+            )
+            for row in rows
+        ]
+        return {
+            "playbooks": [p.outcome_payload() if outcome else p.process_payload()
+                          for p in playbooks],
+            "disclaimer": DISCLAIMER,
+        }
+
+    def tilt_retro(self, session_id: str) -> dict[str, Any]:
+        """Tilt as a record of an evening. Never a score input, never against P/L."""
+        conn = _connect(self.db_path)
+        try:
+            samples = [
+                {"ts": r["ts"], "score": r["score"], "band": r["band"], "topDriver": r["top_driver"]}
+                for r in conn.execute(
+                    "SELECT ts, score, band, top_driver FROM tilt_sample "
+                    "WHERE session_id = ? ORDER BY ts", (session_id,)
+                ).fetchall()
+            ]
+            fires = [f for f in load_fires(conn, default_max_lots=self.max_lots,
+                                           default_max_positions=self.max_positions)
+                     if f.session_id == session_id]
+        finally:
+            conn.close()
+        return tilt_against_adherence(samples, fires)

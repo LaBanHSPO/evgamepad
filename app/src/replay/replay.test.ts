@@ -365,11 +365,19 @@ describe("no order can be placed from a replay", () => {
     }
   });
 
-  it("reaches the gateway only through the two read-only replay routes", () => {
+  it("reaches the gateway only through the replay reads and the review-evidence write", () => {
+    // Phase 11 added one write: recording that a trade was reviewed, which its Review axis
+    // credits. It goes to the score surface, so `/api/replay/*` itself stays read-only — the
+    // gateway-side guard on that is `test_every_statement_replay_runs_is_a_select`.
     const source = readFileSync(resolve(here, "Replay.tsx"), "utf8");
-    const calls = [...source.matchAll(/fetch\(([^)]*)\)/g)].map((m) => m[1]);
-    expect(calls.length).toBeGreaterThan(0);
-    for (const call of calls) expect(call).toContain("/api/replay/");
-    expect(source).not.toContain("method: \"POST\"");
+    const targets = [...source.matchAll(/fetch\(\s*(`[^`]*`|"[^"]*")/g)].map((m) => m[1]);
+    expect(targets.length).toBeGreaterThan(0);
+    for (const target of targets) {
+      expect(target).toMatch(/\/api\/(replay|score\/evidence)\//);
+    }
+    // Whatever it posts, it is never an order.
+    for (const verb of ["intent", "order", "position", "flatten", "panic"]) {
+      expect(source).not.toContain(`/api/${verb}`);
+    }
   });
 });

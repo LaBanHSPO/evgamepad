@@ -12,7 +12,7 @@ import logging
 import os
 import sys
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
@@ -54,6 +54,9 @@ from method.rules import RuleContext  # noqa: E402
 from protocol import PROTOCOL_VERSION  # noqa: E402
 from replay import ReplayRepository  # noqa: E402
 from risk.session import SessionWindow  # noqa: E402
+from score import ScoreRepository  # noqa: E402
+from score.opportunity import OpportunitySampler  # noqa: E402
+from score.repository import VOICE_CAPTURE_BUILT  # noqa: E402
 from sentinel.engine import SentinelEngine  # noqa: E402
 from signals.calendar import CalendarCache, currencies_for  # noqa: E402
 from signals.tv_webhook import TvAlert, WebhookGuard, to_signal  # noqa: E402
@@ -90,7 +93,9 @@ def build_deck(config: AppConfig) -> DeckRepository:
 
 
 def build_desk(config: AppConfig, sentinel: SentinelEngine, broker: Broker,
-               deck: DeckRepository, tilt_view: dict[str, object] | None = None) -> DeskLoops:
+               deck: DeckRepository, tilt_view: dict[str, object] | None = None,
+               score: ScoreRepository | None = None,
+               session_id: Callable[[], str] | None = None) -> DeskLoops:
     """Assemble the desk from read-only tools.
 
     Everything it can see is passed in through the registry; it has no reference to the broker's
@@ -120,7 +125,11 @@ def build_desk(config: AppConfig, sentinel: SentinelEngine, broker: Broker,
         ],
         get_setup=lambda: sentinel_state(),
         # Process aggregates only. No account credentials, no raw journal, no money field.
-        get_progress=deck.summary,
+        # Phase 11 folds the five axes in, so the desk can coach a named axis rather than a mood.
+        get_progress=(
+            deck.summary if score is None or session_id is None
+            else lambda: {**deck.summary(), "score": score.axes_summary(session_id())}
+        ),
         # Phase 9. Band, score, and driver sentences — never a component value or a pad frame.
         get_tilt=None if tilt_view is None else (lambda: dict(tilt_view)),
     )
@@ -130,6 +139,15 @@ def build_desk(config: AppConfig, sentinel: SentinelEngine, broker: Broker,
         return None
 
     return DeskLoops(client=client, tools=tools, publish=publish, symbols=symbols)
+
+
+class ReplayOpenedRequest(BaseModel):
+    """Evidence that a closed trade was opened for review."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    cid: str
+    sessionId: str | None = None
 
 
 class GradePreviewRequest(BaseModel):
@@ -323,9 +341,27 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
     deck = build_deck(config)
     playbooks = PlaybookRepository(config.paths.db)
     replay = ReplayRepository(config.paths.db)
+    score = ScoreRepository(
+        config.paths.db,
+        trades_max=config.score.trades_max,
+        band_width=config.score.band_width,
+        decline_credit_max=config.score.decline_credit_max,
+        weights=dict(config.score.weights),
+        r_unit_usd=config.risk.r_unit_usd,
+        min_seconds_between_orders=config.risk.min_seconds_between_orders,
+        # Both halves matter: the feature must be wanted *and* built. Phase 8 is deferred, so
+        # `VOICE_CAPTURE_BUILT` is False and the memo sub-items drop out instead of failing.
+        voice_available=config.voice.enabled and VOICE_CAPTURE_BUILT,
+    )
+    def _session_id_now() -> str:
+        window = SessionWindow.from_config(
+            config.timezone, config.session.days, config.session.start, config.session.end
+        )
+        return window.local(int(time.time() * 1000)).strftime("%Y-%m-%d")
+
     # One cell per process: the live socket writes it, the desk's read-only tool reads it.
     tilt_view: dict[str, object] = {"band": "calm", "score": 0.0, "top": []}
-    desk = build_desk(config, sentinel, broker, deck, tilt_view)
+    desk = build_desk(config, sentinel, broker, deck, tilt_view, score, _session_id_now)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -375,6 +411,7 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
     app.state.deck = deck
     app.state.playbooks = playbooks
     app.state.replay = replay
+    app.state.score = score
     app.state.tv_guard = WebhookGuard(secret=os.environ.get(config.tradingview.webhook_secret_env, ""))
     app.state.last_tv_signal = None
 
@@ -510,6 +547,52 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
             raise HTTPException(status_code=404, detail="no such trade")
         return body
 
+    @app.get("/api/deck/playbooks")
+    def deck_playbooks() -> dict[str, object]:
+        """Per-playbook record, process figures only. n and adherence, no money."""
+        return deck.playbooks(outcome=False)
+
+    @app.get("/api/deck/playbooks/outcome")
+    def deck_playbooks_outcome() -> dict[str, object]:
+        """The same table with expectancy, excursions and efficiency, behind the deliberate click."""
+        return deck.playbooks(outcome=True)
+
+    @app.get("/api/deck/tilt/{session_id}")
+    def deck_tilt_retro(session_id: str) -> dict[str, object]:
+        """Tilt as a retrospective: bands over the evening, against adherence, never against P/L."""
+        return deck.tilt_retro(session_id)
+
+    @app.get("/api/score/session/{session_id}")
+    def score_session_route(session_id: str) -> dict[str, object]:
+        """One evening's five axes and its total, always recomputed from the stored inputs.
+
+        Recomputing rather than reading the total back is what makes a `score.weights` change show
+        up on every historical evening instead of mixing two weightings in one chart.
+        """
+        return score.session_payload(session_id)
+
+    @app.get("/api/score/month")
+    def score_month() -> dict[str, object]:
+        """The score's distribution by month, with n. Never a streak, never a `days since`."""
+        return score.month()
+
+    @app.post("/api/score/evidence/replay")
+    def score_replay_evidence(body: ReplayOpenedRequest) -> dict[str, object]:
+        """Records that a trade was reviewed. The Review axis credits it.
+
+        This lives on the score surface rather than on `/api/replay/*` deliberately: replay itself
+        stays a read, and the write that says "you reviewed this" belongs to the thing doing the
+        scoring.
+        """
+        journal = JournalWriter(connect(config.paths.db))
+        try:
+            journal.write_review_event(body.sessionId or session_id_now(), kind="replay_open",
+                                       cid=body.cid, ts_ms=int(time.time() * 1000))
+            journal.conn.commit()
+        finally:
+            journal.conn.close()
+        return {"ok": True}
+
     @app.post("/hooks/tv")
     def tradingview_webhook(alert: TvAlert) -> dict[str, object]:
         """A VIP alert becomes a hint on the desk. It can never become an order.
@@ -589,6 +672,7 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
             session_id, timezone=config.timezone, opened_at=now_ms,
             balance=opening.get("balance"), equity=opening.get("equity"),
         )
+        opportunity = OpportunitySampler()
         tilt = TiltTracker(
             bands=Bands(warm=config.tilt.warm, hot=config.tilt.hot,
                         scorched=config.tilt.scorched),
@@ -613,6 +697,7 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
             playbooks=playbooks,
             tilt=tilt,
             tilt_view=tilt_view,
+            opportunity=opportunity,
         )
         try:
             while True:
@@ -625,6 +710,14 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
                 session_id, closed_at=int(time.time() * 1000),
                 balance=closing.get("balance"), equity=closing.get("equity"),
             )
+            # The Process Score is computed at close and nowhere else. A number you can watch
+            # mid-trade becomes the anxiety the P/L used to be, so there is no live one to watch.
+            try:
+                journal.write_opportunity_quality(session_id, opportunity.mean)
+                journal.conn.commit()
+                score.write(session_id)
+            except Exception:
+                log.exception("session score failed; the evening's rows are still intact")
             journal.conn.close()
 
     static_dir = (ROOT / config.gateway.static_dir).resolve()
