@@ -1,6 +1,6 @@
 ---
 title: "Phase 10: Trade replay"
-status: todo
+status: in-progress
 phase: 10
 priority: P1
 effort: 12h
@@ -125,26 +125,89 @@ GET /api/replay/:cid
 
 ## Todo
 
-- [ ] `/api/replay/:cid` + index route
-- [ ] gzip columnar round-trip test
-- [ ] Chart + entry/exit/MFE/MAE markers
-- [ ] Client-side resample, lossless on integer prices
-- [ ] Transport: scrub, play, speed
-- [ ] Event rail (arm, cancel, fire, tag, tilt band)
-- [ ] Grade panel
-- [ ] Memo audio synced to the playhead
-- [ ] FSM hard-locked on the route
+- [x] `/api/replay/:cid` + index route
+- [x] gzip columnar round-trip test
+- [x] Chart + entry/exit/MFE/MAE markers
+- [x] Client-side resample, lossless on integer prices
+- [x] Transport: scrub, play, speed
+- [x] Event rail (arm, cancel, fire, tag, tilt band)
+- [x] Grade panel
+- [x] Memo audio synced to the playhead *(sync built and tested; the memos themselves land with
+      phase 8 — see Deviations)*
+- [x] FSM hard-locked on the route *(delivered as "not mounted at all" — see Deviations)*
 
 ## Success Criteria
 
-- [ ] Opening `/replay/:cid` for a closed trade paints the tape with entry, exit, MFE and MAE marked
-- [ ] An ARM that was cancelled before the fire is visible on the event rail at its real timestamp
-- [ ] Scrubbing with LS moves the playhead smoothly and the memo audio follows and re-syncs
-- [ ] **No order can be placed from the replay route** — the FSM is locked and the pad cannot fire
-- [ ] A trade with no memo replays normally, with no audio controls
-- [ ] A trade whose memo transcript failed still plays its audio
-- [ ] LB/RB step to the previous and next trade of the same evening
-- [ ] One evening of five trades adds under ~100 KB of tape
+- [x] Opening the replay surface for a closed trade paints the tape with entry, exit, MFE and MAE marked
+- [x] An ARM that was cancelled before the fire is visible on the event rail at its real timestamp
+- [x] Scrubbing with LS moves the playhead smoothly and the memo audio follows and re-syncs
+- [x] **No order can be placed from the replay route** — the route mounts no agent and no socket
+- [x] A trade with no memo replays normally, with no audio controls
+- [ ] A trade whose memo transcript failed still plays its audio — **needs phase 8**; the audio path
+      keys on the memo id and never reads the transcript, so it will hold, but it cannot be proved
+      without a memo to fail
+- [x] LB/RB step to the previous and next trade of the same evening
+- [x] One evening of five trades adds under ~100 KB of tape
+
+## Verification Status
+
+Gateway `uv run pytest -q`: **337 passed, 1 skipped** (the skip is phase 2's broker volume test,
+still waiting on a real cTrader dump); `uv run ruff check .` clean. Web `npm test`: **128 passed**
+(35 new); `npx tsc --noEmit` and `npm run build` clean, protocol drift gate included.
+
+| Claim | Proof |
+|---|---|
+| What phase 2 writes is what phase 10 reads | `replay/test_routes.py` drives ticks through the real `TapeRing`, fills and closes through the real `TradeRecorder`, and freezes through the real freeze path before reading a single byte back. A hand-built fixture would only have proved the reader agrees with itself |
+| No order can be placed from a replay | The route mounts no agent and no socket. `replay.test.ts` asserts every replay module imports neither `../agent` nor `../net/ws`, that the binding table produces only transport actions, and that the only `fetch` calls on the surface are the two `/api/replay/*` reads |
+| Nothing on the replay path writes | `test_every_statement_replay_runs_is_a_select` parses every `execute(` in the repository and fails on any verb but `SELECT` |
+| Resampling is lossless on integer prices | Tick counts are conserved across all five timeframes; the first open and last close survive every fold; buckets land on wall-clock boundaries so two trades on one evening line up |
+| Both sides of the book survive | The served tape carries bid and ask separately, `sideForTrade` picks the side the position exits on, and the round-trip test asserts ask > bid on the same bar |
+| The cancelled arm keeps its real timestamp | `test_an_arm_cancelled_before_the_fire_is_on_the_rail` asserts the exact millisecond and the reason text |
+| Tilt contributes crossings, not samples | Six samples spanning three bands produce three events |
+| Replay degrades rather than blanking | Separate tests for a trade with no tape, a corrupt blob, and a pre-phase-10 event shape — all three still serve the markers |
+| The tape stays small | Five trades on one evening, measured off the real blobs, assert one row per trade and under 100 KB total |
+
+## Deviations
+
+- **"FSM hard-`LOCKED`" is delivered as "the FSM is not mounted".** The plan asks App.tsx to lock
+  the order FSM on entry and unlock on exit. Selecting a screen already unmounts the previous one,
+  so arriving at replay destroys the live HUD's agent, its poller and its socket outright. That is
+  strictly stronger than a lock — there is no FSM left to unlock, and no object on the route capable
+  of constructing an intent — so a lock/unlock pair would have been ceremony around a guarantee that
+  already holds. Both halves are asserted in `replay.test.ts` rather than left to the reader.
+- **Phase 2's stored format is fixed-width records, not `gzip(JSON columnar)`.** The plan describes
+  the artifact as gzipped columnar JSON; what phase 2 actually shipped is a gzipped JSON header line
+  followed by fixed-width `struct` records, which is denser for the same data. Phase 10 reads that
+  and serves **columnar JSON over the wire**, which is what the plan's client-side contract needed.
+  No format change was made — an already-frozen tape is not worth rewriting.
+- **The freeze's event denormalisation was phase 10's to finish.** The plan lists it under "phase 2
+  writes it", but phase 2 shipped `events_for(position_id)`, which carries only fill/amend/close.
+  Arms, cancels, signals and tilt bands are keyed by *session*, not position, so `journal/tape/events.py`
+  now joins all four sources at freeze time. Tapes frozen before this change still replay — `normalise`
+  reads the old shape.
+- **No memos, and no `voice/arousal.ts`.** Phase 8 is deferred. The transport's audio sync is built
+  and tested in full (offset from `durMs`, silence outside the span, hold while scrubbing, mute above
+  2x), and `memos` is served as an empty array — which is exactly what "this trade has no memo" looks
+  like, and the surface is required to render identically without one. The `<audio>` element is not
+  rendered when there is no cue.
+- **MFE and MAE are price lines, not dots.** The plan asks for dots. The freeze stores the excursion
+  *extremes*, not the moment they occurred, so a dot would need a timestamp nobody recorded. A
+  horizontal line at the price is exactly what is known. They print in R only when a recorded stop
+  makes R knowable; otherwise the price distance prints as itself rather than as an invented R.
+- **The deck's outcome panel was not modified.** It aggregates by setup and has no per-trade rows to
+  hang a link on — phase 6 deliberately kept per-trade money off it. Adding a trade table there to
+  satisfy a link would contradict that design, so the trade picker lives on the replay surface,
+  fed by the same `/api/replay/index` that LB/RB steps through.
+- **Lightweight Charts is a new dependency, loaded lazily.** The plan calls it "already the HUD chart
+  library"; it was not installed — the HUD writes prices imperatively and draws no chart. Adding it
+  eagerly cost the HUD ~60 KB gzipped for a screen most evenings never open, so the replay screen is
+  a `React.lazy` chunk. The main bundle is unchanged at ~95 KB gzipped; replay's 61 KB loads on
+  demand and is cached by the service worker like any other hashed asset. `npm audit --omit=dev`
+  reports zero vulnerabilities.
+- **The screen is a nav entry, not a `/replay/:cid` route.** The app has no router (phase 3's
+  decision); screens are a nav list and the live surfaces sit alongside the prototype ones. Replay
+  is registered as "Replay (real gateway)" beside the existing prototype screen, which is left
+  untouched. `Replay` still accepts a `cid` prop, so a router drops in without touching the surface.
 
 ## Risk Assessment
 

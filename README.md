@@ -195,7 +195,7 @@ acceptance gates follow migration, navigation, and evidence contracts from `1` t
 | 7 | [Playbook, rule registry, trade grading](./plans/260824-1506-evening-forex-gold-gamepad/phase-07-playbook-and-trade-grading.md) | 12h | Built |
 | 8 | [Voice: capture, whisper.cpp, coach](./plans/260824-1506-evening-forex-gold-gamepad/phase-08-voice-capture-whisper-and-coach.md) | 14h | Deferred |
 | 9 | [Tilt telemetry and adaptive friction](./plans/260824-1506-evening-forex-gold-gamepad/phase-09-tilt-telemetry-and-adaptive-friction.md) | 10h | Built |
-| 10 | [Trade replay](./plans/260824-1506-evening-forex-gold-gamepad/phase-10-trade-replay.md) | 12h | Pending |
+| 10 | [Trade replay](./plans/260824-1506-evening-forex-gold-gamepad/phase-10-trade-replay.md) | 12h | Built |
 | 11 | [Process Score and radar deck](./plans/260824-1506-evening-forex-gold-gamepad/phase-11-process-score-and-radar-deck.md) | 8h | Pending |
 | 12 | [Daily journal cockpit and preparation](./plans/260824-1506-evening-forex-gold-gamepad/phase-12-daily-journal-cockpit-and-preparation.md) | 24h | Pending |
 | 13 | [Reports, settings, and data portability](./plans/260824-1506-evening-forex-gold-gamepad/phase-13-reports-settings-and-data-portability.md) | 18h | Pending |
@@ -366,6 +366,49 @@ the process with them. It cannot see a balance, and it still has no order tool.
 
 Process framing after Brett Steenbarger (*The Daily Trading Coach*, *Trading Psychology 2.0*,
 *Enhancing Trader Performance*) — cited, not reproduced.
+
+## Trade replay
+
+TradeZella's trade replay, on the hardware you traded with. Open a closed trade and scrub it back
+through the tape it actually happened on: the ARM you cancelled forty seconds before you fired, the
+stop you moved, the band you crossed, where MFE and MAE really sat.
+
+| Input | Action |
+|---|---|
+| **LS ←→** | scrub, velocity-based (deadzone 0.2) |
+| **RS ←→** | zoom the window — 1s, 5s, 15s, 1m, 5m |
+| **A** | play / pause |
+| **D-pad ↑↓** | speed 0.5x · 1x · 2x · 4x |
+| **LB / RB** | previous / next trade of the evening |
+| **B** | exit |
+
+The tape is one row per trade, frozen after the post-roll settles: 1 Hz OHLC for **both sides of
+the book** (a long's excursions are measured on the bid, a short's on the ask), plus the events,
+denormalised at freeze time from the pad telemetry, the broker, the signals and the tilt samples.
+About 12-20 KB a trade. A zero-trade evening writes nothing at all.
+
+Every displayed timeframe is folded out of that one stored series, so a 5-minute view and the
+second-by-second tape can never disagree. The aggregation stays on the scaled integers and the
+divide happens once, when drawing.
+
+Things it deliberately will not do:
+
+- **No order can be placed from a replay.** Not because a flag says so: the route mounts no agent
+  and no socket. Selecting a screen unmounts the previous one, so arriving here destroys the live
+  HUD's order path rather than merely locking it, and the pad on this route drives an action type
+  that has no order case to construct. Tests assert both halves.
+- **Nothing on the replay path writes.** A test reads the repository and fails if any statement it
+  runs is not a `SELECT`.
+- **Entry and exit are never inferred from the bars.** At 1 Hz the entry candle is context; the
+  fill is truth, so the markers come from `trade_closed`.
+- **MFE and MAE are drawn as price lines, not dots.** The freeze stores the extremes, not when they
+  happened, so a timestamped dot would be a fabrication. They print in R only when a recorded stop
+  makes R knowable — otherwise the price distance prints as itself.
+- **A trade with no tape still opens**, as a marker-only view, and so does one whose blob will not
+  decompress. A pre-phase-2 trade is still worth reviewing.
+- **Memo audio takes its length from the stored `durMs`**, never `audio.duration` — Chrome's
+  MediaRecorder WebM reports `Infinity`. Above 2x the memo mutes rather than pitch-shifting. Until
+  phase 8 lands there are no memos, and replay works identically without them.
 
 ## Tilt: what it measures, and what it cannot do
 

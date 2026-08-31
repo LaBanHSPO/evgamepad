@@ -29,6 +29,13 @@ dependencies: [1, 3, 4, 5]
 > - `arousal.ts` — the `AnalyserNode` RMS on the PTT stream — plus the `speechRate_z` / `loudness_z`
 >   feed into `TiltInputs`. The component and its 5% weight already exist and renormalise away while
 >   absent; only the measurement is missing.
+>
+> Phase 10 (replay) added one more, on the same terms — built, tested, unfed:
+>
+> - `GET /api/replay/:cid` serves `memos: []`, and the replay transport's audio sync is complete
+>   (offset from the stored `durMs`, silent outside the span, held while scrubbing, muted above 2x).
+>   Populate the memo index and add `GET /api/voice/:id/audio`, which the surface already points at,
+>   and memo pins appear on the rail with no change to the replay code.
 
 ## Overview
 

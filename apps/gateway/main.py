@@ -52,6 +52,7 @@ from journal.tape import TapeRing  # noqa: E402
 from journal.writer import JournalWriter  # noqa: E402
 from method.rules import RuleContext  # noqa: E402
 from protocol import PROTOCOL_VERSION  # noqa: E402
+from replay import ReplayRepository  # noqa: E402
 from risk.session import SessionWindow  # noqa: E402
 from sentinel.engine import SentinelEngine  # noqa: E402
 from signals.calendar import CalendarCache, currencies_for  # noqa: E402
@@ -321,6 +322,7 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
     )
     deck = build_deck(config)
     playbooks = PlaybookRepository(config.paths.db)
+    replay = ReplayRepository(config.paths.db)
     # One cell per process: the live socket writes it, the desk's read-only tool reads it.
     tilt_view: dict[str, object] = {"band": "calm", "score": 0.0, "top": []}
     desk = build_desk(config, sentinel, broker, deck, tilt_view)
@@ -372,6 +374,7 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
     app.state.calendar = calendar
     app.state.deck = deck
     app.state.playbooks = playbooks
+    app.state.replay = replay
     app.state.tv_guard = WebhookGuard(secret=os.environ.get(config.tradingview.webhook_secret_env, ""))
     app.state.last_tv_signal = None
 
@@ -489,6 +492,23 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
     def deck_outcome() -> dict[str, object]:
         """The second tab. Reached by a deliberate click, never linked from the process panel."""
         return deck.outcome()
+
+    @app.get("/api/replay/index")
+    def replay_index(from_ms: int | None = None, to_ms: int | None = None) -> dict[str, object]:
+        """The trade list LB/RB step through. Same origin, same token as the deck."""
+        return replay.index(from_ms=from_ms, to_ms=to_ms)
+
+    @app.get("/api/replay/{cid}")
+    def replay_trade(cid: str) -> dict[str, object]:
+        """One trade's window: bars, events, the closed-trade facts and its grade.
+
+        A trade with no tape still answers 200 with `tape: null` — the client falls back to the
+        marker-only view rather than blanking on a pre-phase-2 trade.
+        """
+        body = replay.trade(cid)
+        if body is None:
+            raise HTTPException(status_code=404, detail="no such trade")
+        return body
 
     @app.post("/hooks/tv")
     def tradingview_webhook(alert: TvAlert) -> dict[str, object]:

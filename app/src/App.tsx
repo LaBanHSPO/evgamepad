@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import type { CSSProperties } from "react";
 import { BgmProvider } from "./components/bgm";
 import { AgentDeskScreen } from "./screens/AgentDeskScreen";
@@ -7,6 +7,7 @@ import { BootScreen } from "./screens/BootScreen";
 import { CityFireScreen } from "./screens/CityFireScreen";
 import { DataScreen } from "./screens/DataScreen";
 import { Deck } from "./deck/Deck";
+
 import { GamepadScreen } from "./screens/GamepadScreen";
 import { HistoryScreen } from "./screens/HistoryScreen";
 import { JournalScreen } from "./screens/JournalScreen";
@@ -30,6 +31,7 @@ import { TradeDetailScreen } from "./screens/TradeDetailScreen";
  */
 
 type ScreenId =
+  | "replaylive"
   | "title"
   | "boot"
   | "pre"
@@ -89,6 +91,7 @@ const GROUPS: {
       { id: "over", label: "Session over" },
       { id: "report", label: "Report" },
       { id: "journal", label: "Journal" },
+      { id: "replaylive", label: "Replay (real gateway)" },
       { id: "replay", label: "Replay" },
       { id: "history", label: "History" },
       { id: "score", label: "Process score" },
@@ -106,8 +109,10 @@ const GROUPS: {
   },
 ];
 
-const SCREENS: Record<Exclude<ScreenId, "session">, () => JSX.Element> = {
-  // The two surfaces wired to the real gateway; the rest are the design prototype.
+// `session` and `replaylive` are rendered by hand below: one takes a HUD state, the other needs
+// a way back out, and neither fits a zero-argument component.
+const SCREENS: Record<Exclude<ScreenId, "session" | "replaylive">, () => JSX.Element> = {
+  // The three surfaces wired to the real gateway; the rest are the design prototype.
   live: LiveHudScreen,
   deck: Deck,
   title: AttractScreen,
@@ -130,6 +135,13 @@ const SCREENS: Record<Exclude<ScreenId, "session">, () => JSX.Element> = {
   settings: SettingsScreen,
   philosophy: PhilosophyScreen,
 };
+
+/**
+ * Replay is the only screen that needs a charting library, and most evenings never open it. Loading
+ * it on demand keeps ~60 KB gzipped off the HUD's critical path; the chunk is cached by the service
+ * worker on first fetch like every other hashed asset.
+ */
+const Replay = lazy(() => import("./replay/Replay").then((m) => ({ default: m.Replay })));
 
 const RAIL = 48;
 const OPEN = 216;
@@ -342,6 +354,12 @@ export default function App() {
         >
           {screen === "session" ? (
             <SessionHudScreen state={hud} />
+          ) : screen === "replaylive" ? (
+            // Mounting replay unmounts the live HUD, taking its agent, poller and socket with it —
+            // which is why no order can be placed from this route. B goes back to the deck.
+            <Suspense fallback={<p>loading the tape…</p>}>
+              <Replay onExit={() => setScreen("deck")} />
+            </Suspense>
           ) : (
             (() => {
               const Screen = SCREENS[screen];

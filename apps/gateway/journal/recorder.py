@@ -19,7 +19,7 @@ from typing import Any
 
 from broker.conversion import AssetGraph, ConversionError
 from broker.volume import SymbolSpec, volume_to_lots
-from journal.tape import TapeRing, freeze_window
+from journal.tape import TapeRing, denormalise, freeze_window
 from journal.writer import ClosedTrade, JournalWriter
 from risk.r import RRecord, r_at_entry, r_multiple
 from risk.session import market_session
@@ -217,7 +217,12 @@ class TradeRecorder:
         self.journal.write_tape(
             cid=trade.cid, position_id=trade.position_id, symbol=trade.symbol,
             from_ts=from_ts, to_ts=to_ts, dt_s=self.dt_s, bars=blob,
-            events=self.journal.events_for(trade.position_id),
+            # Joined here rather than at read time: the pad, signal and tilt sources are keyed by
+            # session and would need three range scans per replay to reassemble later.
+            events=denormalise(
+                self.journal.conn, session_id=self.session_id, position_id=trade.position_id,
+                from_ms=from_ts * 1000, to_ms=to_ts * 1000,
+            ),
             mfe=result.mfe, mae=result.mae, created_at=until_ms,
         )
 
