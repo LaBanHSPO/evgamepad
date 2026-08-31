@@ -29,6 +29,9 @@ def registry() -> ToolRegistry:
         get_setup=lambda: {"kind": "range"},
         get_progress=lambda: {"stoodDown": 2},
         get_tilt=lambda: {"band": "hot", "score": 0.71, "top": ["size at 2.0x your session median"]},
+        get_journal=lambda: {"sessions": 12, "consistency": {"value": 78.0, "n": 12},
+                             "groups": {"planned-win": 4}, "topMistakes": ["no_initial_sl"],
+                             "focus": "no_initial_sl"},
     )
 
 
@@ -208,3 +211,12 @@ def test_a_desk_built_without_tilt_simply_has_no_tilt_tool() -> None:
     assert "get_tilt" not in tools.names()
     with pytest.raises(PermissionError):
         tools.call("get_tilt")
+
+
+def test_the_journal_tool_hands_over_counts_and_never_the_players_words() -> None:
+    """A journal you cannot write privately is one you stop writing honestly."""
+    view = registry().call("get_journal")
+    assert set(view) == {"sessions", "consistency", "groups", "topMistakes", "focus"}
+    flat = str(view).lower()
+    for private in ("thesis", "note", "memo", "transcript", "analysis"):
+        assert private not in flat

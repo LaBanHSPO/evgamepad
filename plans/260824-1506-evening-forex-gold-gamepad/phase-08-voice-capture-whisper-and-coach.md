@@ -40,6 +40,10 @@ dependencies: [1, 3, 4, 5]
 >   (offset from the stored `durMs`, silent outside the span, held while scrubbing, muted above 2x).
 >   Populate the memo index and add `GET /api/voice/:id/audio`, which the surface already points at,
 >   and memo pins appear on the rail with no change to the replay code.
+>
+> Phase 12 (journal) adds the last of them: `TradeFacts.has_memo` is `None` (not captured) and the
+> trade detail's `memos` is empty, so the after-stage execution score drops the item and
+> renormalises. Populate the memo index and the item becomes live evidence.
 
 ## Overview
 

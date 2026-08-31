@@ -68,6 +68,7 @@ def build_registry(
     get_setup: Callable[[], dict[str, Any] | None],
     get_progress: Callable[[], dict[str, Any]],
     get_tilt: Callable[[], dict[str, Any]] | None = None,
+    get_journal: Callable[[], dict[str, Any]] | None = None,
 ) -> ToolRegistry:
     """The full read-only surface. Every name here is a noun, deliberately."""
     registry = ToolRegistry()
@@ -85,4 +86,9 @@ def build_registry(
     # The per-component values and the raw pad telemetry never leave the box.
     if get_tilt is not None:
         registry.register("get_tilt", "Current tilt band and what is driving it", get_tilt)
+    # Phase 12. Counts and codes only — never the player's own analysis, review notes or memos,
+    # which are the parts of a journal that have to stay private to be worth writing.
+    if get_journal is not None:
+        registry.register("get_journal", "Session counts, consistency, and the top mistake codes",
+                          get_journal)
     return registry

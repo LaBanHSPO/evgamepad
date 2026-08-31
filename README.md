@@ -197,7 +197,7 @@ acceptance gates follow migration, navigation, and evidence contracts from `1` t
 | 9 | [Tilt telemetry and adaptive friction](./plans/260824-1506-evening-forex-gold-gamepad/phase-09-tilt-telemetry-and-adaptive-friction.md) | 10h | Built |
 | 10 | [Trade replay](./plans/260824-1506-evening-forex-gold-gamepad/phase-10-trade-replay.md) | 12h | Built |
 | 11 | [Process Score and radar deck](./plans/260824-1506-evening-forex-gold-gamepad/phase-11-process-score-and-radar-deck.md) | 8h | Built |
-| 12 | [Daily journal cockpit and preparation](./plans/260824-1506-evening-forex-gold-gamepad/phase-12-daily-journal-cockpit-and-preparation.md) | 24h | Pending |
+| 12 | [Daily journal cockpit and preparation](./plans/260824-1506-evening-forex-gold-gamepad/phase-12-daily-journal-cockpit-and-preparation.md) | 24h | Built |
 | 13 | [Reports, settings, and data portability](./plans/260824-1506-evening-forex-gold-gamepad/phase-13-reports-settings-and-data-portability.md) | 18h | Pending |
 | 14 | [End-to-end session journey and release gate](./plans/260824-1506-evening-forex-gold-gamepad/phase-14-end-to-end-session-journey-and-release-gate.md) | 14h | Pending |
 
@@ -366,6 +366,70 @@ the process with them. It cannot see a balance, and it still has no order tool.
 
 Process framing after Brett Steenbarger (*The Daily Trading Coach*, *Trading Psychology 2.0*,
 *Enhancing Trader Performance*) — cited, not reproduced.
+
+## The daily journal
+
+`/journal` is the loop the rest of the product feeds: **prepare, trade, close, review**, without
+leaving the shell.
+
+**Today** carries four IANA market clocks (Sydney, Tokyo, London, New York — real tzdata, so
+London and New York move across DST and Tokyo never does), a five-item readiness check, the
+evening's written analysis, and a position-size calculator. The desk's own plan sits *beside* your
+analysis rather than merged into it; no model writes a word of what you wrote.
+
+**Sizing** runs on the gateway, through phase 2's own quote-to-USD conversion and the broker's real
+volume step. It answers with three numbers kept deliberately apart: the lots your risk implies, the
+lots the broker will actually accept, and the risk you will therefore **carry** — recomputed from
+the rounded volume, because reporting the risk you asked for rather than the one you will hold is
+lying by omission. It rounds down, never up. Applying a result changes the HUD's preview; LT+RT is
+still the only thing that trades.
+
+**The dashboard** leads with Process Consistency over the last 20 sessions —
+`0.5 × mean + 0.5 × (100 − mean absolute deviation from the median)`. Two halves doing different
+jobs: the mean says how well you played, the deviation says how reliably. It always prints `n` and
+refuses a confident number below five sessions, because four evenings is a week, not a process. The
+day heatmap is coloured by **Process Score** and activity; a day with no score is an outline, not a
+bad day, and there is no dollar figure on the surface at all.
+
+**History** filters on period, playbook, setup, symbol, timeframe, side, market session, intent,
+mistake, and win/loss/breakeven. The clauses are built from a fixed table on the server, so an
+unknown filter is dropped rather than interpolated and a combination can never return a trade
+outside what was asked for. Paging is capped at 200.
+
+**A trade** shows the immutable plan and execution, then everything you reviewed on top: Actual vs
+Plan, the three execution scores, the grade, mistakes, attachments, and a link to the tape.
+
+Things the journal deliberately will not do:
+
+- **It cannot rewrite a fact.** Every write targets a review table; a test parses the service's
+  statements and fails if any of them names `trade_plan`, `trade_closed`, `position_event`,
+  `trade_tape`, `trade_grade`, `cid_reservation` or `session_equity`. A journal that can edit a
+  fill is not a journal.
+- **It never claims a counterfactual.** The panel is called *Actual vs Plan*, not "theoretical
+  profit". Where price went after your exit is not evidence about a position you had closed.
+- **It never infers that you were on tilt.** A clean fire under a real playbook derives as
+  `planned`; anything else stays `unknown` until you say otherwise. `impulsive` and `revenge`
+  describe a state of mind, and the four-group chart **excludes** the unclassified rather than
+  guessing — the cost of libelling one clean discretionary trade is that you stop trusting the
+  whole record.
+- **Unknown is never zero.** The before/during/after scores drop what was not captured and
+  renormalise, and each names the inputs it could not measure, so a high score over a small
+  denominator looks like one.
+- **A mistake costs nothing.** The taxonomy separates what the rows *prove* (oversize, no initial
+  stop, a stop moved further away, an event-window fire) from what only you can assert (early
+  discretionary exit, chased entry, revenge re-entry). You can withdraw your own judgement; a
+  derived one comes back on the next sync, because it is a fact. There is no streak, badge, or
+  penalty, and none of it reaches the Process Score.
+- **Readiness never blocks anything.** A checklist that can lock you out is one you click through,
+  and then it measures nothing. It has three answers, not two: skipping is a real answer and
+  different from "no".
+- **Attachments cannot name a path.** The server reads the magic bytes, decides what the file
+  actually is, generates a ULID, and writes that; your filename is stored as a label. PNG, JPEG and
+  WebP only — no SVG and no HTML, because an image that can run script is a stored XSS with a
+  `.png` on the end.
+- **The desk sees counts, never your words.** `get_journal` returns session counts, consistency and
+  the top mistake codes. Your analysis, review notes and memos never leave the box — a journal you
+  cannot write privately is one you stop writing honestly.
 
 ## The Process Score
 

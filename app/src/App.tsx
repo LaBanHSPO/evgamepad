@@ -7,6 +7,7 @@ import { BootScreen } from "./screens/BootScreen";
 import { CityFireScreen } from "./screens/CityFireScreen";
 import { DataScreen } from "./screens/DataScreen";
 import { Deck } from "./deck/Deck";
+import { SystemPrinciples } from "./journal/SystemPrinciples";
 
 import { GamepadScreen } from "./screens/GamepadScreen";
 import { HistoryScreen } from "./screens/HistoryScreen";
@@ -31,6 +32,8 @@ import { TradeDetailScreen } from "./screens/TradeDetailScreen";
  */
 
 type ScreenId =
+  | "journallive"
+  | "systemlive"
   | "replaylive"
   | "title"
   | "boot"
@@ -90,6 +93,7 @@ const GROUPS: {
       { id: "clear", label: "Session clear" },
       { id: "over", label: "Session over" },
       { id: "report", label: "Report" },
+      { id: "journallive", label: "Journal (real gateway)" },
       { id: "journal", label: "Journal" },
       { id: "replaylive", label: "Replay (real gateway)" },
       { id: "replay", label: "Replay" },
@@ -104,17 +108,20 @@ const GROUPS: {
       { id: "pad", label: "Gamepad" },
       { id: "data", label: "Data" },
       { id: "settings", label: "Settings" },
+      { id: "systemlive", label: "System (real gateway)" },
       { id: "philosophy", label: "Philosophy" },
     ],
   },
 ];
 
-// `session` and `replaylive` are rendered by hand below: one takes a HUD state, the other needs
-// a way back out, and neither fits a zero-argument component.
-const SCREENS: Record<Exclude<ScreenId, "session" | "replaylive">, () => JSX.Element> = {
+// `session`, `replaylive` and `journallive` are rendered by hand below: one takes a HUD state and
+// the others need a way to hand a cid onward, and none of them fits a zero-argument component.
+const SCREENS: Record<Exclude<ScreenId, "session" | "replaylive" | "journallive">,
+                      () => JSX.Element> = {
   // The three surfaces wired to the real gateway; the rest are the design prototype.
   live: LiveHudScreen,
   deck: Deck,
+  systemlive: SystemPrinciples,
   title: AttractScreen,
   boot: BootScreen,
   pre: PreSessionScreen,
@@ -142,6 +149,9 @@ const SCREENS: Record<Exclude<ScreenId, "session" | "replaylive">, () => JSX.Ele
  * worker on first fetch like every other hashed asset.
  */
 const Replay = lazy(() => import("./replay/Replay").then((m) => ({ default: m.Replay })));
+
+/** The journal is a large surface and most sessions open the HUD instead; it loads on demand. */
+const Journal = lazy(() => import("./journal/Journal").then((m) => ({ default: m.Journal })));
 
 const RAIL = 48;
 const OPEN = 216;
@@ -198,6 +208,7 @@ const shortStyle: CSSProperties = {
 
 export default function App() {
   const [screen, setScreen] = useState<ScreenId>("title");
+  const [replayCid, setReplayCid] = useState<string | null>(null);
   const [hud, setHud] = useState<HudState>("live");
 
   return (
@@ -354,11 +365,19 @@ export default function App() {
         >
           {screen === "session" ? (
             <SessionHudScreen state={hud} />
+          ) : screen === "journallive" ? (
+            // The journal hands a cid to the replay route, which is the review loop the phases
+            // were building toward: dashboard -> trade -> the tape it happened on.
+            <Suspense fallback={<p>loading the journal…</p>}>
+              <Journal
+                onReplay={(cid) => { setReplayCid(cid); setScreen("replaylive"); }}
+              />
+            </Suspense>
           ) : screen === "replaylive" ? (
             // Mounting replay unmounts the live HUD, taking its agent, poller and socket with it —
             // which is why no order can be placed from this route. B goes back to the deck.
             <Suspense fallback={<p>loading the tape…</p>}>
-              <Replay onExit={() => setScreen("deck")} />
+              <Replay cid={replayCid ?? undefined} onExit={() => setScreen("journallive")} />
             </Suspense>
           ) : (
             (() => {

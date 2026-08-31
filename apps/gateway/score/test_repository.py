@@ -321,8 +321,12 @@ def test_the_schema_has_nowhere_to_accumulate_across_sessions(db: Path) -> None:
     finally:
         conn.close()
 
-    for forbidden in ("streak", "level", "badge", "days_since", "consecutive"):
-        assert not any(forbidden in c for c in columns), f"`{forbidden}` exists in the schema"
+    # Matched as whole snake_case tokens rather than substrings: phase 12's `key_levels` holds
+    # chart price levels, which is not the gamification kind and must not trip this.
+    tokens = {token for column in columns for token in column.split("_")}
+    for forbidden in ("streak", "streaks", "level", "badge", "badges", "consecutive"):
+        assert forbidden not in tokens, f"`{forbidden}` exists in the schema"
+    assert not any(c.startswith("days_since") for c in columns)
 
 
 def test_the_axes_summary_the_copilot_reads_carries_no_money(journal: JournalWriter,

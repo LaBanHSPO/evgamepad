@@ -24,7 +24,7 @@ _LOOP = asyncio.new_event_loop()
 asyncio.set_event_loop(_LOOP)
 _REACTOR = reactor_setup.install(_LOOP)
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect  # noqa: E402
+from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel, ConfigDict, Field  # noqa: E402
 
@@ -47,7 +47,10 @@ from grading.routes import (  # noqa: E402
     registry_view,
     unknown_codes,
 )
+from journal.attachments import AttachmentError, path_for, store, usage  # noqa: E402
+from journal.query_service import DEFAULT_PAGE, HISTORY_FILTERS, JournalService  # noqa: E402
 from journal.recorder import TradeRecorder  # noqa: E402
+from journal.sizing import size_position  # noqa: E402
 from journal.tape import TapeRing  # noqa: E402
 from journal.writer import JournalWriter  # noqa: E402
 from method.rules import RuleContext  # noqa: E402
@@ -95,7 +98,8 @@ def build_deck(config: AppConfig) -> DeckRepository:
 def build_desk(config: AppConfig, sentinel: SentinelEngine, broker: Broker,
                deck: DeckRepository, tilt_view: dict[str, object] | None = None,
                score: ScoreRepository | None = None,
-               session_id: Callable[[], str] | None = None) -> DeskLoops:
+               session_id: Callable[[], str] | None = None,
+               journal: JournalService | None = None) -> DeskLoops:
     """Assemble the desk from read-only tools.
 
     Everything it can see is passed in through the registry; it has no reference to the broker's
@@ -132,6 +136,7 @@ def build_desk(config: AppConfig, sentinel: SentinelEngine, broker: Broker,
         ),
         # Phase 9. Band, score, and driver sentences — never a component value or a pad frame.
         get_tilt=None if tilt_view is None else (lambda: dict(tilt_view)),
+        get_journal=None if journal is None else journal.aggregates,
     )
 
     async def publish(_t: str, _ch: str, _payload: dict) -> None:
@@ -139,6 +144,59 @@ def build_desk(config: AppConfig, sentinel: SentinelEngine, broker: Broker,
         return None
 
     return DeskLoops(client=client, tools=tools, publish=publish, symbols=symbols)
+
+
+class TodayRequest(BaseModel):
+    """Readiness and daily analysis. Both optional: a PUT may carry either or both."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sessionId: str | None = None
+    readiness: list[dict] | None = None
+    analysis: dict | None = None
+
+
+class TradeReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    intent: str | None = None
+    note: str | None = None
+    earlyExit: bool = False
+
+
+class MistakeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    note: str | None = None
+
+
+class MistakeDefinitionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9_]+$")
+    label: str = Field(min_length=1, max_length=120)
+
+
+class SystemRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    philosophy: str | None = None
+    principles: list[str] = Field(default_factory=list)
+    focusCode: str | None = None
+
+
+class SizeRequest(BaseModel):
+    """What the calculator needs. Nothing here can become an order."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str
+    entry: float
+    stop: float
+    equity: float | None = None
+    riskUsd: float | None = None
+    riskPercent: float | None = None
 
 
 class ReplayOpenedRequest(BaseModel):
@@ -211,13 +269,10 @@ def _attach_recorder(broker: CTraderBroker, recorder: TradeRecorder) -> None:
         fact = normalise_execution(event)
         spec = broker.by_symbol_id.get(fact.symbol_id or -1)
         if fact.kind == "fill" and spec is not None and fact.cid:
-            prices = {name: q.mid for name, q in broker.quotes.items()}
             recorder.on_fill(
                 cid=fact.cid, position_id=fact.position_id or 0, symbol=spec.name,
                 side=fact.side or "buy", volume=fact.volume or 0, entry=fact.price or 0.0,
-                ts_ms=fact.ts_ms or 0,
-                prices={s.symbol_id: prices[s.name] for s in broker.specs.values()
-                        if s.name in prices},
+                ts_ms=fact.ts_ms or 0, prices=mid_prices(broker),
             )
         elif fact.kind == "close" and fact.position_id:
             recorder.on_close(
@@ -305,6 +360,18 @@ def _merge_manual(stored: dict, regraded: dict) -> dict:
     }
 
 
+def mid_prices(broker: Broker) -> dict[int, float]:
+    """Mid prices keyed by symbol id, the shape `AssetGraph.quote_to_usd` reads.
+
+    One builder for both callers — the fill path and the size calculator must price a quote the
+    same way, or a trade would be sized against one rate and recorded against another.
+    """
+    quotes = getattr(broker, "quotes", None) or {}
+    specs = getattr(broker, "specs", None) or {}
+    mids = {name: quote.mid for name, quote in quotes.items()}
+    return {spec.symbol_id: mids[spec.name] for spec in specs.values() if spec.name in mids}
+
+
 async def _account_snapshot(broker: Broker) -> dict[str, float | None]:
     """Balance and equity straight from cTrader. Never re-derived from summed fills.
 
@@ -341,6 +408,10 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
     deck = build_deck(config)
     playbooks = PlaybookRepository(config.paths.db)
     replay = ReplayRepository(config.paths.db)
+    journal_service = JournalService(
+        config.paths.db, max_lots=max((s.max_lots for s in config.symbols), default=0.1),
+    )
+    attachments_dir = config.paths.data_dir_path / "attachments"
     score = ScoreRepository(
         config.paths.db,
         trades_max=config.score.trades_max,
@@ -361,7 +432,8 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
 
     # One cell per process: the live socket writes it, the desk's read-only tool reads it.
     tilt_view: dict[str, object] = {"band": "calm", "score": 0.0, "top": []}
-    desk = build_desk(config, sentinel, broker, deck, tilt_view, score, _session_id_now)
+    desk = build_desk(config, sentinel, broker, deck, tilt_view, score, _session_id_now,
+                      journal_service)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -371,6 +443,9 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
         seeded = playbooks.seed_if_empty(ts_ms=int(time.time() * 1000))
         if seeded:
             log.info("seeded %d starter playbooks", seeded)
+        taxonomy = journal_service.seed_mistakes(int(time.time() * 1000))
+        if taxonomy:
+            log.info("seeded %d built-in mistakes", taxonomy)
         reactor_setup.start(_REACTOR)
 
         journal = JournalWriter(connect(config.paths.db))
@@ -412,6 +487,7 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
     app.state.playbooks = playbooks
     app.state.replay = replay
     app.state.score = score
+    app.state.journal_service = journal_service
     app.state.tv_guard = WebhookGuard(secret=os.environ.get(config.tradingview.webhook_secret_env, ""))
     app.state.last_tv_signal = None
 
@@ -592,6 +668,165 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
         finally:
             journal.conn.close()
         return {"ok": True}
+
+    # -- journal cockpit (phase 12) --------------------------------------------------
+    #
+    # Plain same-origin HTTP behind the existing token, like every other non-realtime surface.
+    # Every write below targets a review table; nothing here can reach a fill or an execution event.
+
+    @app.get("/api/journal/today")
+    def journal_today(session_id: str | None = None) -> dict[str, object]:
+        """The prepare-and-land page. Defaults to tonight."""
+        return journal_service.today(session_id or session_id_now())
+
+    @app.put("/api/journal/today")
+    def journal_put_today(body: TodayRequest) -> dict[str, object]:
+        """Readiness and the daily analysis. Advisory: neither has ever blocked an unlock."""
+        session_id = body.sessionId or session_id_now()
+        stamp = int(time.time() * 1000)
+        if body.readiness is not None:
+            journal_service.put_readiness(session_id, body.readiness, stamp)
+        if body.analysis is not None:
+            journal_service.put_analysis(session_id, body.analysis, stamp)
+        return journal_service.today(session_id)
+
+    @app.get("/api/journal/overview")
+    def journal_overview(from_ms: int | None = None, to_ms: int | None = None) -> dict[str, object]:
+        """The dashboard. Process first — the money lives behind the deck's Outcome tab."""
+        return journal_service.overview(from_ms=from_ms, to_ms=to_ms)
+
+    @app.get("/api/journal/days")
+    def journal_days(from_ms: int | None = None, to_ms: int | None = None) -> dict[str, object]:
+        """The heatmap, coloured by Process Score and activity."""
+        return journal_service.days(from_ms=from_ms, to_ms=to_ms)
+
+    @app.get("/api/journal/day/{session_id}")
+    def journal_day(session_id: str) -> dict[str, object]:
+        return journal_service.day(session_id)
+
+    @app.get("/api/journal/history")
+    def journal_history(
+        page: int = 0, size: int = DEFAULT_PAGE, from_ms: int | None = None,
+        to_ms: int | None = None, playbook: str | None = None, setup: str | None = None,
+        symbol: str | None = None, timeframe: str | None = None, side: str | None = None,
+        market_session: str | None = None, intent: str | None = None, mistake: str | None = None,
+        result: str | None = None,
+    ) -> dict[str, object]:
+        """Every dimension, combinable, parameterised and paginated."""
+        filters = {name: value for name, value in locals().items() if name in HISTORY_FILTERS}
+        return journal_service.history(filters, page=max(0, page), size=size)
+
+    @app.get("/api/journal/trade/{cid}")
+    def journal_trade(cid: str) -> dict[str, object]:
+        """The immutable record, then everything reviewed on top of it."""
+        body = journal_service.trade(cid)
+        if body is None:
+            raise HTTPException(status_code=404, detail="no such trade")
+        return body
+
+    @app.put("/api/journal/trade/{cid}")
+    def journal_put_trade(cid: str, body: TradeReviewRequest) -> dict[str, object]:
+        """Annotate a trade. `impulsive` and `revenge` only ever arrive from here, never derived."""
+        try:
+            journal_service.put_review(cid, body.model_dump(), int(time.time() * 1000))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return journal_service.trade(cid) or {}
+
+    @app.post("/api/journal/trade/{cid}/mistakes")
+    def journal_add_mistake(cid: str, body: MistakeRequest) -> dict[str, object]:
+        journal_service.add_mistake(cid, body.code, int(time.time() * 1000), body.note)
+        return {"ok": True}
+
+    @app.delete("/api/journal/trade/{cid}/mistakes/{code}")
+    def journal_remove_mistake(cid: str, code: str) -> dict[str, object]:
+        """Withdraws a judgement. A derived mistake returns on the next sync — it is a fact."""
+        journal_service.remove_mistake(cid, code)
+        return {"ok": True}
+
+    @app.post("/api/journal/trade/{cid}/mistakes/sync")
+    def journal_sync_mistakes(cid: str) -> dict[str, object]:
+        return {"derived": journal_service.sync_mistakes(cid, int(time.time() * 1000))}
+
+    @app.get("/api/journal/mistakes")
+    def journal_taxonomy() -> dict[str, object]:
+        return journal_service.taxonomy()
+
+    @app.post("/api/journal/mistakes")
+    def journal_define_mistake(body: MistakeDefinitionRequest) -> dict[str, object]:
+        journal_service.define_mistake(body.code, body.label, int(time.time() * 1000))
+        return journal_service.taxonomy()
+
+    @app.get("/api/journal/system")
+    def journal_system() -> dict[str, object]:
+        return journal_service.system()
+
+    @app.put("/api/journal/system")
+    def journal_put_system(body: SystemRequest) -> dict[str, object]:
+        journal_service.put_system(body.model_dump(), int(time.time() * 1000))
+        return journal_service.system()
+
+    @app.post("/api/journal/size")
+    def journal_size(body: SizeRequest) -> dict[str, object]:
+        """Position sizing through phase 2's own conversion and the broker's volume step.
+
+        Applying the answer changes the HUD's preview only. LT+RT is still the only thing that
+        trades, and this route has no path to an order.
+        """
+        spec = _spec_for(body.symbol)
+        if spec is None:
+            raise HTTPException(status_code=404, detail=f"no spec for {body.symbol}")
+        symbol_cfg = next((s for s in config.symbols if s.name == body.symbol), None)
+        return size_position(
+            spec=spec, entry=body.entry, stop=body.stop, equity=body.equity,
+            risk_usd=body.riskUsd, risk_percent=body.riskPercent,
+            graph=getattr(broker, "graph", None), prices=mid_prices(broker),
+            ts_ms=int(time.time() * 1000),
+            max_lots=symbol_cfg.max_lots if symbol_cfg else None,
+        ).payload()
+
+    def _spec_for(symbol: str):
+        """The broker's own spec, which is the only source that knows the real volume step."""
+        specs = getattr(broker, "specs", None) or {}
+        return specs.get(symbol)
+
+    @app.post("/api/journal/attachments")
+    async def journal_attach(request: Request, session_id: str | None = None,
+                             cid: str | None = None, label: str | None = None) -> dict[str, object]:
+        """A chart screenshot, as a raw image body.
+
+        The client never names the file: the server reads the magic bytes, generates a ULID, and
+        writes that. A client-supplied name is stored as a label and never becomes a path.
+        """
+        data = await request.body()
+        try:
+            attachment = store(data, directory=attachments_dir)
+        except AttachmentError as exc:
+            raise HTTPException(status_code=415, detail=str(exc)) from exc
+        journal_service.record_attachment(
+            attachment_id=attachment.id, mime=attachment.mime, size=attachment.bytes,
+            width=attachment.width, height=attachment.height,
+            session_id=session_id or (None if cid else session_id_now()), cid=cid, label=label,
+            ts_ms=int(time.time() * 1000),
+        )
+        return {"id": attachment.id, "mime": attachment.mime, "bytes": attachment.bytes,
+                "width": attachment.width, "height": attachment.height,
+                "usage": usage(attachments_dir)}
+
+    @app.get("/api/journal/attachments/{attachment_id}")
+    def journal_attachment(attachment_id: str) -> Response:
+        """Resolved from the row, never from the URL."""
+        row = journal_service.attachment(attachment_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="no such attachment")
+        extension = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}[row["mime"]]
+        try:
+            path = path_for(attachment_id, extension, directory=attachments_dir)
+        except AttachmentError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="the file is gone")
+        return Response(content=path.read_bytes(), media_type=row["mime"])
 
     @app.post("/hooks/tv")
     def tradingview_webhook(alert: TvAlert) -> dict[str, object]:
