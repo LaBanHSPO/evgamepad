@@ -1,6 +1,6 @@
 ---
 title: "Phase 7: Playbook, rule registry, and trade grading"
-status: todo
+status: in-progress
 phase: 7
 priority: P1
 effort: 12h
@@ -126,25 +126,75 @@ BUY 0.10 XAUUSD @ 2345.12
 
 ## Todo
 
-- [ ] Rule registry extracted; risk/rules.py imports it; existing tests green
-- [ ] Playbook rules provably cannot reject an intent
-- [ ] `005-playbooks.sql` + Volman starter seed
-- [ ] Grading pure functions + fixtures
+- [x] Rule registry extracted; risk/rules.py imports it; existing tests green
+- [x] Playbook rules provably cannot reject an intent
+- [x] `005-playbooks.sql` + Volman starter seed
+- [x] Grading pure functions + fixtures
 - [ ] `grade` at ARM and FIRE
 - [ ] Confirm overlay shows the grade before commit
 - [ ] GameOverlay playbook picker; no competing Menu shortcut
-- [ ] Post-trade checklist, skip = unknown
+- [x] Post-trade checklist, skip = unknown
 - [ ] `/playbooks` editor
 
 ## Success Criteria
 
-- [ ] The confirm overlay names the active playbook and shows `n/m rules OK` **before** the fire
-- [ ] A failing **playbook** rule still lets the trade through; a failing **risk** rule still rejects it
-- [ ] Firing with no playbook selected produces an `__unplanned__` grade, not a crash and not a block
-- [ ] Skipping the post-trade checklist leaves `unknown`, and `required_total` shrinks accordingly
+- [x] The confirm overlay names the active playbook and shows `n/m rules OK` **before** the fire
+- [x] A failing **playbook** rule still lets the trade through; a failing **risk** rule still rejects it
+- [x] Firing with no playbook selected produces an `__unplanned__` grade, not a crash and not a block
+- [x] Skipping the post-trade checklist leaves `unknown`, and `required_total` shrinks accordingly
 - [ ] A cancelled ARM during a stand-down still writes a `trade_grade` row (phase 6 counts it)
-- [ ] Retiring a playbook keeps last month's deck numbers resolving
-- [ ] `risk/rules.py` contains no rule logic of its own — only registry calls
+- [x] Retiring a playbook keeps last month's deck numbers resolving
+- [x] `risk/rules.py` contains no rule logic of its own — only registry calls
+
+## Verification Status
+
+Gateway: **279 passed, 1 skipped**. Web: **88 passed**. `ruff` and `tsc` clean, `npm run build`
+passes. The gateway boots, applies `005-playbooks.sql`, and seeds five starter playbooks.
+
+### The extraction was behaviour-preserving
+
+Step 1's own proof: **phase 2's 22 risk tests pass untouched** after the rules moved into
+`method/rules.py`. `risk/rules.py` now builds `OPEN_RULES` from `rules_for("risk")` and holds no
+comparison of its own — a test reads the file and fails if `ctx.lots`, `ctx.positions_open`, or a
+heartbeat comparison reappears in it.
+
+### Playbook rules provably cannot reject
+
+Three independent assertions, because this is the failure mode that would turn the journal into a
+gate: the playbook and gate code sets are disjoint; no playbook rule carries a rejection reason
+(and without one it cannot produce a reject); and a context that fails *every* playbook rule at
+once still returns `allowed=True` from `evaluate_open`.
+
+### Also verified
+
+A clean fire grades clean and a chased one names `ema_distance` with `3.00 ATR` as the single
+overlay line. `__unplanned__` grades to an empty result set rather than crashing, and stores a
+null `playbook_id` because it is not a row in `playbook`. An unanswered manual rule is `unknown`,
+shrinking `required_total` so a skip keeps `clean` intact, while an explicit "no" does cost it. A
+rule with no chart data is `unknown`, not failed. A refused fire still writes a grade row — the
+socket test asserts both a `grade` frame and an `order.reject` for the same cid. Retiring hides a
+playbook from selection while `playbooks.get()` still resolves it. An unknown rule code is a 422.
+
+### Deviations from this phase as written
+
+- **The ARM grade rides HTTP.** Protocol v1 was frozen without an `intent.arm` message, so
+  `POST /api/playbooks/grade-preview` serves the pre-commit grade rather than forcing a v2
+  migration. It persists nothing; the socket still writes and pushes the authoritative `grade` at
+  FIRE. Same reasoning as the phase 3 check-in.
+- **The checklist re-grade only touches manual rules.** Re-running the auto rules at close would
+  score the trade against a chart that has moved on, so the ARM/FIRE verdicts are kept and only
+  what the player answered changes.
+- **The picker is click-driven.** Phase 3 reserved pad navigation for the GameOverlay, which does
+  not exist yet; `PlaybookPicker` is built to drop into it when it lands.
+- **No `/playbooks` editor page.** The API is complete and tested (create, replace, retire,
+  registry listing); the editing UI is not built. The picker, the confirm grade, and the checklist
+  are.
+
+### Not verified
+
+The overlay grade has never been seen against live chart data — `price`, `ema20`, and `atr` come
+from the broker's trendbars, and no broker has connected. Those rules currently grade as
+`unknown`, which is the designed behaviour but is not the same as having seen them work.
 
 ## Risk Assessment
 

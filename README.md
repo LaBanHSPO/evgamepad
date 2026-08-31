@@ -20,9 +20,10 @@ backup, restore, and deliberate deletion.
 > **The end goal is confidence and enjoyment — improving decision quality, not the money.**
 > Demo only. Not advice. Entertainment, not alpha.
 
-**Status:** phases 1–4 and 6 landed in code — frozen protocol, config boot-fails, migrations, risk gates,
+**Status:** phases 1–4, 6 and 7 landed in code — frozen protocol, config boot-fails, migrations, risk gates,
 the cid ledger, the journal and tape pipeline, the game socket, the cTrader client, and the 8BitDo
-client agent, the AI desk and sentinel, and the performance deck. Three things are still
+client agent, the AI desk and sentinel, the performance deck, and the playbook with
+trade grading. Three things are still
 **unverified**: the broker link needs an IC Markets demo account and an approved Open API app, the
 pad has never been held (no 8BitDo hardware here), and the desk stays offline until
 `copilot.model` and `XAI_API_KEY` are set. Phase 5 (VPS deploy) is the remaining gap. The
@@ -297,6 +298,40 @@ writable:
 cd apps/gateway
 EV_CONFIG=../../config/default.yaml EV_DATA_DIR=../../data uv run python main.py
 ```
+
+## Playbooks: enforced vs graded
+
+A **playbook** is a named setup with explicit rules — one of five seeded from the detectors, or one
+you write. Every fire is graded against the playbook that was active when it fired, and the grade
+appears in the confirm overlay **before** you commit:
+
+```
+BUY 0.10 XAUUSD @ 2345.12
+[M5 range break]  4/5 rules OK  ·  ✗ Not chasing (3.00 ATR)
+```
+
+The distinction the whole feature rests on:
+
+| | Risk rules | Playbook rules |
+|---|---|---|
+| Where they live | one registry, `method/rules.py` | the same registry |
+| What a failure does | **rejects the intent** server-side | **is recorded and shown** |
+| Who decides them | config, and only config | you |
+
+A playbook rule can never block a trade. That is asserted by a test, not by convention — the
+failure mode it guards against is the journal quietly turning into a gate nobody agreed to.
+
+Three more things it deliberately does:
+
+- **Grading is keyed on the fire, not the position.** A cancelled arm and a rejected intent are
+  both graded, which is what lets the deck count trades you declined.
+- **Skipping the post-trade checklist costs nothing.** An unanswered rule is `unknown` — neither
+  pass nor fail — and leaves the denominator entirely.
+- **No playbook selected is a valid state.** The fire grades as `unplanned`, which reads honestly
+  on the deck rather than as a failure.
+
+Retiring a playbook hides it from selection and keeps it resolvable, so last month's deck numbers
+survive a change of mind.
 
 ## The deck, and what it refuses to show
 

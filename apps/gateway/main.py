@@ -26,7 +26,7 @@ _REACTOR = reactor_setup.install(_LOOP)
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
-from pydantic import BaseModel, Field  # noqa: E402
+from pydantic import BaseModel, ConfigDict, Field  # noqa: E402
 
 from api.conflate import Conflator  # noqa: E402
 from api.ws import GameSocket, GatewayState, origin_allowed  # noqa: E402
@@ -39,9 +39,18 @@ from copilot.loops import DeskLoops  # noqa: E402
 from copilot.tools import build_registry  # noqa: E402
 from db.migrate import connect, migrate  # noqa: E402
 from deck.routes import DeckRepository  # noqa: E402
+from grading.grade import grade_fire  # noqa: E402
+from grading.routes import (  # noqa: E402
+    ChecklistRequest,
+    PlaybookRepository,
+    PlaybookRequest,
+    registry_view,
+    unknown_codes,
+)
 from journal.recorder import TradeRecorder  # noqa: E402
 from journal.tape import TapeRing  # noqa: E402
 from journal.writer import JournalWriter  # noqa: E402
+from method.rules import RuleContext  # noqa: E402
 from protocol import PROTOCOL_VERSION  # noqa: E402
 from risk.session import SessionWindow  # noqa: E402
 from sentinel.engine import SentinelEngine  # noqa: E402
@@ -115,6 +124,22 @@ def build_desk(config: AppConfig, sentinel: SentinelEngine, broker: Broker,
         return None
 
     return DeskLoops(client=client, tools=tools, publish=publish, symbols=symbols)
+
+
+class GradePreviewRequest(BaseModel):
+    """What the HUD knows at ARM. Anything it cannot supply grades as unknown, never as failed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    cid: str = Field(max_length=32)
+    sym: str = Field(max_length=16)
+    side: Literal["buy", "sell"]
+    lots: float = Field(gt=0)
+    playbookId: str | None = Field(default=None, max_length=64)
+    price: float | None = None
+    ema20: float | None = None
+    atr: float | None = None
+    spread: float | None = None
 
 
 class StandDownRequest(BaseModel):
@@ -222,6 +247,40 @@ async def _connect_with_backoff(broker: Broker, ring: TapeRing, recorder: TradeR
     log.error("broker link could not be established; the HUD stays up and trading stays refused")
 
 
+def _merge_manual(stored: dict, regraded: dict) -> dict:
+    """Keep the ARM verdicts for the auto rules; take the manual ones from the checklist.
+
+    Re-running the auto rules now would score the trade against a chart that has moved on, so the
+    only thing the checklist is allowed to change is what the player answered.
+    """
+    import json as _json
+
+    by_code = {r["code"]: r for r in stored["results"]}
+    for result in regraded["results"]:
+        if result["kind"] == "manual":
+            by_code[result["code"]] = result
+    results = list(by_code.values())
+
+    answered = [r for r in results if r["required"] and not r["unknown"]]
+    required_pass = sum(1 for r in answered if r["ok"])
+    required_total = len(answered)
+    payload = {
+        **stored, "results": results, "required_pass": required_pass,
+        "required_total": required_total,
+        "clean": required_total > 0 and required_pass == required_total,
+    }
+    return {
+        "payload": payload,
+        "row": {
+            "results": _json.dumps(results, sort_keys=True),
+            "required_pass": required_pass,
+            "required_total": required_total,
+            "clean": int(payload["clean"]),
+            "playbook_id": stored["playbook_id"],
+        },
+    }
+
+
 async def _account_snapshot(broker: Broker) -> dict[str, float | None]:
     """Balance and equity straight from cTrader. Never re-derived from summed fills.
 
@@ -256,6 +315,7 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
         calendar=calendar,
     )
     deck = build_deck(config)
+    playbooks = PlaybookRepository(config.paths.db)
     desk = build_desk(config, sentinel, broker, deck)
 
     @asynccontextmanager
@@ -263,6 +323,9 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
         applied = migrate(config.paths.db)
         if applied:
             log.info("applied migrations: %s", ", ".join(applied))
+        seeded = playbooks.seed_if_empty(ts_ms=int(time.time() * 1000))
+        if seeded:
+            log.info("seeded %d starter playbooks", seeded)
         reactor_setup.start(_REACTOR)
 
         journal = JournalWriter(connect(config.paths.db))
@@ -301,6 +364,7 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
     app.state.desk = desk
     app.state.calendar = calendar
     app.state.deck = deck
+    app.state.playbooks = playbooks
     app.state.tv_guard = WebhookGuard(secret=os.environ.get(config.tradingview.webhook_secret_env, ""))
     app.state.last_tv_signal = None
 
@@ -318,6 +382,91 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
             config.timezone, config.session.days, config.session.start, config.session.end
         )
         return window.local(int(time.time() * 1000)).strftime("%Y-%m-%d")
+
+    @app.get("/api/playbooks")
+    def list_playbooks(include_retired: bool = False) -> dict[str, object]:
+        """The book. Retired playbooks are hidden from selection but stay resolvable."""
+        return {"playbooks": playbooks.list(include_retired=include_retired),
+                "registry": registry_view()}
+
+    @app.post("/api/playbooks")
+    def save_playbook(body: PlaybookRequest) -> dict[str, object]:
+        """Create or replace a playbook. A rule code the registry lacks is refused outright."""
+        missing = unknown_codes(body.rules)
+        if missing:
+            raise HTTPException(status_code=422,
+                                detail=f"unknown rule codes: {', '.join(missing)}")
+        return {"playbook": playbooks.save(body, ts_ms=int(time.time() * 1000))}
+
+    @app.post("/api/playbooks/{playbook_id}/retire")
+    def retire_playbook(playbook_id: str) -> dict[str, object]:
+        """Hide it from selection. Historical grades keep resolving, so the deck keeps its months."""
+        if not playbooks.retire(playbook_id, ts_ms=int(time.time() * 1000)):
+            raise HTTPException(status_code=404, detail="no such active playbook")
+        return {"ok": True, "retired": playbook_id}
+
+    @app.post("/api/playbooks/grade-preview")
+    def grade_preview(body: GradePreviewRequest) -> dict[str, object]:
+        """The grade the confirm overlay shows **before** the fire.
+
+        Protocol v1 was frozen without an `intent.arm` message, so the pre-commit grade rides HTTP
+        like the rest of the playbook surface rather than forcing a v2 migration. Nothing is
+        persisted here — the socket still writes and pushes the authoritative `grade` at FIRE.
+        """
+        book = playbooks.get(body.playbookId) if body.playbookId else None
+        setup = sentinel.tracker(body.sym).current
+        now_ms = int(time.time() * 1000)
+        symbol_cfg = next((s for s in config.symbols if s.name == body.sym), None)
+
+        ctx = RuleContext(
+            now_ms=now_ms, symbol=body.sym, lots=body.lots, clutch=True,
+            session_open=True, session_label="",
+            allowed_symbols=frozenset(s.name for s in config.symbols),
+            positions_open=0, max_positions=config.risk.max_positions,
+            max_lots=symbol_cfg.max_lots if symbol_cfg else 0.0,
+            day_loss_usd=0.0, max_day_loss_usd=config.risk.max_daily_loss_usd,
+            seconds_since_last_order=float("inf"),
+            min_seconds_between_orders=config.risk.min_seconds_between_orders,
+            heartbeat_age_s=0.0, heartbeat_dead_s=config.gateway.heartbeat_dead_s,
+            setup_tag=setup.kind if setup else None,
+            setup_side=setup.side if setup else None,
+            side=body.side,
+            price=body.price, ema20=body.ema20, atr=body.atr,
+            spread=body.spread,
+            spread_cap=symbol_cfg.max_spread if symbol_cfg else None,
+        )
+        grade = grade_fire(cid=body.cid, playbook=book, ctx=ctx, stage="arm")
+        failure = grade.first_failure()
+        return {
+            "grade": grade.payload(),
+            "playbookName": grade.playbook_name,
+            "summary": grade.summary,
+            "firstFailure": None if failure is None else failure.as_row(),
+        }
+
+    @app.post("/api/playbooks/checklist")
+    def post_trade_checklist(body: ChecklistRequest) -> dict[str, object]:
+        """The 3-tap checklist. Skipping leaves rules unknown, which costs the player nothing."""
+        stored = playbooks.grade_for(body.cid)
+        if stored is None:
+            raise HTTPException(status_code=404, detail="no grade for that fire")
+
+        book = None if stored["playbook_id"] is None else playbooks.get(stored["playbook_id"])
+        # The chart context is gone by now, so the re-grade answers only what the player just
+        # told us; every auto rule that needed live data stays unknown rather than being invented.
+        ctx = RuleContext(
+            now_ms=int(time.time() * 1000), symbol="", lots=0.0, clutch=True,
+            session_open=True, session_label="", allowed_symbols=frozenset(),
+            positions_open=0, max_positions=1, max_lots=0.0,
+            day_loss_usd=0.0, max_day_loss_usd=0.0,
+            seconds_since_last_order=0.0, min_seconds_between_orders=0.0,
+            heartbeat_age_s=0.0, heartbeat_dead_s=1.0,
+            manual_answers=dict(body.answers),
+        )
+        regraded = grade_fire(cid=body.cid, playbook=book, ctx=ctx, stage="fire")
+        merged = _merge_manual(stored, regraded.payload())
+        playbooks.save_grade({**regraded.as_db_row(), **merged["row"]})
+        return {"ok": True, "grade": merged["payload"]}
 
     @app.get("/api/deck/summary")
     def deck_summary() -> dict[str, object]:
@@ -427,6 +576,7 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
             heartbeat_dead_s=config.gateway.heartbeat_dead_s,
             desk=desk,
             sentinel=sentinel,
+            playbooks=playbooks,
         )
         try:
             while True:

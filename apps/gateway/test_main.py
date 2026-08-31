@@ -316,3 +316,169 @@ def test_the_session_note_is_returned_as_text_for_the_client_to_escape(client: T
     """Player text. The API hands it back verbatim; the panel renders it as text, never markup."""
     seed_deck(client.app.state.config.paths.db)
     assert client.get("/api/deck/process").json()["latestSession"]["note"] == "<b>quiet</b>"
+
+
+def test_a_new_player_starts_with_a_real_book(client: TestClient) -> None:
+    """Seeded from the phase 4 detectors, so the overlay says something on night one."""
+    body = client.get("/api/playbooks").json()
+    slugs = {p["slug"] for p in body["playbooks"]}
+    assert len(slugs) >= 5
+    assert "m5-false-break" in slugs
+    assert all(p["rules"] for p in body["playbooks"])
+
+
+def test_the_editor_is_only_offered_rules_the_registry_has(client: TestClient) -> None:
+    registry = client.get("/api/playbooks").json()["registry"]
+    assert {r["code"] for r in registry["playbook"]}
+    assert "manual" in registry
+    # The enforced rules are listed so the editor can explain them, not so they can be authored.
+    assert {r["code"] for r in registry["riskEnforced"]} & {"max_lots", "daily_loss"}
+
+
+def test_a_playbook_naming_an_unknown_rule_is_refused(client: TestClient) -> None:
+    body = {"name": "Invented", "slug": "invented",
+            "rules": [{"code": "always_win", "params": {}}]}
+    response = client.post("/api/playbooks", json=body)
+    assert response.status_code == 422
+    assert "always_win" in response.json()["detail"]
+
+
+def test_a_playbook_round_trips_with_its_prose_intact(client: TestClient) -> None:
+    body = {
+        "name": "My break", "slug": "my-break", "detector_tag": "range_break",
+        "narrative": "Wait for the <retest> & only then.",
+        "rules": [{"code": "named_setup", "ord": 0},
+                  {"code": "ema_distance", "params": {"max_atr": 2.0}, "ord": 1}],
+    }
+    saved = client.post("/api/playbooks", json=body).json()["playbook"]
+    assert saved["narrative"] == "Wait for the <retest> & only then."
+    assert saved["rules"][1]["params"] == {"max_atr": 2.0}
+    # The rule's kind comes from the registry, not from the request.
+    assert saved["rules"][0]["kind"] == "auto"
+
+
+def test_retiring_a_playbook_hides_it_but_keeps_it_resolvable(client: TestClient) -> None:
+    """The deck must not lose a month because the book changed."""
+    before = {p["id"] for p in client.get("/api/playbooks").json()["playbooks"]}
+    target = "pb-range-fade"
+    assert target in before
+
+    assert client.post(f"/api/playbooks/{target}/retire").json()["ok"] is True
+    after = {p["id"] for p in client.get("/api/playbooks").json()["playbooks"]}
+    assert target not in after
+
+    with_retired = client.get("/api/playbooks?include_retired=true").json()["playbooks"]
+    retired = next(p for p in with_retired if p["id"] == target)
+    assert retired["retired_at"] is not None
+    assert client.app.state.playbooks.get(target) is not None
+
+    assert client.post(f"/api/playbooks/{target}/retire").status_code == 404
+
+
+def test_the_arm_preview_names_the_playbook_and_counts_the_rules(client: TestClient) -> None:
+    """`4/5 rules OK · ✗ …` — what the confirm overlay shows before you commit."""
+    body = {"cid": "01JKQ8ZC9N7Y2WX4T6VB3MHRAE", "sym": "XAUUSD", "side": "buy", "lots": 0.01,
+            "playbookId": "pb-range-break", "price": 2010.0, "ema20": 2000.0, "atr": 1.0,
+            "spread": 0.3}
+    preview = client.post("/api/playbooks/grade-preview", json=body).json()
+
+    assert preview["playbookName"] == "M5 range break"
+    assert "rules OK" in preview["summary"]
+    assert preview["firstFailure"]["code"] in {"setup_matches", "ema_distance", "with_trend",
+                                               "named_setup"}
+
+
+def test_the_preview_persists_nothing(client: TestClient) -> None:
+    """The socket writes the authoritative grade at FIRE; a preview is only a look."""
+    cid = "01JKQ8ZC9N7Y2WX4T6VB3MHRAF"
+    client.post("/api/playbooks/grade-preview",
+                json={"cid": cid, "sym": "XAUUSD", "side": "buy", "lots": 0.01})
+    assert client.app.state.playbooks.grade_for(cid) is None
+
+
+def test_a_fire_is_graded_and_the_grade_reaches_the_socket(client: TestClient, monkeypatch) -> None:
+    import json
+
+    cfg = client.app.state.config
+    monkeypatch.setenv(cfg.gateway.token_env, "tok")
+    cid = "01JKQ8ZC9N7Y2WX4T6VB3MHRAG"
+
+    with client.websocket_connect(
+        "/ws?token=tok", headers={"origin": cfg.gateway.public_origin}
+    ) as ws:
+        ws.send_text(json.dumps({"v": 1, "t": "hello", "seq": 1, "ts": 1, "ch": "session",
+                                 "p": {"token": "tok"}}))
+        ws.receive_text()
+
+        ws.send_text(json.dumps({"v": 1, "t": "playbook.select", "seq": 2, "ts": 1,
+                                 "ch": "session", "p": {"playbookId": "pb-range-break"}}))
+        ws.receive_text()
+
+        ws.send_text(json.dumps({
+            "v": 1, "t": "intent.open", "seq": 3, "ts": 1, "ch": "orders", "cid": cid,
+            "p": {"sym": "XAUUSD", "side": "buy", "type": "market", "lots": 0.01,
+                  "clutch": True, "armedAt": 1},
+        }))
+        frames = [json.loads(ws.receive_text()) for _ in range(2)]
+
+    grade = next(f for f in frames if f["t"] == "grade")
+    assert grade["p"]["playbookId"] == "pb-range-break"
+    assert grade["p"]["results"]
+    # A grade row exists even though the gate refused the fire — declines are gradeable.
+    assert client.app.state.playbooks.grade_for(cid) is not None
+    assert any(f["t"] == "order.reject" for f in frames)
+
+
+def test_the_checklist_answers_only_the_manual_rules(client: TestClient) -> None:
+    """The auto verdicts stay as they were at FIRE; re-running them now would use a moved chart."""
+    from grading.grade import grade_fire
+    from grading.routes import to_domain
+    from method.rules import RuleContext
+
+    cid = "01JKQ8ZC9N7Y2WX4T6VB3MHRAH"
+    book = client.app.state.playbooks.get("pb-range-break")
+    ctx = RuleContext(
+        now_ms=1, symbol="XAUUSD", lots=0.01, clutch=True, session_open=True, session_label="",
+        allowed_symbols=frozenset({"XAUUSD"}), positions_open=0, max_positions=1, max_lots=0.1,
+        day_loss_usd=0.0, max_day_loss_usd=200.0, seconds_since_last_order=10.0,
+        min_seconds_between_orders=2.0, heartbeat_age_s=0.0, heartbeat_dead_s=3.0,
+        setup_tag="range_break", setup_side="buy", side="buy",
+        price=2000.5, ema20=2000.0, atr=1.0, spread=0.3, spread_cap=0.8,
+    )
+    at_fire = grade_fire(cid=cid, playbook=book, ctx=ctx, stage="fire")
+    client.app.state.playbooks.save_grade(at_fire.as_db_row())
+    assert to_domain  # the loader the route uses
+
+    answered = client.post("/api/playbooks/checklist",
+                           json={"cid": cid, "answers": {"no_chase": True}}).json()
+    assert answered["ok"] is True
+    codes = {r["code"]: r for r in answered["grade"]["results"]}
+    assert codes["no_chase"]["ok"] is True
+    assert codes["ema_distance"]["actual"] == "0.50 ATR", "the auto verdict survived unchanged"
+
+
+def test_skipping_the_checklist_shrinks_the_denominator(client: TestClient) -> None:
+    from grading.grade import grade_fire
+    from method.rules import RuleContext
+
+    cid = "01JKQ8ZC9N7Y2WX4T6VB3MHRAI"
+    book = client.app.state.playbooks.get("pb-range-break")
+    ctx = RuleContext(
+        now_ms=1, symbol="XAUUSD", lots=0.01, clutch=True, session_open=True, session_label="",
+        allowed_symbols=frozenset({"XAUUSD"}), positions_open=0, max_positions=1, max_lots=0.1,
+        day_loss_usd=0.0, max_day_loss_usd=200.0, seconds_since_last_order=10.0,
+        min_seconds_between_orders=2.0, heartbeat_age_s=0.0, heartbeat_dead_s=3.0,
+        setup_tag="range_break", setup_side="buy", side="buy",
+        price=2000.5, ema20=2000.0, atr=1.0, spread=0.3, spread_cap=0.8,
+    )
+    stored = grade_fire(cid=cid, playbook=book, ctx=ctx, stage="fire")
+    client.app.state.playbooks.save_grade(stored.as_db_row())
+
+    skipped = client.post("/api/playbooks/checklist", json={"cid": cid, "answers": {}}).json()
+    assert skipped["grade"]["required_total"] == stored.required_total
+    assert skipped["grade"]["clean"] is True, "a skip costs nothing"
+
+
+def test_a_checklist_for_an_unknown_fire_is_a_404(client: TestClient) -> None:
+    assert client.post("/api/playbooks/checklist",
+                       json={"cid": "01NOSUCHFIRE", "answers": {}}).status_code == 404

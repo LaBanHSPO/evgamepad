@@ -77,6 +77,10 @@ class GameSocket:
     desk: Any | None = None
     sentinel: Any | None = None
 
+    # Phase 7. Absent means every fire grades as `__unplanned__`, which is a valid state.
+    playbooks: Any | None = None
+    active_playbook_id: str | None = None
+
     seq: int = 0
     subscriptions: set[str] = field(default_factory=set)
     _outbox: list[Envelope] = field(default_factory=list, init=False)
@@ -124,6 +128,7 @@ class GameSocket:
             "session.unlock": self._session_unlock,
             "ai.ask": self._ai_ask,
             "pad.telemetry": self._pad_telemetry,
+            "playbook.select": self._playbook_select,
         }
         handler = handlers.get(envelope.t)
         if handler is None:
@@ -224,7 +229,15 @@ class GameSocket:
         symbol = str(payload["sym"])
         lots = float(payload["lots"])
 
-        decision = evaluate_open(self._open_context(symbol, lots, bool(payload.get("clutch"))))
+        clutch = bool(payload.get("clutch"))
+        side = str(payload["side"])
+        decision = evaluate_open(self._open_context(symbol, lots, clutch))
+
+        # Graded before the gate decides. A refused fire is still a fire that happened, and the
+        # deck's declined count depends on a row existing for it.
+        if envelope.cid:
+            await self.grade_and_push(str(envelope.cid), symbol, lots, side, clutch, stage="fire")
+
         if not decision.allowed:
             await self._reject(envelope.cid, decision.reason or "refused")
             return
@@ -234,7 +247,7 @@ class GameSocket:
 
         cid = str(envelope.cid)
         result = await self.broker.place(
-            cid=cid, sym=symbol, side=str(payload["side"]), lots=lots,
+            cid=cid, sym=symbol, side=side, lots=lots,
             relative_sl=payload.get("relativeSl"), relative_tp=payload.get("relativeTp"),
         )
         now = self.now_ms()
@@ -338,6 +351,65 @@ class GameSocket:
     async def push_signal(self, signal: dict[str, Any]) -> None:
         """A method tag, a calendar guard, or a TradingView hint. Never an order."""
         await self.emit("signal.item", "ai", signal)
+
+    async def _playbook_select(self, envelope: Envelope) -> None:
+        """The active playbook is part of session state, chosen in the GameOverlay."""
+        self.active_playbook_id = str(envelope.p.get("playbookId") or "") or None
+        await self.emit("session", "session", self._session_payload())
+
+    def grade_context(self, symbol: str, lots: float, side: str, clutch: bool) -> Any:
+        """Assemble what the rules read.
+
+        Chart fields that are not available right now stay `None`, and the affected rules grade as
+        *unknown* rather than failing — a missing EMA is not a broken rule.
+        """
+        from method.rules import RuleContext
+
+        now = self.now_ms()
+        setup = None
+        spread = None
+        spread_cap = None
+        if self.sentinel is not None:
+            tracker = self.sentinel.tracker(symbol)
+            setup = tracker.current
+            spread_cap = self.sentinel.spread_caps.get(symbol)
+
+        return RuleContext(
+            now_ms=now, symbol=symbol, lots=lots, clutch=clutch,
+            session_open=self.window.is_open(now) and not self.state.locked,
+            session_label=self.window.describe(now),
+            allowed_symbols=self.allowed_symbols,
+            positions_open=self.state.positions_open,
+            max_positions=self.max_positions,
+            max_lots=self.max_lots_by_symbol.get(symbol, 0.0),
+            day_loss_usd=self.state.day_loss_usd,
+            max_day_loss_usd=self.max_day_loss_usd,
+            seconds_since_last_order=self.state.seconds_since_last_order(now),
+            min_seconds_between_orders=self.min_seconds_between_orders,
+            heartbeat_age_s=self.state.heartbeat_age_s(now),
+            heartbeat_dead_s=self.heartbeat_dead_s,
+            setup_tag=setup.kind if setup else None,
+            setup_side=setup.side if setup else None,
+            side=side,
+            spread=spread,
+            spread_cap=spread_cap,
+        )
+
+    async def grade_and_push(self, cid: str, symbol: str, lots: float, side: str,
+                             clutch: bool, stage: str) -> None:
+        """Grade one fire and push it. Scoring only — this can never stop the order."""
+        if self.playbooks is None:
+            return
+        from grading.grade import grade_fire
+
+        book = (
+            self.playbooks.get(self.active_playbook_id)
+            if self.active_playbook_id else None
+        )
+        grade = grade_fire(cid=cid, playbook=book,
+                           ctx=self.grade_context(symbol, lots, side, clutch), stage=stage)
+        self.playbooks.save_grade(grade.as_db_row())
+        await self.emit("grade", "session", grade.payload(), cid=cid)
 
     async def _pad_telemetry(self, envelope: Envelope) -> None:
         """Accepted and journalled now; phase 9 turns it into a tilt score.

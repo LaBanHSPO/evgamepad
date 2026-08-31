@@ -246,6 +246,98 @@ class JournalWriter:
         keys = ("session_id", "pre_rating", "pre_at", "post_rating", "post_at", "stood_down_count")
         return dict(zip(keys, row, strict=True))
 
+    # -- playbooks and grading (phase 7) -----------------------------------------------
+
+    def upsert_playbook(self, playbook: dict[str, Any], rules: list[dict[str, Any]]) -> None:
+        """Write a playbook and replace its rule list. Retiring is a separate, softer act."""
+        self.conn.execute(
+            "INSERT INTO playbook (id, name, slug, method, symbols, detector_tag, narrative, "
+            "active, created_at, retired_at) VALUES (?,?,?,?,?,?,?,?,?,?) "
+            "ON CONFLICT (id) DO UPDATE SET name=excluded.name, slug=excluded.slug, "
+            "method=excluded.method, symbols=excluded.symbols, "
+            "detector_tag=excluded.detector_tag, narrative=excluded.narrative, "
+            "active=excluded.active",
+            (
+                playbook["id"], playbook["name"], playbook["slug"],
+                playbook.get("method", "volman_m5"),
+                json.dumps(list(playbook.get("symbols", []))),
+                playbook.get("detector_tag"), playbook.get("narrative"),
+                int(playbook.get("active", True)), playbook.get("created_at", 0),
+                playbook.get("retired_at"),
+            ),
+        )
+        self.conn.execute("DELETE FROM playbook_rule WHERE playbook_id = ?", (playbook["id"],))
+        for rule in rules:
+            self.conn.execute(
+                "INSERT INTO playbook_rule (playbook_id, ord, kind, code, params, label, required) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (playbook["id"], rule.get("ord", 0), rule.get("kind", "auto"), rule["code"],
+                 json.dumps(rule.get("params", {}), sort_keys=True), rule.get("label"),
+                 int(rule.get("required", True))),
+            )
+
+    def playbooks(self, *, include_retired: bool = False) -> list[dict[str, Any]]:
+        """Playbooks and their rules. Retired ones stay resolvable so old grades still read."""
+        where = "" if include_retired else "WHERE retired_at IS NULL AND active = 1"
+        books = self.conn.execute(
+            f"SELECT id, name, slug, method, symbols, detector_tag, narrative, active, "
+            f"created_at, retired_at FROM playbook {where} ORDER BY created_at, name"
+        ).fetchall()
+        keys = ("id", "name", "slug", "method", "symbols", "detector_tag", "narrative", "active",
+                "created_at", "retired_at")
+        out: list[dict[str, Any]] = []
+        for row in books:
+            book = dict(zip(keys, row, strict=True))
+            book["symbols"] = json.loads(book["symbols"] or "[]")
+            book["active"] = bool(book["active"])
+            book["rules"] = [
+                {"ord": r[0], "kind": r[1], "code": r[2], "params": json.loads(r[3]),
+                 "label": r[4], "required": bool(r[5])}
+                for r in self.conn.execute(
+                    "SELECT ord, kind, code, params, label, required FROM playbook_rule "
+                    "WHERE playbook_id = ? ORDER BY ord",
+                    (book["id"],),
+                )
+            ]
+            out.append(book)
+        return out
+
+    def retire_playbook(self, playbook_id: str, *, ts_ms: int) -> bool:
+        """Hide a playbook from selection without deleting it — the deck must not lose a month."""
+        cursor = self.conn.execute(
+            "UPDATE playbook SET retired_at = ?, active = 0 WHERE id = ? AND retired_at IS NULL",
+            (ts_ms, playbook_id),
+        )
+        return cursor.rowcount > 0
+
+    def write_grade(self, row: dict[str, Any]) -> None:
+        """One grade per cid. A re-grade at FIRE replaces the ARM row for the same fire."""
+        self.conn.execute(
+            "INSERT INTO trade_grade (cid, playbook_id, stage, evaluated_at, results, "
+            "required_pass, required_total, clean) VALUES (?,?,?,?,?,?,?,?) "
+            "ON CONFLICT (cid) DO UPDATE SET stage=excluded.stage, "
+            "evaluated_at=excluded.evaluated_at, results=excluded.results, "
+            "required_pass=excluded.required_pass, required_total=excluded.required_total, "
+            "clean=excluded.clean",
+            (row["cid"], row["playbook_id"], row["stage"], row["evaluated_at"], row["results"],
+             row["required_pass"], row["required_total"], row["clean"]),
+        )
+
+    def grade_for(self, cid: str) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            "SELECT cid, playbook_id, stage, evaluated_at, results, required_pass, "
+            "required_total, clean FROM trade_grade WHERE cid = ?",
+            (cid,),
+        ).fetchone()
+        if row is None:
+            return None
+        keys = ("cid", "playbook_id", "stage", "evaluated_at", "results", "required_pass",
+                "required_total", "clean")
+        grade = dict(zip(keys, row, strict=True))
+        grade["results"] = json.loads(grade["results"])
+        grade["clean"] = bool(grade["clean"])
+        return grade
+
     def write_tape(
         self, *, cid: str, position_id: int | None, symbol: str, from_ts: int, to_ts: int,
         dt_s: int, bars: bytes, events: list[dict[str, Any]], mfe: float | None,

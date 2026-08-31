@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ConfirmGrade } from "../playbook/ConfirmGrade";
+import { PlaybookPicker } from "../playbook/PlaybookPicker";
+import { PostTradeChecklist } from "../playbook/PostTradeChecklist";
+import type { Grade, GradePreview, Playbook } from "../playbook/types";
 import { GameAgent } from "../agent";
 import type { AgentView } from "../agent";
 import { PadPoller } from "../pad/poll";
+import { newCid } from "../net/cid";
 import { GameClient } from "../net/ws";
 import type { SocketStatus } from "../net/ws";
 import type { Envelope } from "../protocol/types";
@@ -38,6 +43,11 @@ export function LiveHudScreen(): JSX.Element {
   const [showDollars, setShowDollars] = useState(false);
   const [refused, setRefused] = useState<number | null>(null);
   const [log, setLog] = useState<string[]>([]);
+  const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
+  const [activePlaybook, setActivePlaybook] = useState<string | null>(null);
+  const [preview, setPreview] = useState<GradePreview | null>(null);
+  const [grade, setGrade] = useState<Grade | null>(null);
+  const clientRef = useRef<GameClient | null>(null);
 
   const bidRef = useRef<HTMLSpanElement>(null);
   const askRef = useRef<HTMLSpanElement>(null);
@@ -48,6 +58,14 @@ export function LiveHudScreen(): JSX.Element {
 
   const note = useCallback((line: string) => {
     setLog((prev) => [`${new Date().toLocaleTimeString()} ${line}`, ...prev].slice(0, 8));
+  }, []);
+
+  // The book loads once; retired playbooks never appear, but their old grades still resolve.
+  useEffect(() => {
+    void fetch("/api/playbooks")
+      .then((r) => r.json())
+      .then((body) => setPlaybooks(body.playbooks as Playbook[]))
+      .catch(() => undefined);
   }, []);
 
   const onMessage = useCallback(
@@ -80,6 +98,11 @@ export function LiveHudScreen(): JSX.Element {
         case "maint":
           note(`maint: ${payload.note ?? "broker unavailable"}`);
           break;
+        case "grade": {
+          // The authoritative grade, pushed at FIRE. The preview above it was only a look.
+          setGrade(envelope.p as unknown as Grade);
+          break;
+        }
         default:
           break;
       }
@@ -112,6 +135,7 @@ export function LiveHudScreen(): JSX.Element {
       },
     });
 
+    clientRef.current = client;
     agentRef.current = agent;
     const poller = new PadPoller({
       onFrame: (frame) => agent.onFrame(frame),
@@ -128,6 +152,42 @@ export function LiveHudScreen(): JSX.Element {
   useEffect(() => () => {
     pollerRef.current?.stop();
   }, []);
+
+  const selectPlaybook = useCallback((id: string | null) => {
+    setActivePlaybook(id);
+    // The active playbook is session state, so the gateway is told rather than only the browser.
+    clientRef.current?.send("playbook.select", "session", { playbookId: id });
+  }, []);
+
+  /** The grade shown before you commit. Nothing is persisted by a preview. */
+  const previewGrade = useCallback(async (side: "buy" | "sell") => {
+    const current = agentRef.current?.view;
+    if (!current) return;
+    try {
+      const response = await fetch("/api/playbooks/grade-preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          cid: newCid(), sym: current.symbol, side, lots: current.lots,
+          playbookId: activePlaybook,
+        }),
+      });
+      setPreview((await response.json()) as GradePreview);
+    } catch {
+      setPreview(null);
+    }
+  }, [activePlaybook]);
+
+  const submitChecklist = useCallback((answers: Record<string, boolean>) => {
+    const cid = grade?.cid;
+    setGrade(null);
+    if (!cid || Object.keys(answers).length === 0) return;
+    void fetch("/api/playbooks/checklist", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cid, answers }),
+    }).then(() => note("checklist saved"));
+  }, [grade, note]);
 
   const checkIn = useCallback((phase: "pre" | "post", rating: number | null) => {
     void fetch("/api/journal/checkin", {
@@ -197,9 +257,21 @@ export function LiveHudScreen(): JSX.Element {
       </section>
 
       <section style={panel}>
+        <PlaybookPicker playbooks={playbooks} activeId={activePlaybook} onSelect={selectPlaybook} />
+      </section>
+
+      <section style={panel}>
         <div>{PHASE_COPY[view?.phase ?? "LOCKED"]}</div>
         {view?.side ? <div>armed: {view.side}</div> : null}
-        <div style={{ opacity: 0.7 }}>grading unavailable until phase 7</div>
+        <ConfirmGrade preview={preview} />
+        <div style={row}>
+          <button type="button" onClick={() => void previewGrade("buy")}>
+            preview buy
+          </button>
+          <button type="button" onClick={() => void previewGrade("sell")}>
+            preview sell
+          </button>
+        </div>
         <div style={row}>
           <span>stood down tonight: {view?.stoodDown ?? 0}</span>
           <span>pad: {view?.padConnected ? "connected" : "absent"}</span>
@@ -231,6 +303,8 @@ export function LiveHudScreen(): JSX.Element {
           </button>
         </div>
       </section>
+
+      <PostTradeChecklist cid={grade?.cid ?? ""} grade={grade} onDone={submitChecklist} />
 
       <section style={{ ...panel, fontFamily: "var(--font-terminal)", opacity: 0.8 }}>
         {log.length === 0 ? <div>no events yet</div> : log.map((line) => <div key={line}>{line}</div>)}
