@@ -8,6 +8,8 @@ import { CityFireScreen } from "./screens/CityFireScreen";
 import { DataScreen } from "./screens/DataScreen";
 import { Deck } from "./deck/Deck";
 import { SystemPrinciples } from "./journal/SystemPrinciples";
+import { ReportBuilder } from "./reports/ReportBuilder";
+import { Settings as LiveSettings } from "./settings/Settings";
 
 import { GamepadScreen } from "./screens/GamepadScreen";
 import { HistoryScreen } from "./screens/HistoryScreen";
@@ -32,6 +34,8 @@ import { TradeDetailScreen } from "./screens/TradeDetailScreen";
  */
 
 type ScreenId =
+  | "settingslive"
+  | "reportlive"
   | "journallive"
   | "systemlive"
   | "replaylive"
@@ -92,6 +96,7 @@ const GROUPS: {
     items: [
       { id: "clear", label: "Session clear" },
       { id: "over", label: "Session over" },
+      { id: "reportlive", label: "Report (real gateway)" },
       { id: "report", label: "Report" },
       { id: "journallive", label: "Journal (real gateway)" },
       { id: "journal", label: "Journal" },
@@ -107,6 +112,7 @@ const GROUPS: {
     items: [
       { id: "pad", label: "Gamepad" },
       { id: "data", label: "Data" },
+      { id: "settingslive", label: "Settings (real gateway)" },
       { id: "settings", label: "Settings" },
       { id: "systemlive", label: "System (real gateway)" },
       { id: "philosophy", label: "Philosophy" },
@@ -122,6 +128,8 @@ const SCREENS: Record<Exclude<ScreenId, "session" | "replaylive" | "journallive"
   live: LiveHudScreen,
   deck: Deck,
   systemlive: SystemPrinciples,
+  settingslive: LiveSettings,
+  reportlive: ReportBuilder,
   title: AttractScreen,
   boot: BootScreen,
   pre: PreSessionScreen,

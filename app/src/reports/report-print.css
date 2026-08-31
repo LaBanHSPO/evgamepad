@@ -1,0 +1,93 @@
+/*
+ * The print stylesheet.
+ *
+ * PDF is the browser's own Save as PDF over this file. Putting Chromium on the VPS to render a
+ * monthly summary would be several hundred megabytes and a second attack surface for a job the
+ * machine in front of the player already does perfectly well.
+ *
+ * On paper the dark theme inverts: a black page is unreadable printed and wastes a cartridge, so
+ * print is the one place this product is not dark-only. The screen stays dark.
+ */
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 16mm 14mm;
+  }
+
+  /* Ink, not phosphor. */
+  :root,
+  body,
+  .report {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  /* Everything that is not the report itself: the nav rail, the tab bar, the controls. */
+  .no-print,
+  nav,
+  button,
+  input,
+  select,
+  textarea {
+    display: none !important;
+  }
+
+  .report section {
+    border: 1px solid #ccc !important;
+    background: #fff !important;
+    /* A section split across a page break is the fastest way to make a report look unfinished. */
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 8mm;
+  }
+
+  .report h1,
+  .report h2 {
+    color: #111 !important;
+  }
+
+  /* The cover owns the first page, so the process figures are what you see first — always. */
+  .report .cover {
+    break-after: page;
+    page-break-after: always;
+  }
+
+  /* And the money, when it was asked for at all, starts its own. */
+  .report .outcome {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  .report table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10pt;
+  }
+
+  .report th,
+  .report td {
+    border-bottom: 1px solid #ddd;
+    padding: 3pt 6pt;
+    text-align: left;
+  }
+
+  .report .heatmap-cell {
+    /* Colour is unreliable on a mono printer, so the score is printed as a number too. */
+    border: 1px solid #999 !important;
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  .report a[href]::after {
+    /* A link is useless on paper unless it says where it goes. */
+    content: " (" attr(href) ")";
+    font-size: 8pt;
+    color: #555;
+  }
+
+  .report .disclaimer {
+    font-size: 9pt;
+    color: #555 !important;
+  }
+}

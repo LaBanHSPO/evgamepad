@@ -11,5 +11,10 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 data/
+# ...but `apps/gateway/data/` is the export/backup/restore source package, not a data volume.
+# Un-ignore the directory so git descends into it, then re-ignore anything a runtime would drop.
+!apps/gateway/data/
+apps/gateway/data/*.db
+apps/gateway/data/*.tar.gz
 app/node_modules/
 app/dist/

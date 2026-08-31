@@ -8,6 +8,7 @@ uvicorn is run on that same loop so the broker client and the web server never f
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import sys
@@ -25,6 +26,7 @@ asyncio.set_event_loop(_LOOP)
 _REACTOR = reactor_setup.install(_LOOP)
 
 from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect  # noqa: E402
+from fastapi.responses import StreamingResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel, ConfigDict, Field  # noqa: E402
 
@@ -37,6 +39,12 @@ from config import AppConfig, ConfigError, load_config  # noqa: E402
 from copilot.client import SpaceXaiClient  # noqa: E402
 from copilot.loops import DeskLoops  # noqa: E402
 from copilot.tools import build_registry  # noqa: E402
+from data.backup import DEFAULT_MAX_BYTES  # noqa: E402
+from data.backup import create as create_backup  # noqa: E402
+from data.delete import Confirmation, DeleteRefused, delete_all  # noqa: E402
+from data.export import journal_json, trades_csv  # noqa: E402
+from data.restore import Readiness, RestoreError, restore  # noqa: E402
+from data.restore import inspect as inspect_archive  # noqa: E402
 from db.migrate import connect, migrate  # noqa: E402
 from deck.routes import DeckRepository  # noqa: E402
 from grading.grade import grade_fire  # noqa: E402
@@ -56,11 +64,14 @@ from journal.writer import JournalWriter  # noqa: E402
 from method.rules import RuleContext  # noqa: E402
 from protocol import PROTOCOL_VERSION  # noqa: E402
 from replay import ReplayRepository  # noqa: E402
+from reports import ReportBuilder  # noqa: E402
 from risk.session import SessionWindow  # noqa: E402
 from score import ScoreRepository  # noqa: E402
 from score.opportunity import OpportunitySampler  # noqa: E402
 from score.repository import VOICE_CAPTURE_BUILT  # noqa: E402
 from sentinel.engine import SentinelEngine  # noqa: E402
+from settings import SettingsRepository  # noqa: E402
+from settings.schema import SettingsError  # noqa: E402
 from signals.calendar import CalendarCache, currencies_for  # noqa: E402
 from signals.tv_webhook import TvAlert, WebhookGuard, to_signal  # noqa: E402
 from tilt.baseline import load_baseline  # noqa: E402
@@ -197,6 +208,32 @@ class SizeRequest(BaseModel):
     equity: float | None = None
     riskUsd: float | None = None
     riskPercent: float | None = None
+
+
+class SettingsResetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    keys: list[str] = Field(default_factory=list)
+
+
+class RestoreRequest(BaseModel):
+    """A backup by name, plus the gateway state the caller believes it is in."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    locked: bool = False
+    positionsOpen: int = 0
+    jobsRunning: int = 0
+
+
+class DeleteAllRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    phrase: str
+    heldMs: int = 0
+    locked: bool = False
+    positionsOpen: int = 0
 
 
 class ReplayOpenedRequest(BaseModel):
@@ -412,6 +449,10 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
         config.paths.db, max_lots=max((s.max_lots for s in config.symbols), default=0.1),
     )
     attachments_dir = config.paths.data_dir_path / "attachments"
+    backups_dir = config.paths.data_dir_path / "backups"
+    settings_repo = SettingsRepository(
+        config.paths.db, server_symbols=lambda: {s.name for s in config.symbols},
+    )
     score = ScoreRepository(
         config.paths.db,
         trades_max=config.score.trades_max,
@@ -424,6 +465,8 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
         # `VOICE_CAPTURE_BUILT` is False and the memo sub-items drop out instead of failing.
         voice_available=config.voice.enabled and VOICE_CAPTURE_BUILT,
     )
+    reports = ReportBuilder(config.paths.db, deck=deck, score=score, journal=journal_service)
+
     def _session_id_now() -> str:
         window = SessionWindow.from_config(
             config.timezone, config.session.days, config.session.start, config.session.end
@@ -488,6 +531,8 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
     app.state.replay = replay
     app.state.score = score
     app.state.journal_service = journal_service
+    app.state.settings = settings_repo
+    app.state.reports = reports
     app.state.tv_guard = WebhookGuard(secret=os.environ.get(config.tradingview.webhook_secret_env, ""))
     app.state.last_tv_signal = None
 
@@ -827,6 +872,163 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
         if not path.exists():
             raise HTTPException(status_code=404, detail="the file is gone")
         return Response(content=path.read_bytes(), media_type=row["mime"])
+
+    # -- settings, reports and data (phase 13) ----------------------------------------
+    #
+    # The account is a chip, not a selector, and nothing here can weaken a safety property:
+    # demo mode, the bind address, the credentials and the three boot-fails live in config.
+
+    @app.get("/api/settings")
+    def get_settings() -> dict[str, object]:
+        return settings_repo.payload(identity=_account_identity())
+
+    @app.put("/api/settings")
+    def put_settings(body: dict) -> dict[str, object]:
+        """One bad key rejects the batch. An unknown key is refused, never silently dropped."""
+        try:
+            return {"settings": settings_repo.put(body, int(time.time() * 1000))}
+        except SettingsError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.post("/api/settings/reset")
+    def reset_settings(body: SettingsResetRequest) -> dict[str, object]:
+        try:
+            return {"settings": settings_repo.reset(body.keys, int(time.time() * 1000))}
+        except SettingsError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    def _account_identity() -> dict[str, object]:
+        """What the account is. Never a value that could authenticate as it."""
+        return {
+            "broker": "IC Markets",
+            "platform": "cTrader",
+            "mode": config.mode,
+            "readOnly": True,
+            "note": "one demo account, configured on the server",
+        }
+
+    @app.get("/api/reports")
+    def get_report(period: str = "month", from_ms: int | None = None, to_ms: int | None = None,
+                   session_id: str | None = None, include_outcome: bool = False,
+                   ) -> dict[str, object]:
+        """The report as data. The browser renders it and its own Save as PDF prints it."""
+        if period not in ("week", "month", "custom", "session"):
+            raise HTTPException(status_code=422, detail="unknown period")
+        return reports.build(period=period, from_ms=from_ms, to_ms=to_ms,  # type: ignore[arg-type]
+                             session_id=session_id, include_outcome=include_outcome)
+
+    @app.get("/api/export/trades.csv")
+    def export_trades(from_ms: int | None = None, to_ms: int | None = None) -> StreamingResponse:
+        """Streamed, so a two-year journal starts downloading immediately."""
+        return StreamingResponse(
+            trades_csv(config.paths.db, from_ms=from_ms, to_ms=to_ms),
+            media_type="text/csv",
+            headers={"content-disposition": 'attachment; filename="trades.csv"'},
+        )
+
+    @app.get("/api/export/journal.json")
+    def export_journal(from_ms: int | None = None, to_ms: int | None = None) -> StreamingResponse:
+        return StreamingResponse(
+            journal_json(config.paths.db, from_ms=from_ms, to_ms=to_ms),
+            media_type="application/json",
+            headers={"content-disposition": 'attachment; filename="journal.json"'},
+        )
+
+    @app.post("/api/data/backup")
+    def make_backup() -> dict[str, object]:
+        """A consistent snapshot plus the media. Never the tokens, never the models."""
+        backups_dir.mkdir(parents=True, exist_ok=True)
+        stamp = int(time.time() * 1000)
+        out = backups_dir / f"evgamepad-{stamp}.tar.gz"
+        try:
+            manifest = create_backup(config.paths.data_dir_path, out, now_ms=stamp,
+                                     max_bytes=DEFAULT_MAX_BYTES)
+        except Exception as exc:
+            _audit("backup", stamp, ok=False, counts={}, note="archive failed")
+            raise HTTPException(status_code=507, detail=str(exc)) from exc
+
+        _audit("backup", stamp, ok=True, counts={"files": len(manifest.members)}, note=None)
+        return {"name": out.name, "bytes": out.stat().st_size,
+                "files": len(manifest.members), "createdAt": manifest.created_at,
+                "counts": manifest.counts}
+
+    @app.get("/api/data/backups")
+    def list_backups() -> dict[str, object]:
+        if not backups_dir.is_dir():
+            return {"backups": []}
+        return {"backups": sorted(
+            ({"name": p.name, "bytes": p.stat().st_size, "modified": int(p.stat().st_mtime * 1000)}
+             for p in backups_dir.glob("*.tar.gz")),
+            key=lambda row: row["modified"], reverse=True,
+        )}
+
+    @app.get("/api/data/backups/{name}")
+    def download_backup(name: str) -> Response:
+        """Resolved inside the backups directory, never from the name alone."""
+        candidate = (backups_dir / name).resolve()
+        if not str(candidate).startswith(str(backups_dir.resolve())) or not candidate.is_file():
+            raise HTTPException(status_code=404, detail="no such backup")
+        return Response(content=candidate.read_bytes(), media_type="application/gzip")
+
+    @app.post("/api/data/restore")
+    def do_restore(body: RestoreRequest) -> dict[str, object]:
+        """Validate, stage, swap, verify. A refusal leaves current data untouched."""
+        candidate = (backups_dir / body.name).resolve()
+        if not str(candidate).startswith(str(backups_dir.resolve())):
+            raise HTTPException(status_code=404, detail="no such backup")
+
+        stamp = int(time.time() * 1000)
+        readiness = Readiness(locked=body.locked, positions_open=body.positionsOpen,
+                              jobs_running=body.jobsRunning)
+        try:
+            result = restore(candidate, config.paths.data_dir_path, readiness=readiness,
+                             now_ms=stamp)
+        except RestoreError as exc:
+            _audit("restore", stamp, ok=False, counts={}, note="refused before any change")
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        _audit("restore", stamp, ok=True, counts={"files": result["files"]}, note=None)
+        return result
+
+    @app.post("/api/data/restore/inspect")
+    def inspect_restore(body: RestoreRequest) -> dict[str, object]:
+        """What an archive claims, before anyone commits to it."""
+        candidate = (backups_dir / body.name).resolve()
+        if not str(candidate).startswith(str(backups_dir.resolve())):
+            raise HTTPException(status_code=404, detail="no such backup")
+        try:
+            manifest = inspect_archive(candidate)
+        except RestoreError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {"createdAt": manifest.created_at, "files": len(manifest.members),
+                "counts": manifest.counts, "schema": manifest.schema}
+
+    @app.delete("/api/data/all")
+    def delete_everything(body: DeleteAllRequest) -> dict[str, object]:
+        """The exact phrase, a two-second hold, a locked session, and no open position."""
+        try:
+            return delete_all(
+                config.paths.data_dir_path,
+                confirmation=Confirmation(phrase=body.phrase, held_ms=body.heldMs,
+                                          locked=body.locked, positions_open=body.positionsOpen),
+                now_ms=int(time.time() * 1000),
+            )
+        except DeleteRefused as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    def _audit(action: str, started: int, *, ok: bool, counts: dict, note: str | None) -> None:
+        """Action, time and counts. Never a secret, and never anything that was deleted."""
+        journal = JournalWriter(connect(config.paths.db))
+        try:
+            journal.conn.execute(
+                "INSERT INTO data_operation (action, started_at, finished_at, ok, counts, note) "
+                "VALUES (?,?,?,?,?,?)",
+                (action, started, int(time.time() * 1000), int(ok), json.dumps(counts, sort_keys=True),
+                 note),
+            )
+            journal.conn.commit()
+        finally:
+            journal.conn.close()
 
     @app.post("/hooks/tv")
     def tradingview_webhook(alert: TvAlert) -> dict[str, object]:

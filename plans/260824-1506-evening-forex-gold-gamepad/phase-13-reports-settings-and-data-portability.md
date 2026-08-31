@@ -1,6 +1,6 @@
 ---
 title: "Phase 13: Reports Settings and Data Portability"
-status: todo
+status: in-progress
 phase: 13
 priority: P1
 effort: 18h
@@ -117,28 +117,86 @@ theme remain the product boundary.
 
 ## Todo
 
-- [ ] Safe settings schema + desktop dark-only UI
-- [ ] Single account identity read-only; no secrets/safety toggles
-- [ ] Process-first report builder + browser PDF
-- [ ] Streamed CSV and JSON exports
-- [ ] Manifested backup excluding secrets/models
-- [ ] Staged atomic restore + rollback
-- [ ] Explicit delete-all flow
-- [ ] Backup/restore round-trip and corruption tests
-- [ ] README data-management runbook
+- [x] Safe settings schema + desktop dark-only UI
+- [x] Single account identity read-only; no secrets/safety toggles
+- [x] Process-first report builder + browser PDF
+- [x] Streamed CSV and JSON exports
+- [x] Manifested backup excluding secrets/models
+- [x] Staged atomic restore + rollback
+- [x] Explicit delete-all flow
+- [x] Backup/restore round-trip and corruption tests
+- [x] README data-management runbook
 
 ## Success Criteria
 
-- [ ] `/settings` cannot change demo/live mode, account credentials, bind address, or tool permissions
-- [ ] No light theme or mobile-only layout is introduced
-- [ ] A monthly report saves as a readable PDF with process pages first and Outcome optional
-- [ ] CSV and JSON exports contain requested journal data and zero secret/env/path values
-- [ ] Backup includes DB, tapes, voice, and chart attachments but excludes models and credentials
-- [ ] A corrupt checksum, traversal path, unsupported schema, active position, or busy background job
+- [x] `/settings` cannot change demo/live mode, account credentials, bind address, or tool permissions
+- [x] No light theme or mobile-only layout is introduced
+- [x] A monthly report saves as a readable PDF with process pages first and Outcome optional
+- [x] CSV and JSON exports contain requested journal data and zero secret/env/path values
+- [x] Backup includes DB, tapes, voice, and chart attachments but excludes models and credentials
+- [x] A corrupt checksum, traversal path, unsupported schema, active position, or busy background job
       rejects restore before current data changes
-- [ ] Successful restore reproduces row counts and attachment hashes from the backup manifest
-- [ ] Delete-all cannot run during a session and leaves no DB journal rows or retained user media
-- [ ] No MT5, broker-history, CSV, or general trade import endpoint exists
+- [x] Successful restore reproduces row counts and attachment hashes from the backup manifest
+- [x] Delete-all cannot run during a session and leaves no DB journal rows or retained user media
+- [x] No MT5, broker-history, CSV, or general trade import endpoint exists
+
+## Verification Status
+
+Gateway `uv run pytest -q`: **525 passed, 1 skipped** (the skip is phase 2's broker volume test,
+still waiting on a real cTrader dump); `uv run ruff check .` clean. Web `npm test`: **182 passed**
+(19 new); `npx tsc --noEmit` and `npm run build` clean.
+
+| Claim | Proof |
+|---|---|
+| No setting can reach a safety property | Two independent nets: an allowlist, and `FORBIDDEN_SEGMENTS`/`FORBIDDEN_PHRASES` checked at **construction**, so `broker.mode`, `gateway.bind`, `broker.client_secret`, `copilot.on_hot_path`, `tilt.gate_close` and `tradingview.auto_trade` all fail at import rather than at runtime. `test_defining_a_dangerous_setting_fails_at_construction` asserts each one |
+| An unknown key is refused, not ignored | The whole batch rejects; a test sends one good key with one bad one and asserts the good half was **not** applied. A silently dropped write is a setting the player thinks they changed |
+| The symbol list narrows but never widens | The validator takes the server's own symbol set; `BTCUSD` is refused with the reason |
+| The UI offers nothing the gateway would refuse | `settings.test.ts` asserts the form is generated from `view.schema`, and that the page mentions no live/bind/credential/boot-fail control and has no account `<select>` |
+| Exports carry no secret and no path | Built from explicit column allowlists; a test greps every export for the redaction list, for the literal temp path, and for the token planted in `secure/` |
+| The backup excludes the tokens and the models | Asserted against the real archive's member list *and* its concatenated bytes — the planted `super-secret` string is absent |
+| A capped backup leaves nothing behind | The archive, the `.partial`, and the staging directory are all asserted gone after the failure |
+| The snapshot is consistent | Taken through `sqlite3.Connection.backup()` while an open write transaction is in flight |
+| Restore refuses before touching anything | Separate tests for an unlocked session, an open position, a running job, a corrupt checksum, a traversal path, a symlink member, an undeclared member, a missing member, a newer manifest, unknown migrations, a decompression bomb, a non-archive, and a missing file — each asserting the current journal afterwards |
+| The round trip reproduces counts and hashes | The journal is genuinely moved on (trades deleted, analysis rewritten, the PNG overwritten) before the restore, so a no-op restore cannot pass |
+| Delete needs all four conditions | Each is asserted to refuse individually, with the journal intact after all four refusals |
+| Delete leaves one content-free audit row | The row is asserted to carry only `rows`/`files`/`tables` and not to contain the planted note text |
+| Nothing is copied aside after the final confirmation | `delete.py` is greped (docstrings stripped) for `create(`, `backup(`, `snapshot_db`, `copytree`, `copy2` |
+| No import path exists | Every data module is greped for `mt5`, `metatrader`, `broker_history`, `import_trades`, `csv_import`; the UI is greped for `/api/import` and `upload` |
+| Process pages lead the report | `PROCESS_ONLY_KEYS` pins the exact key set when the appendix is off, and the cover is asserted money-free in **both** configurations |
+| PDF is the browser's own | `window.print()` over a print stylesheet; the builder is greped for puppeteer/playwright/chromium/jspdf/html2canvas |
+
+## Deviations
+
+- **A settings key/value table, with the validation in code.** The plan says the migration "owns
+  validated user preferences". Validation lives in `settings/schema.py` rather than in SQL because
+  a `CHECK` constraint cannot express "an IANA zone this machine can resolve" or "engage above
+  release", and — more importantly — because adding a row must not be the same act as adding a
+  setting. The table is dumb on purpose; the allowlist is the gate.
+- **The segment guard, learned twice.** `FORBIDDEN_SEGMENTS` matches whole dot/underscore segments
+  rather than substrings, because `report.default_period` contains "port" and a guard that rejects
+  the report defaults is a guard nobody keeps. This is the same fix phase 12's `key_levels` forced
+  on phase 11's schema guard; it is now the house pattern.
+- **Two exceptions were escaping `inspect()`.** A missing manifest member raised `KeyError` and a
+  missing file raised `FileNotFoundError`, both of which would have surfaced as a 500 rather than
+  a refusal with a reason. Found by the tests, fixed in `restore.py` and `backup.py`.
+- **`settings/routes.py`, `reports/routes.py` and `data/*` routes are registered in `main.py`.**
+  The same call phases 10, 11 and 12 made: repositories and builders in their own modules, routes
+  where every other route in this build lives.
+- **The report is served as data and rendered by the client.** The plan implies a server-rendered
+  print surface; splitting it means the print stylesheet lives with the component that uses it and
+  the same JSON is reusable. The "process first" ordering is enforced on **both** sides — the
+  gateway does not assemble the outcome section unless asked, and the CSS puts the cover on its own
+  page.
+- **Print is the one place the product is not dark-only.** A black A4 page is unreadable and wastes
+  a cartridge, so `@media print` inverts to ink. The screen theme is untouched, and a test asserts
+  the inversion appears nowhere outside the print block.
+- **Attachments were already excluded from backup by construction, not by filter.** `MEDIA_DIRS` is
+  an allowlist of two directories; `secure/` and `models/` are not "filtered out", they were never
+  candidates. `EXCLUDED` documents why, and the test reads both.
+- **Restore's readiness is declared by the caller.** The gateway has no cross-request view of an
+  open position, so `locked`, `positionsOpen` and `jobsRunning` arrive in the request. That is
+  honest about where the check happens — and the delete gate's phrase and hold are re-checked
+  server-side regardless, so the destructive path is never protected by the client alone.
 
 ## Risk Assessment
 

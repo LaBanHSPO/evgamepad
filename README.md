@@ -198,7 +198,7 @@ acceptance gates follow migration, navigation, and evidence contracts from `1` t
 | 10 | [Trade replay](./plans/260824-1506-evening-forex-gold-gamepad/phase-10-trade-replay.md) | 12h | Built |
 | 11 | [Process Score and radar deck](./plans/260824-1506-evening-forex-gold-gamepad/phase-11-process-score-and-radar-deck.md) | 8h | Built |
 | 12 | [Daily journal cockpit and preparation](./plans/260824-1506-evening-forex-gold-gamepad/phase-12-daily-journal-cockpit-and-preparation.md) | 24h | Built |
-| 13 | [Reports, settings, and data portability](./plans/260824-1506-evening-forex-gold-gamepad/phase-13-reports-settings-and-data-portability.md) | 18h | Pending |
+| 13 | [Reports, settings, and data portability](./plans/260824-1506-evening-forex-gold-gamepad/phase-13-reports-settings-and-data-portability.md) | 18h | Built |
 | 14 | [End-to-end session journey and release gate](./plans/260824-1506-evening-forex-gold-gamepad/phase-14-end-to-end-session-journey-and-release-gate.md) | 14h | Pending |
 
 Total: 203h ≈ 26 working days.
@@ -366,6 +366,73 @@ the process with them. It cannot see a balance, and it still has no order tool.
 
 Process framing after Brett Steenbarger (*The Daily Trading Coach*, *Trading Psychology 2.0*,
 *Enhancing Trader Performance*) — cited, not reproduced.
+
+## Settings, reports, and your data
+
+**Settings** edits preferences and nothing else. The form is generated from the *server's* schema,
+which is what makes the boundary real rather than a promise: there is no control for demo/live
+mode, the bind address, the broker credentials, or any of the three safety boot-fails, because the
+gateway does not offer them and refuses the write if one is sent. The account is a read-only chip —
+one configured cTrader demo account is the whole safety story, so a second one is out of scope, not
+missing. Playbooks and your principles are *linked*, never duplicated: two places to define a rule
+is one too many.
+
+**Reports** compose the existing journal queries and print through the browser's own Save as PDF
+over a print stylesheet. Nothing headless is installed on the VPS for a job the machine in front of
+you already does. The cover owns the first page and carries no money in any configuration; the
+outcome appendix is **fetched on request**, so a report saved without it never contained a dollar
+figure at all. On paper the theme inverts to ink — the one place this product is not dark-only —
+and the heatmap prints its score as a number as well as a colour, because a mono printer has no
+bands.
+
+**Exports** stream: `trades.csv` for the trade facts with review dimensions flattened alongside,
+`journal.json` for everything including your own words. Both are built from explicit column
+allowlists, so a column added to the schema later cannot quietly start appearing in a file you
+email to someone. There is deliberately **no import**: no CSV-in, no MT5 reader, no broker-history
+parser. This journal describes what this gateway executed, and a row it did not fill is a row it
+cannot vouch for.
+
+### Backup, restore, delete
+
+```
+POST   /api/data/backup            take an archive
+GET    /api/data/backups           list them
+GET    /api/data/backups/{name}    download one
+POST   /api/data/restore/inspect   what an archive claims, before committing
+POST   /api/data/restore           validate, stage, swap, verify
+DELETE /api/data/all               the one that cannot be undone
+```
+
+**Backup** takes a consistent snapshot through SQLite's own online backup API — not a file copy,
+which *usually* works and is therefore the worst possible property for a backup — plus your
+screenshots, memos and trade tapes. It excludes the refreshed broker tokens (a secret) and the
+whisper models (replaceable, and hundreds of megabytes), because the archive is built from a named
+allowlist rather than a walk of the volume. Every member is SHA-256'd in the manifest, the archive
+is streamed to a temporary file under a size cap, and any failure removes it: a half-written backup
+that looks complete is how people lose a journal.
+
+**Restore** validates everything before touching anything, in this order:
+
+1. The gateway must be idle — session locked, no position open, no background job.
+2. The archive must be structurally sound: a real manifest, a version this build understands, and
+   every member a safe path. Absolute paths, `..`, symlinks, device files, duplicates, undeclared
+   members and decompression bombs are all *refused*, not sanitised.
+3. Every checksum must match, verified in staging.
+4. The schema must not be newer than this build — an older archive is migrated forward in staging.
+
+Only then does the current data move aside as a rollback snapshot, the staged copy swap in, and the
+row counts get verified against the manifest. If verification fails the rollback goes back. **A
+failed restore is indistinguishable from one that never ran**, and that is the property every
+refusal test asserts.
+
+**Delete-all** needs four things at once: the exact phrase `DELETE EVERYTHING`, a two-second hold,
+a locked session, and no open position — checked in the browser and again in the gateway. It
+removes every journal row, memo, screenshot and tape, then vacuums the file so the pages are
+actually reclaimed. Your config, the models, the app and the broker connection stay, along with
+**one content-free audit row**: the action, the time, and counts. A row that quoted a deleted note
+would mean the delete had not happened. A backup is offered before it and never taken after it — a
+hidden recovery copy made after the final confirmation is not a safety net, it is a lie about what
+the word means.
 
 ## The daily journal
 
