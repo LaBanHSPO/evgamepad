@@ -203,6 +203,12 @@ class ScoreConfig(Base):
         return self
 
 
+class DeckConfig(Base):
+    """~20 sessions a month means the first two months of Sharpe are noise."""
+
+    min_sessions_for_sharpe: int = Field(default=30, ge=2)
+
+
 class PlaybookConfig(Base):
     seed_volman: bool = True
     allow_custom: bool = True
@@ -298,6 +304,7 @@ class AppConfig(Base):
     tape: TapeConfig
     tilt: TiltConfig
     score: ScoreConfig
+    deck: DeckConfig = Field(default_factory=DeckConfig)
     playbook: PlaybookConfig
     copilot: CopilotConfig = Field(default_factory=CopilotConfig)
     signals: SignalsConfig = Field(default_factory=SignalsConfig)

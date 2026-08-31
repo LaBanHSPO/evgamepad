@@ -20,12 +20,13 @@ backup, restore, and deliberate deletion.
 > **The end goal is confidence and enjoyment — improving decision quality, not the money.**
 > Demo only. Not advice. Entertainment, not alpha.
 
-**Status:** phases 1–3 landed in code — frozen protocol, config boot-fails, migrations, risk gates,
+**Status:** phases 1–4 and 6 landed in code — frozen protocol, config boot-fails, migrations, risk gates,
 the cid ledger, the journal and tape pipeline, the game socket, the cTrader client, and the 8BitDo
-client agent (pad FSM, chord, telemetry, socket client, installable shell). Two things are still
-**unverified**: the broker link needs an IC Markets demo account and an approved Open API app, and
-the pad itself has never been held — no 8BitDo hardware in this environment. The authority for
-everything below is
+client agent, the AI desk and sentinel, and the performance deck. Three things are still
+**unverified**: the broker link needs an IC Markets demo account and an approved Open API app, the
+pad has never been held (no 8BitDo hardware here), and the desk stays offline until
+`copilot.model` and `XAI_API_KEY` are set. Phase 5 (VPS deploy) is the remaining gap. The
+authority for everything below is
 [`plans/260824-1506-evening-forex-gold-gamepad/plan.md`](./plans/260824-1506-evening-forex-gold-gamepad/plan.md).
 
 ---
@@ -296,6 +297,40 @@ writable:
 cd apps/gateway
 EV_CONFIG=../../config/default.yaml EV_DATA_DIR=../../data uv run python main.py
 ```
+
+## The deck, and what it refuses to show
+
+`/deck` answers one question: **am I improving?** It opens on the **process** panel and there is
+not a single dollar figure on it — not a balance, not a P/L, not a return. Watching the money
+mid-trade is what pulls attention off the process, so the outcome tab is a deliberate click, and
+its figures are not even fetched until you make it.
+
+What the process panel measures:
+
+| Figure | Why it is there |
+|---|---|
+| **Adherence** | Fraction of fires that satisfied every rule. Scored with the gateway's *own* rule set, imported rather than re-listed, so the deck cannot claim a rule the gate never had |
+| **Trades declined** | Arms cancelled while a stand-down condition was live. Counts **upward** — not trading is a position |
+| **Opportunity quality** | What the tape actually offered that evening. A flat night on a dead tape reads as discipline, not as a missing result |
+| **Check-in** | Two pad taps, skippable, plotted against adherence — never against money |
+| **This month vs last** | The primary "am I improving?" answer |
+
+What it deliberately refuses:
+
+- **No streaks, levels, badges, or leaderboards.** Every one of them creates pressure to trade a
+  dead tape.
+- **No Sharpe below 30 sessions.** ~20 evenings a month means the first two months are noise, so
+  the deck prints "not enough sessions yet" and the sample size instead of a confident number.
+- **No zero standing in for "not measured".** An evening with no fires has *no* adherence score
+  rather than a score of zero; scoring a stand-down at zero would punish the exact behaviour the
+  deck exists to reward.
+- **No money in a notification, ever.**
+
+The desk can read these process figures through its one read-only `get_progress` tool and coach
+the process with them. It cannot see a balance, and it still has no order tool.
+
+Process framing after Brett Steenbarger (*The Daily Trading Coach*, *Trading Psychology 2.0*,
+*Enhancing Trader Performance*) — cited, not reproduced.
 
 ## Non-goals
 

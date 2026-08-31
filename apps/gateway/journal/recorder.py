@@ -67,6 +67,9 @@ class TradeRecorder:
         entry: float, ts_ms: int, prices: Mapping[int, float],
         planned_sl: float | None = None, planned_tp: float | None = None,
         timeframe: str | None = None, playbook_id: str | None = None, armed_at: int | None = None,
+        setup_tag: str | None = None, inside_window: bool | None = None,
+        positions_at_fire: int | None = None, seconds_to_high_impact: float | None = None,
+        max_lots_at_fire: float | None = None, max_positions_at_fire: int | None = None,
     ) -> OpenTrade:
         """Write the plan and start tracking the position for its eventual close."""
         spec = self.specs[symbol]
@@ -85,6 +88,14 @@ class TradeRecorder:
             "relative_tp": None if planned_tp is None else int(round(abs(planned_tp - entry) * PRICE_SCALE)),
             "planned_sl": planned_sl, "planned_tp": planned_tp, "planned_rr": planned_rr,
             "armed_at": armed_at, "created_at": ts_ms,
+            # Adherence inputs, captured now: the deck must score the trade against the rules it
+            # was taken under, not against whatever config says next month.
+            "setup_tag": setup_tag,
+            "inside_window": None if inside_window is None else int(inside_window),
+            "positions_at_fire": positions_at_fire,
+            "seconds_to_high_impact": seconds_to_high_impact,
+            "max_lots_at_fire": max_lots_at_fire,
+            "max_positions_at_fire": max_positions_at_fire,
         }
         plan.update(record.as_row())
         self.journal.write_plan(plan)

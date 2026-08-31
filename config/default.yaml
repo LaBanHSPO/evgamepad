@@ -111,6 +111,9 @@ score:                        # phase 11
     preparation: 0.15
     review: 0.10
 
+deck:                         # phase 6
+  min_sessions_for_sharpe: 30 # below this the deck says "not enough sessions yet"
+
 playbook:                     # phase 7
   seed_volman: true
   allow_custom: true

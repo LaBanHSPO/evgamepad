@@ -204,3 +204,115 @@ def test_an_alert_carrying_an_order_field_is_refused_outright(client: TestClient
     body = {"secret": "shh", "setup": "x", "sym": "XAUUSD", "lots": 0.5}
     assert client.post("/hooks/tv", json=body).status_code == 422
     client.app.state.config.tradingview.enabled = False
+
+
+def seed_deck(db_path, sessions: int = 3, *, with_fires: bool = True) -> None:
+    """A few evenings of journal rows, written the way the gateway would write them."""
+    import sqlite3
+
+    conn = sqlite3.connect(db_path)
+    for i in range(sessions):
+        sid = f"2026-09-{i + 1:02d}"
+        opened = 1_788_000_000_000 + i * 86_400_000
+        conn.execute(
+            "INSERT OR REPLACE INTO session_equity (session_id, timezone, opened_at, closed_at, "
+            "balance_open, equity_open, balance_close, equity_close) VALUES (?,?,?,?,?,?,?,?)",
+            (sid, "UTC", opened, opened + 3600, 10_000.0, 10_000.0, 10_050.0, 10_050.0),
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO session_process (session_id, pre_rating, post_rating, "
+            "stood_down_count, opportunity_quality, note) VALUES (?,?,?,?,?,?)",
+            (sid, 4, 3, 2, 0.2, "<b>quiet</b>"),
+        )
+        if not with_fires:
+            continue
+        cid = f"01CID{i:021d}"
+        conn.execute("INSERT INTO cid_reservation (cid, intent, state, created_at, updated_at) "
+                     "VALUES (?,?,?,?,?)", (cid, "open", "acked", opened, opened))
+        conn.execute(
+            "INSERT INTO trade_plan (cid, session_id, symbol, side, lots, volume, r_usd, "
+            "r_method, r_units, created_at, setup_tag, inside_window, positions_at_fire, "
+            "max_lots_at_fire, max_positions_at_fire) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (cid, sid, "XAUUSD", "buy", 0.01, 100, 2.0, "stop", 1.0, opened,
+             "range_break", 1, 0, 0.10, 1),
+        )
+        conn.execute(
+            "INSERT INTO trade_closed (cid, session_id, position_id, symbol, side, lots, volume, "
+            "closed_at, net_pnl_usd, r_usd, r_multiple) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (cid, sid, 100 + i, "XAUUSD", "buy", 0.01, 100, opened + 60_000, 20.0, 2.0, 1.0),
+        )
+    conn.commit()
+    conn.close()
+
+
+def test_the_process_panel_shows_no_dollar_figure_at_all(client: TestClient) -> None:
+    """The default view must not let you check the money. That is the whole design."""
+    import json
+
+    seed_deck(client.app.state.config.paths.db)
+    body = client.get("/api/deck/process").json()
+    assert body["panel"] == "process"
+    assert body["allTime"]["sessions"] == 3
+
+    text = json.dumps(body).lower()
+    for banned in ("pnl", "equity", "balance", "usd", "return", "profit", "drawdown", "sharpe"):
+        assert banned not in text, f"`{banned}` reached the process panel"
+
+
+def test_the_outcome_panel_is_a_separate_request(client: TestClient) -> None:
+    seed_deck(client.app.state.config.paths.db)
+    body = client.get("/api/deck/outcome").json()
+    assert body["panel"] == "outcome"
+    assert "returnPct" in body["months"]["current"]
+    assert body["bySetup"]["range_break"]["trades"] == 3
+
+
+def test_a_short_history_refuses_to_print_a_sharpe(client: TestClient) -> None:
+    seed_deck(client.app.state.config.paths.db, sessions=3)
+    sharpe = client.get("/api/deck/outcome").json()["sharpe"]
+    assert sharpe["enough"] is False
+    assert sharpe["value"] is None
+    assert sharpe["display"] == "not enough sessions yet"
+    assert "3 of 30" in sharpe["note"]
+
+
+def test_a_dead_tape_evening_with_no_trades_reads_as_disciplined(client: TestClient) -> None:
+    seed_deck(client.app.state.config.paths.db, sessions=2, with_fires=False)
+    latest = client.get("/api/deck/process").json()["latestSession"]
+    assert "standing down was the read" in latest["verdict"]
+    assert latest["declined"] == 2
+
+
+def test_month_deltas_render_for_the_process_figures(client: TestClient) -> None:
+    seed_deck(client.app.state.config.paths.db)
+    months = client.get("/api/deck/process").json()["months"]
+    assert set(months["delta"]) == {"adherence", "declinedRate", "checkinAverage",
+                                    "opportunityQuality"}
+
+
+def test_every_panel_carries_the_demo_and_not_advice_line(client: TestClient) -> None:
+    seed_deck(client.app.state.config.paths.db)
+    for path in ("/api/deck/summary", "/api/deck/process", "/api/deck/outcome"):
+        assert "not advice" in client.get(path).json()["disclaimer"]
+
+
+def test_the_desk_reads_process_figures_and_never_a_money_figure(client: TestClient) -> None:
+    """`get_progress` is a read, and what it returns has no money field to leak."""
+    import json
+
+    seed_deck(client.app.state.config.paths.db)
+    progress = client.app.state.deck.summary()
+    text = json.dumps(progress).lower()
+    for banned in ("pnl", "equity", "balance", "usd", "return", "profit"):
+        assert banned not in text
+
+    tools = client.app.state.desk.tools
+    assert "get_progress" in tools.names()
+    assert not any(verb in name for name in tools.names()
+                   for verb in ("place", "close", "write", "update"))
+
+
+def test_the_session_note_is_returned_as_text_for_the_client_to_escape(client: TestClient) -> None:
+    """Player text. The API hands it back verbatim; the panel renders it as text, never markup."""
+    seed_deck(client.app.state.config.paths.db)
+    assert client.get("/api/deck/process").json()["latestSession"]["note"] == "<b>quiet</b>"

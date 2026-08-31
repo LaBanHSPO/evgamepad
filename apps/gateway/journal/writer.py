@@ -149,6 +149,8 @@ class JournalWriter:
             "lots", "volume", "planned_entry", "relative_sl", "relative_tp", "planned_sl",
             "planned_tp", "planned_rr", "r_usd", "r_method", "r_units", "r_stop_distance",
             "r_rate", "r_rate_chain", "r_rate_source", "r_rate_ts", "armed_at", "created_at",
+            "setup_tag", "inside_window", "positions_at_fire", "seconds_to_high_impact",
+            "max_lots_at_fire", "max_positions_at_fire",
         )
         placeholders = ", ".join("?" for _ in columns)
         self.conn.execute(

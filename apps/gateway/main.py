@@ -38,6 +38,7 @@ from copilot.client import SpaceXaiClient  # noqa: E402
 from copilot.loops import DeskLoops  # noqa: E402
 from copilot.tools import build_registry  # noqa: E402
 from db.migrate import connect, migrate  # noqa: E402
+from deck.routes import DeckRepository  # noqa: E402
 from journal.recorder import TradeRecorder  # noqa: E402
 from journal.tape import TapeRing  # noqa: E402
 from journal.writer import JournalWriter  # noqa: E402
@@ -65,7 +66,18 @@ class CheckInRequest(BaseModel):
     rating: int | None = Field(default=None, ge=1, le=5)
 
 
-def build_desk(config: AppConfig, sentinel: SentinelEngine, broker: Broker) -> DeskLoops:
+def build_deck(config: AppConfig) -> DeckRepository:
+    """The deck reads the journal; it never writes and never touches the broker."""
+    return DeckRepository(
+        config.paths.db,
+        max_lots=max((s.max_lots for s in config.symbols), default=0.1),
+        max_positions=config.risk.max_positions,
+        min_sessions_for_sharpe=config.deck.min_sessions_for_sharpe,
+    )
+
+
+def build_desk(config: AppConfig, sentinel: SentinelEngine, broker: Broker,
+               deck: DeckRepository) -> DeskLoops:
     """Assemble the desk from read-only tools.
 
     Everything it can see is passed in through the registry; it has no reference to the broker's
@@ -94,7 +106,8 @@ def build_desk(config: AppConfig, sentinel: SentinelEngine, broker: Broker) -> D
                       if sentinel.calendar else [])
         ],
         get_setup=lambda: sentinel_state(),
-        get_progress=lambda: {"note": "process figures land in phase 6"},
+        # Process aggregates only. No account credentials, no raw journal, no money field.
+        get_progress=deck.summary,
     )
 
     async def publish(_t: str, _ch: str, _payload: dict) -> None:
@@ -242,7 +255,8 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
         spread_caps={s.name: s.max_spread for s in config.symbols if s.max_spread},
         calendar=calendar,
     )
-    desk = build_desk(config, sentinel, broker)
+    deck = build_deck(config)
+    desk = build_desk(config, sentinel, broker, deck)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -286,6 +300,7 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
     app.state.sentinel = sentinel
     app.state.desk = desk
     app.state.calendar = calendar
+    app.state.deck = deck
     app.state.tv_guard = WebhookGuard(secret=os.environ.get(config.tradingview.webhook_secret_env, ""))
     app.state.last_tv_signal = None
 
@@ -303,6 +318,21 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
             config.timezone, config.session.days, config.session.start, config.session.end
         )
         return window.local(int(time.time() * 1000)).strftime("%Y-%m-%d")
+
+    @app.get("/api/deck/summary")
+    def deck_summary() -> dict[str, object]:
+        """Process figures the HUD and the desk may read. Deliberately money-free."""
+        return deck.summary()
+
+    @app.get("/api/deck/process")
+    def deck_process() -> dict[str, object]:
+        """The default panel: adherence, declined trades, opportunity quality, check-ins."""
+        return deck.process()
+
+    @app.get("/api/deck/outcome")
+    def deck_outcome() -> dict[str, object]:
+        """The second tab. Reached by a deliberate click, never linked from the process panel."""
+        return deck.outcome()
 
     @app.post("/hooks/tv")
     def tradingview_webhook(alert: TvAlert) -> dict[str, object]:

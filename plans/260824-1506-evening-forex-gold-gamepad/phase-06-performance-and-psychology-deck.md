@@ -1,6 +1,6 @@
 ---
 title: "Phase 6: Performance and psychology deck"
-status: todo
+status: in-progress
 phase: 6
 priority: P1
 effort: 14h
@@ -121,25 +121,76 @@ deck; the copilot may only narrate numbers the deck already produced.
 
 ## Todo
 
-- [ ] `004-deck.sql` indices/views over phase 2/3-owned rows
-- [ ] metrics.py + fixture tests incl. low-N Sharpe
-- [ ] Adherence reuses phase 2 risk rules
-- [ ] `/api/deck/*` routes
-- [ ] ProcessPanel (default) with month-over-month deltas
-- [ ] OutcomePanel behind a click
-- [ ] Phase 3 check-in + one-line note rendered without duplicate capture
-- [ ] Copilot `get_progress`, still no order tools
-- [ ] README: what the deck refuses to show
+- [x] `004-deck.sql` indices/views over phase 2/3-owned rows
+- [x] metrics.py + fixture tests incl. low-N Sharpe
+- [x] Adherence reuses phase 2 risk rules
+- [x] `/api/deck/*` routes
+- [x] ProcessPanel (default) with month-over-month deltas
+- [x] OutcomePanel behind a click
+- [x] Phase 3 check-in + one-line note rendered without duplicate capture
+- [x] Copilot `get_progress`, still no order tools
+- [x] README: what the deck refuses to show
 
 ## Success Criteria
 
-- [ ] Opening `/deck` lands on the **process** panel; no dollar figure is visible until a tab is clicked
-- [ ] A month with fewer than `min_sessions_for_sharpe` sessions renders "not enough sessions yet", not a Sharpe number
-- [ ] An evening with zero trades in a dead tape is framed as disciplined, not missing data
-- [ ] This-month-vs-last-month deltas render for adherence, declined-rate, check-in average, return %, and average R
+- [x] Opening `/deck` lands on the **process** panel; no dollar figure is visible until a tab is clicked
+- [x] A month with fewer than `min_sessions_for_sharpe` sessions renders "not enough sessions yet", not a Sharpe number
+- [x] An evening with zero trades in a dead tape is framed as disciplined, not missing data
+- [x] This-month-vs-last-month deltas render for adherence, declined-rate, check-in average, return %, and average R
 - [ ] `session_equity` figures reconcile against the cTrader account, not against summed fills
-- [ ] Copilot can narrate the deck and still has no `place`/`close`/write tool
-- [ ] Every panel shows the demo / entertainment / not-advice line
+- [x] Copilot can narrate the deck and still has no `place`/`close`/write tool
+- [x] Every panel shows the demo / entertainment / not-advice line
+
+## Verification Status
+
+Gateway: **232 passed, 1 skipped**. Web: **81 passed**. `ruff check` and `tsc --noEmit` clean;
+`npm run build` passes. The gateway boots and applies `004-deck.sql`.
+
+### Verified
+
+**The money is not on the process panel.** A test serialises the whole `/api/deck/process`
+response and asserts that none of `pnl`, `equity`, `balance`, `usd`, `return`, `profit`,
+`drawdown`, or `sharpe` appears anywhere in it. A source test asserts the Deck opens on the
+process tab and does not fetch `/api/deck/outcome` until the tab is clicked — a glance cannot
+show you the money, it takes a decision.
+
+**Adherence cannot drift from the gate.** `GATEWAY_ADHERENCE_RULES` is derived from phase 2's
+`OPEN_RULES` by id, and a test fails if any of them is not a real gateway rule. The two process
+expectations the gateway never enforced (`named_setup`, `event_guard`) are labelled `process`
+rather than `gateway`, so the deck can never claim a fire broke a rule the gate allowed.
+
+**A quiet evening is a result.** An evening with no fires has adherence `None`, not `0.0`; a
+dead-tape evening returns "standing down was the read". Declined trades count upward and are
+reported per session so a busy month and a quiet one compare.
+
+**The Sharpe guard.** Below `deck.min_sessions_for_sharpe` (30) the deck returns
+`not enough sessions yet` plus how many sessions it has of how many it needs. A flat return
+series is refused rather than dividing by zero. The sample size travels with every number.
+
+**`get_progress` is money-free.** The desk's one journal tool returns process aggregates, and a
+test serialises its output to assert no money field can leak through it.
+
+### Deviations from this phase as written
+
+- **The adherence inputs are captured at fire time**, in six new `trade_plan` columns added by
+  `004-deck.sql`. Reconstructing `inside_window`, `positions_at_fire`, or the caps from config at
+  read time would score a trade against *tonight's* rules rather than the ones it was taken under.
+  A plan row predating the migration falls back to today's caps and is visibly untagged.
+- **`session_process` gained `note`, `adherence_score`, and `opportunity_quality`** by additive
+  ALTER rather than being recreated. Phase 3 still owns the table.
+- **The deck lives in the existing `app/`** as a screen in the shell, not at a router path — this
+  app has no router, consistent with phases 1 and 3.
+- **`session_process.adherence_score` is not yet written.** The deck computes adherence live from
+  the fires; the column exists for the cached-aggregate path but nothing populates it, because
+  live computation over a few hundred rows is not yet slow enough to justify a cache that could
+  disagree with the rules.
+
+### Not verified
+
+Nothing here needs the broker, the pad, or the desk provider — the deck reads the journal. But it
+has never been run against a **real** evening's rows, because no real evening has been traded.
+Every fixture above is synthetic. The first live session is what will show whether
+`session_equity` reconciles against the cTrader account, which is that criterion's real test.
 
 ## Risk Assessment
 

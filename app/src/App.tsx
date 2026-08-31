@@ -6,6 +6,7 @@ import { AttractScreen } from "./screens/AttractScreen";
 import { BootScreen } from "./screens/BootScreen";
 import { CityFireScreen } from "./screens/CityFireScreen";
 import { DataScreen } from "./screens/DataScreen";
+import { Deck } from "./deck/Deck";
 import { GamepadScreen } from "./screens/GamepadScreen";
 import { HistoryScreen } from "./screens/HistoryScreen";
 import { JournalScreen } from "./screens/JournalScreen";
@@ -34,6 +35,7 @@ type ScreenId =
   | "pre"
   | "session"
   | "live"
+  | "deck"
   | "artmatrix"
   | "artcontra"
   | "desk"
@@ -70,6 +72,7 @@ const GROUPS: {
     short: "2",
     items: [
       { id: "live", label: "Live HUD (real gateway)" },
+      { id: "deck", label: "Deck (real gateway)" },
       { id: "session", label: "Session HUD" },
       { id: "artmatrix", label: "HUD on matrix art" },
       { id: "artcontra", label: "Fire on city art" },
@@ -104,8 +107,9 @@ const GROUPS: {
 ];
 
 const SCREENS: Record<Exclude<ScreenId, "session">, () => JSX.Element> = {
-  // The only screen wired to the real socket and the real pad; the rest are the design prototype.
+  // The two surfaces wired to the real gateway; the rest are the design prototype.
   live: LiveHudScreen,
+  deck: Deck,
   title: AttractScreen,
   boot: BootScreen,
   pre: PreSessionScreen,
