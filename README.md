@@ -20,8 +20,10 @@ backup, restore, and deliberate deletion.
 > **The end goal is confidence and enjoyment — improving decision quality, not the money.**
 > Demo only. Not advice. Entertainment, not alpha.
 
-**Status:** phase 1 landed — repo, frozen protocol, config boot-fails, migration runner, single
-gateway image. Phases 2–14 not started; no order can be placed yet. The authority for everything below is
+**Status:** phases 1–2 landed in code — frozen protocol, config boot-fails, migrations, the risk
+gates, the cid ledger, the journal and tape pipeline, the game socket, and the cTrader client. The
+broker link itself is **unverified**: it needs an IC Markets demo account and an approved Open API
+app, so no order has been placed yet. The authority for everything below is
 [`plans/260824-1506-evening-forex-gold-gamepad/plan.md`](./plans/260824-1506-evening-forex-gold-gamepad/plan.md).
 
 ---
@@ -239,8 +241,8 @@ into an image, exported, or included in backups.
 
 ```bash
 cd apps/gateway
-uv sync                   # gateway deps
-uv run pytest             # protocol round-trips, config boot-fails, migrations
+uv sync                   # gateway deps, including ctrader-open-api
+uv run pytest             # protocol, boot-fails, migrations, risk gates, R, tape, socket
 uv run ruff check .
 cd ../..
 

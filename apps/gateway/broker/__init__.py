@@ -1,5 +1,8 @@
 """Broker boundary — an in-process module interface, not a wire protocol.
 
+Phase 2 note: the network-touching calls are `async`. `snapshot()` stays synchronous because it
+reads cached link state and `/healthz` must never wait on the broker.
+
 There is no execution sidecar: the process that owns risk is the process that calls the broker.
 Phase 1 freezes this interface and ships a stub that cannot place; phase 2 implements it against
 OpenApiPy.
@@ -41,19 +44,20 @@ class Broker(ABC):
     """
 
     @abstractmethod
-    def health(self) -> BrokerResult: ...
+    def snapshot(self) -> dict[str, Any]:
+        """Cached link state. Synchronous and network-free — `/healthz` calls it."""
 
     @abstractmethod
-    def snapshot(self) -> dict[str, Any]: ...
+    async def health(self) -> BrokerResult: ...
 
     @abstractmethod
-    def account(self) -> dict[str, Any]: ...
+    async def account(self) -> dict[str, Any]: ...
 
     @abstractmethod
-    def positions(self) -> list[dict[str, Any]]: ...
+    async def positions(self) -> list[dict[str, Any]]: ...
 
     @abstractmethod
-    def place(
+    async def place(
         self,
         *,
         cid: str,
@@ -65,10 +69,10 @@ class Broker(ABC):
     ) -> BrokerResult: ...
 
     @abstractmethod
-    def close(self, *, cid: str, position_id: int) -> BrokerResult: ...
+    async def close(self, *, cid: str, position_id: int) -> BrokerResult: ...
 
     @abstractmethod
-    def amend_position_sl_tp(
+    async def amend_position_sl_tp(
         self, *, cid: str, position_id: int, sl: float | None = None, tp: float | None = None
     ) -> BrokerResult: ...
 
@@ -83,26 +87,26 @@ class StubBroker(Broker):
     def __init__(self) -> None:
         self._fill_handler: Callable[[dict[str, Any]], None] | None = None
 
-    def health(self) -> BrokerResult:
-        return BrokerResult(ok=False, reason=NOT_WIRED)
-
     def snapshot(self) -> dict[str, Any]:
         return {"connected": False, "reason": NOT_WIRED}
 
-    def account(self) -> dict[str, Any]:
+    async def health(self) -> BrokerResult:
+        return BrokerResult(ok=False, reason=NOT_WIRED)
+
+    async def account(self) -> dict[str, Any]:
         return {"reason": NOT_WIRED}
 
-    def positions(self) -> list[dict[str, Any]]:
+    async def positions(self) -> list[dict[str, Any]]:
         return []
 
-    def place(self, *, cid: str, sym: str, side: str, lots: float,
+    async def place(self, *, cid: str, sym: str, side: str, lots: float,
               relative_sl: int | None = None, relative_tp: int | None = None) -> BrokerResult:
         return BrokerResult(ok=False, reason=NOT_WIRED, detail={"cid": cid})
 
-    def close(self, *, cid: str, position_id: int) -> BrokerResult:
+    async def close(self, *, cid: str, position_id: int) -> BrokerResult:
         return BrokerResult(ok=False, reason=NOT_WIRED, detail={"cid": cid})
 
-    def amend_position_sl_tp(self, *, cid: str, position_id: int,
+    async def amend_position_sl_tp(self, *, cid: str, position_id: int,
                              sl: float | None = None, tp: float | None = None) -> BrokerResult:
         return BrokerResult(ok=False, reason=NOT_WIRED, detail={"cid": cid})
 

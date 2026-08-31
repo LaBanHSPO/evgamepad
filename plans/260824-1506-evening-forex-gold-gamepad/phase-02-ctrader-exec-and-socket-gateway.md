@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: cTrader broker link and socket gateway"
-status: todo
+status: in-progress
 phase: 2
 priority: P1
 effort: 22h
@@ -164,19 +164,19 @@ Spot prices in protocol are 1/100000 of a price unit (`123000` → `1.23`). Scal
 
 ## Todo
 
-- [ ] `asyncioreactor` installed before any `reactor` import; mismatch boot-fails
+- [x] `asyncioreactor` installed before any `reactor` import; mismatch boot-fails
 - [ ] Open API auth + heartbeat
-- [ ] Broker callback containment boundary
+- [x] Broker callback containment boundary
 - [ ] Symbol/asset map + SymbolById lot/volume specs + quote-to-USD conversion
 - [ ] Spots + M5
 - [ ] MARKET open with relative SL/TP + absolute position amendment + full close/panic + cid
-- [ ] Gateway risk + dead-man
-- [ ] Session equity snapshot + closed-trade rows
+- [x] Gateway risk + dead-man
+- [x] Session equity snapshot + closed-trade rows
 - [ ] Reconcile on reconnect
-- [ ] R defined once and imported everywhere
-- [ ] 1 Hz tape ring + per-trade freeze + MFE/MAE
-- [ ] `001-core-trading.sql` for phase-owned core tables
-- [ ] `cooldown` reject reason reserved; close/panic exempt
+- [x] R defined once and imported everywhere
+- [x] 1 Hz tape ring + per-trade freeze + MFE/MAE
+- [x] `001-core-trading.sql` for phase-owned core tables
+- [x] `cooldown` reject reason reserved; close/panic exempt
 - [ ] Demo-only guards
 
 ## Success Criteria
@@ -186,21 +186,83 @@ Spot prices in protocol are 1/100000 of a price unit (`123000` → `1.23`). Scal
 - [ ] New MARKET order sends relative SL/TP only; a later SL/TP edit uses
       `ProtoOAAmendPositionSLTPReq`; both require the confirmed action contract
 - [ ] Volume conversion asserted against IC Markets' real `minVolume`/`stepVolume` fixture, not a guess
-- [ ] Duplicate cid does not double
-- [ ] 3s silence → opens reject; close/panic still allowed
-- [ ] ICT session window; daily loss close-only
+- [x] Duplicate cid does not double
+- [x] 3s silence → opens reject; close/panic still allowed
+- [x] ICT session window; daily loss close-only
 - [ ] Pointing config at live host does not send `NewOrder`
-- [ ] A closed long and a closed short both produce correct MFE/MAE from the right side of the book
-- [ ] One evening of five trades adds under ~100 KB of tape; a zero-trade evening adds none
-- [ ] `r_multiple` is non-null for every closed trade, with and without an SL at entry
-- [ ] USDJPY risk converts JPY to USD using the captured entry-time rate; XAUUSD uses identity
+- [x] A closed long and a closed short both produce correct MFE/MAE from the right side of the book
+- [x] One evening of five trades adds under ~100 KB of tape; a zero-trade evening adds none
+- [x] `r_multiple` is non-null for every closed trade, with and without an SL at entry
+- [x] USDJPY risk converts JPY to USD using the captured entry-time rate; XAUUSD uses identity
       conversion; both retain rate/source/timestamp in the plan
-- [ ] Fresh boot applies `001-core-trading.sql` once and contains no tables owned by later phases
+- [x] Fresh boot applies `001-core-trading.sql` once and contains no tables owned by later phases
 - [ ] The gateway serves the HUD, accepts a WS, and streams cTrader quotes **from one process** —
       `docker compose ps` shows a single container
 - [ ] A forced exception inside a broker callback produces a reject/maint frame and does **not**
       terminate the process; the socket stays up and the journal keeps writing
-- [ ] Importing the app under a non-asyncio reactor exits non-zero with a named error
+- [x] Importing the app under a non-asyncio reactor exits non-zero with a named error
+
+## Verification Status
+
+`uv run pytest`: **150 passed, 1 skipped**. `ruff check`: clean. The gateway boots on the asyncio
+reactor, applies `001-core-trading.sql`, serves `/healthz` and the HUD, accepts a game socket, and
+shuts down cleanly.
+
+### Verified without the broker
+
+Reactor guard (including a subprocess proof that importing `ctrader_open_api` first is caught),
+callback containment, volume and price scaling, quote-to-USD conversion, the single R definition,
+every open gate and the exit exemption, the cid ledger, session equity, the plan/close/tape
+pipeline, MFE/MAE from the correct side of the book, tape size, conflation, origin and token
+checks, and the full intent path against a fake broker.
+
+Execution-event normalisation is tested against **real protobuf messages** built in-process, so
+the `ProtoOAExecutionEvent` -> journal mapping is exercised for real even though no event has yet
+arrived from Spotware.
+
+### Blocked on the prerequisites at the top of this file
+
+No cTrader ID, no IC Markets demo account, no approved Open API app, no `.env`, and no captured
+`SymbolsList`/`SymbolById` dump. Everything below is **written but never run against Spotware**:
+
+- connect, `ProtoHeartbeatEvent`, application auth, account auth, and the `isLive` refusal
+- `SymbolsListReq` -> `SymbolByIdReq` -> `AssetListReq` symbol and asset load
+- `SubscribeSpotsReq`, live trendbars, and `GetTrendbarsReq` history
+- `NewOrderReq` / `AmendPositionSLTPReq` / `ClosePositionReq` / `ReconcileReq` round trips
+
+Two success criteria therefore stay open by construction, not by omission:
+
+- **Volume conversion against IC Markets' real `minVolume`/`stepVolume`.** A fixture-backed test
+  exists at `broker/test_ctrader.py::test_volume_converts_against_the_real_broker_fixture` and
+  **skips** until `broker/fixtures/symbols-icmarkets-demo.json` is dropped in. It is not asserted
+  against invented numbers — a guessed `lotSize` is exactly the bug that sends a huge ounce count.
+- **`wscat` sees cTrader bid/ask; a 0.01 XAUUSD intent produces a demo position.** Needs the
+  account.
+
+### Findings from this phase
+
+- **`ctrader_open_api` installs Twisted's default reactor at import time.** An import sorter is
+  enough to place it above `broker.ctrader` and silently move the whole process onto an
+  `EPollReactor` — which does not crash, it just makes the socket seem slow. Caught by the phase 1
+  guard during this work. Fixed three ways: `broker/ctrader.py` installs the reactor before the
+  vendor import, `conftest.py` installs it before any test module loads, and a subprocess test
+  pins the hazard so it cannot regress quietly.
+- **`Client.whenConnected` is a method, not a Deferred.** Awaiting the bound method raised
+  `AttributeError` on the first real boot. Found by running the gateway, not by the suite.
+- **The vendor client connects over TLS** (`clientFromString(..., "ssl:host:port")`), so
+  `service-identity` is now a dependency — without it Twisted does only rudimentary hostname
+  verification on a link carrying a trading-scoped token.
+
+### Deviations from this phase as written
+
+- **The `Broker` interface is now `async`** for the network-touching calls. `snapshot()` stays
+  synchronous so `/healthz` never waits on the broker.
+- **`broker/events.py` was added** (not in the phase's file list). Mapping one
+  `ProtoOAExecutionEvent` shape onto fill/close/reject is branching that would otherwise be
+  repeated at every call site.
+- **`journal/recorder.py` was added** for the same reason: the phase requires plan-at-FIRE,
+  append-only events, closed-trade rows, and the post-roll freeze, but named no module to own
+  that pipeline.
 
 ## Risk Assessment
 
