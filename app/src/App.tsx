@@ -9,6 +9,7 @@ import { DataScreen } from "./screens/DataScreen";
 import { GamepadScreen } from "./screens/GamepadScreen";
 import { HistoryScreen } from "./screens/HistoryScreen";
 import { JournalScreen } from "./screens/JournalScreen";
+import { LiveHudScreen } from "./screens/LiveHudScreen";
 import { MatrixHudScreen } from "./screens/MatrixHudScreen";
 import { PhilosophyScreen } from "./screens/PhilosophyScreen";
 import { PreSessionScreen } from "./screens/PreSessionScreen";
@@ -32,6 +33,7 @@ type ScreenId =
   | "boot"
   | "pre"
   | "session"
+  | "live"
   | "artmatrix"
   | "artcontra"
   | "desk"
@@ -67,6 +69,7 @@ const GROUPS: {
     heading: "2 · In session",
     short: "2",
     items: [
+      { id: "live", label: "Live HUD (real gateway)" },
       { id: "session", label: "Session HUD" },
       { id: "artmatrix", label: "HUD on matrix art" },
       { id: "artcontra", label: "Fire on city art" },
@@ -101,6 +104,8 @@ const GROUPS: {
 ];
 
 const SCREENS: Record<Exclude<ScreenId, "session">, () => JSX.Element> = {
+  // The only screen wired to the real socket and the real pad; the rest are the design prototype.
+  live: LiveHudScreen,
   title: AttractScreen,
   boot: BootScreen,
   pre: PreSessionScreen,

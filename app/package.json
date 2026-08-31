@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run protocol:check && tsc -b && vite build",
+    "test:watch": "vitest",
     "preview": "vite preview",
     "protocol:check": "node scripts/check-protocol-types.mjs",
+    "test": "vitest run",
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
@@ -15,11 +17,13 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@types/node": "^26.4.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "lucide-static": "0.417.0",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "vitest": "^2.1.9"
   }
 }

@@ -20,10 +20,12 @@ backup, restore, and deliberate deletion.
 > **The end goal is confidence and enjoyment — improving decision quality, not the money.**
 > Demo only. Not advice. Entertainment, not alpha.
 
-**Status:** phases 1–2 landed in code — frozen protocol, config boot-fails, migrations, the risk
-gates, the cid ledger, the journal and tape pipeline, the game socket, and the cTrader client. The
-broker link itself is **unverified**: it needs an IC Markets demo account and an approved Open API
-app, so no order has been placed yet. The authority for everything below is
+**Status:** phases 1–3 landed in code — frozen protocol, config boot-fails, migrations, risk gates,
+the cid ledger, the journal and tape pipeline, the game socket, the cTrader client, and the 8BitDo
+client agent (pad FSM, chord, telemetry, socket client, installable shell). Two things are still
+**unverified**: the broker link needs an IC Markets demo account and an approved Open API app, and
+the pad itself has never been held — no 8BitDo hardware in this environment. The authority for
+everything below is
 [`plans/260824-1506-evening-forex-gold-gamepad/plan.md`](./plans/260824-1506-evening-forex-gold-gamepad/plan.md).
 
 ---
@@ -51,6 +53,22 @@ panic controls remain available as safety exits.
 
 Pad link is the **2.4G dongle** (wired USB is the fallback). Bluetooth on the Ultimate 2 needs
 macOS 26+, so it is out on this machine.
+
+**Pairing the 8BitDo Ultimate 2 Wireless**
+
+1. Put the switch on the back to **X** (XInput). Chrome then reports `mapping: "standard"` and the
+   table above holds with no calibration.
+2. Plug the **2.4G dongle** into the Mac and press **Start**. The dongle is the supported path.
+3. Wired USB-C is the fallback and behaves identically; use it if the dongle drops.
+4. Open the HUD, focus the tab, and **press any button** — the Gamepad API stays silent until the
+   page has seen one (a spec privacy gesture), so the HUD reports "pad: absent" until you do.
+5. Paddles (L4/R4) are adopted only if a first-run probe sees one move. If it never does, the game
+   stays on LT/RT forever — nothing degrades.
+
+**The tab must stay focused.** Hiding it or unplugging the pad cancels any arm on the spot and
+locks new opens at both ends: the client stops sending, and the gateway's dead-man rejects. Close,
+panic, and the HUD's own **FLATTEN** button keep working regardless — a dead pad must never trap an
+open position.
 
 ## Architecture
 

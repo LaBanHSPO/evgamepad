@@ -70,6 +70,10 @@ class FakeBroker(Broker):
 def socket(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> GameSocket:
     db = tmp_path / "journal.db"
     migrate(db)
+    journal = JournalWriter(connect(db))
+    # The session row exists before the socket does in production, and telemetry's foreign key
+    # depends on it — so the fixture opens one too.
+    journal.open_session("S-1", timezone=TZ, opened_at=1, balance=None, equity=None)
     sent: list[str] = []
 
     async def send(raw: str) -> None:
@@ -78,7 +82,7 @@ def socket(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> GameSocket:
     gs = GameSocket(
         send=send,
         broker=FakeBroker(),
-        journal=JournalWriter(connect(db)),
+        journal=journal,
         window=SessionWindow.from_config(TZ, ["sun", "mon", "tue", "wed", "thu", "fri", "sat"],
                                          "00:00", "23:59"),
         state=GatewayState(session_id="S-1"),
@@ -268,10 +272,10 @@ async def test_pad_telemetry_is_journalled_now_and_scored_in_phase_nine(socket: 
         "ts": 1, "from": "IDLE", "to": "ARM", "clutchMs": 900, "armMs": 300, "clutchCycles": 1,
         "armFlips": 0, "btnRateHz": 2.0, "lotStepsSince": 0,
     }))
-    rows = socket.journal.conn.execute(
-        "SELECT COUNT(*) FROM position_event WHERE kind = 'telemetry'"
+    row = socket.journal.conn.execute(
+        "SELECT from_phase, to_phase, clutch_ms, btn_rate_hz FROM pad_event"
     ).fetchone()
-    assert rows[0] == 1
+    assert row == ("IDLE", "ARM", 900, 2.0)
 
 
 @pytest.mark.asyncio

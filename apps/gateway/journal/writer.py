@@ -185,6 +185,65 @@ class JournalWriter:
             tuple(getattr(trade, c) for c in columns),
         )
 
+    # -- client session (phase 3) ----------------------------------------------------
+
+    def write_pad_event(self, session_id: str | None, sample: dict[str, Any]) -> None:
+        """One 1 Hz telemetry batch. Phase 9 reads these; nothing else does."""
+        self.conn.execute(
+            "INSERT INTO pad_event (session_id, ts, from_phase, to_phase, reason, symbol, lots, "
+            "clutch_ms, arm_ms, clutch_cycles, arm_flips, btn_rate_hz, lot_steps, ttf_ms) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                session_id, sample.get("ts", 0), str(sample.get("from", "")),
+                str(sample.get("to", "")), sample.get("reason"), sample.get("sym"),
+                sample.get("lots"), sample.get("clutchMs", 0), sample.get("armMs", 0),
+                sample.get("clutchCycles", 0), sample.get("armFlips", 0),
+                sample.get("btnRateHz", 0.0), sample.get("lotStepsSince", 0), sample.get("ttfMs"),
+            ),
+        )
+
+    def write_checkin(
+        self, session_id: str, *, phase: str, rating: int | None, ts_ms: int
+    ) -> None:
+        """Pre/post self-rating. A null rating records a deliberate skip, not a low score."""
+        column = "pre" if phase == "pre" else "post"
+        self.conn.execute(
+            "INSERT INTO session_process (session_id) VALUES (?) "
+            "ON CONFLICT (session_id) DO NOTHING",
+            (session_id,),
+        )
+        self.conn.execute(
+            f"UPDATE session_process SET {column}_rating = ?, {column}_at = ? WHERE session_id = ?",
+            (rating, ts_ms, session_id),
+        )
+
+    def increment_stood_down(self, session_id: str) -> int:
+        """A cancelled arm under a stand-down condition. Phase 11's Selectivity axis reuses this."""
+        self.conn.execute(
+            "INSERT INTO session_process (session_id) VALUES (?) "
+            "ON CONFLICT (session_id) DO NOTHING",
+            (session_id,),
+        )
+        self.conn.execute(
+            "UPDATE session_process SET stood_down_count = stood_down_count + 1 WHERE session_id = ?",
+            (session_id,),
+        )
+        row = self.conn.execute(
+            "SELECT stood_down_count FROM session_process WHERE session_id = ?", (session_id,)
+        ).fetchone()
+        return int(row[0]) if row else 0
+
+    def process_row(self, session_id: str) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            "SELECT session_id, pre_rating, pre_at, post_rating, post_at, stood_down_count "
+            "FROM session_process WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        keys = ("session_id", "pre_rating", "pre_at", "post_rating", "post_at", "stood_down_count")
+        return dict(zip(keys, row, strict=True))
+
     def write_tape(
         self, *, cid: str, position_id: int | None, symbol: str, from_ts: int, to_ts: int,
         dt_s: int, bars: bytes, events: list[dict[str, Any]], mfe: float | None,

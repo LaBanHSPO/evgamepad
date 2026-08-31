@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-from broker.events import normalise_execution
 from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOAExecutionEvent
 from ctrader_open_api.messages.OpenApiModelMessages_pb2 import (
     ORDER_ACCEPTED,
@@ -11,6 +10,8 @@ from ctrader_open_api.messages.OpenApiModelMessages_pb2 import (
     ORDER_REJECTED,
     SWAP,
 )
+
+from broker.events import normalise_execution
 
 
 def opening_fill() -> ProtoOAExecutionEvent:

@@ -103,3 +103,43 @@ def test_the_session_row_is_opened_and_closed_around_the_socket(client: TestClie
     assert row is not None
     assert row[1] > 0, "opened_at is wall-clock milliseconds, not a monotonic reading"
     assert row[2] is not None, "the session is closed when the socket goes away"
+
+
+def test_the_checkin_rides_http_because_the_catalog_was_frozen_without_it(
+    client: TestClient,
+) -> None:
+    """A journal write has no business on the socket that prioritises order acks."""
+    body = client.post("/api/journal/checkin", json={"phase": "pre", "rating": 4}).json()
+    assert body["ok"] is True
+    assert body["skipped"] is False
+
+    import sqlite3
+
+    conn = sqlite3.connect(client.app.state.config.paths.db)
+    row = conn.execute("SELECT pre_rating, post_rating FROM session_process").fetchone()
+    conn.close()
+    assert row == (4, None)
+
+
+def test_a_skipped_checkin_is_recorded_as_a_skip_not_as_a_one(client: TestClient) -> None:
+    """Declining to rate is different from rating yourself badly, and must stay distinguishable."""
+    import sqlite3
+
+    assert client.post("/api/journal/checkin", json={"phase": "post"}).json()["skipped"] is True
+    conn = sqlite3.connect(client.app.state.config.paths.db)
+    row = conn.execute("SELECT post_rating, post_at FROM session_process").fetchone()
+    conn.close()
+    assert row[0] is None
+    assert row[1] is not None, "the skip itself is timestamped"
+
+
+def test_a_rating_outside_one_to_five_is_refused(client: TestClient) -> None:
+    assert client.post("/api/journal/checkin", json={"phase": "pre", "rating": 9}).status_code == 422
+    assert client.post("/api/journal/checkin", json={"phase": "mid"}).status_code == 422
+
+
+def test_standing_down_increments_a_counter_that_reads_as_a_win(client: TestClient) -> None:
+    first = client.post("/api/journal/stand-down", json={"conditions": ["outside_window"]}).json()
+    second = client.post("/api/journal/stand-down", json={"conditions": ["spread_wide"]}).json()
+    assert first["stoodDown"] == 1
+    assert second["stoodDown"] == 2

@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Web game and 8BitDo client agent"
-status: todo
+status: in-progress
 phase: 3
 priority: P1
 effort: 18h
@@ -199,48 +199,101 @@ Not a DOM-dense Bloomberg clone.
 
 ## Todo
 
-- [ ] Pad poll + extra-button detect
-- [ ] FSM tests
-- [ ] WS client + dead-man flags
+- [x] Pad poll + extra-button detect
+- [x] FSM tests
+- [x] WS client + dead-man flags
 - [ ] LWC + DOM HUD
 - [ ] Confirm overlay + rumble
 - [ ] Adherence badge, stood-down counter, R-first P/L toggle, check-in
-- [ ] Pad telemetry fields + 1 Hz batch
-- [ ] LB+RB chord PTT; bumpers fire on release; PTT emits no order transition
-- [ ] `confirmHoldMs` as a fire-predicate parameter
+- [x] Pad telemetry fields + 1 Hz batch
+- [x] LB+RB chord PTT; bumpers fire on release; PTT emits no order transition
+- [x] `confirmHoldMs` as a fire-predicate parameter
 - [ ] GameOverlay navigation + new-open lock + no-open/no-modify test; emergency exits preserved
 - [ ] Playbook destination + five-tab shell + disabled `[Memo]` placeholder
 - [ ] Grade placeholder + relative SL/TP/R preview
 - [ ] SL/TP apply stages modify; LT+RT remains mandatory
-- [ ] `002-client-session.sql` + check-in/telemetry writes
+- [x] `002-client-session.sql` + check-in/telemetry writes
 - [ ] Disabled mic control until phase 8; tilt pip placeholder
-- [ ] Installable manifest + shell-only service worker + no-cache-on-data test
-- [ ] README dongle pairing + wired fallback + map
+- [x] Installable manifest + shell-only service worker + no-cache-on-data test
+- [x] README dongle pairing + wired fallback + map
 - [ ] Manual 8BitDo pass, browser tab and installed window
 
 ## Success Criteria
 
 - [ ] Clutch+A+confirm opens **cTrader demo** XAUUSD; fill rumbles; P/L from cTrader
 - [ ] Unplug or Cmd-Tab hiding the tab locks orders (server reject + HUD lock)
-- [ ] Held buttons do not spray orders
+- [x] Held buttons do not spray orders
 - [ ] Symbol/lot/timeframe work without accidental fills
 - [ ] Default HUD shows P/L in R; dollars require one deliberate toggle
 - [ ] Cancelling an arm during a stand-down condition increments the stood-down counter
-- [ ] Pre/post check-in is skippable, writes `session_process`, and never blocks session start/close
-- [ ] Works with standard 17-button pad (LT/RT); extras optional
+- [x] Pre/post check-in is skippable, writes `session_process`, and never blocks session start/close
+- [x] Works with standard 17-button pad (LT/RT); extras optional
 - [ ] Unplug still allows HUD Flatten; FIRE timeout does not double-send
-- [ ] Tapping `LB` alone changes timeframe; `LB + RB` emits only the phase-8 voice control event and
+- [x] Tapping `LB` alone changes timeframe; `LB + RB` emits only the phase-8 voice control event and
       phase 3 never requests microphone permission
 - [ ] Opening Menu cancels ARM and locks new opens; navigation/apply emits no open/modify while full
       close and panic remain available
 - [ ] An SL/TP edit returns as an armed modify preview and cannot reach the broker without LT+RT
 - [ ] Before phase 7, the confirm overlay says `grading unavailable` without blocking a fire
-- [ ] `fsm.test.ts` passes unchanged after `confirmHoldMs` is introduced
+- [x] `fsm.test.ts` passes unchanged after `confirmHoldMs` is introduced
 - [ ] Chrome offers **Install**; the installed window trades identically to the tab, and the pad,
       rumble, and focus-lock rules behave the same in it
 - [ ] With the network cut, the installed app opens its shell and shows a disconnected state — it
       never shows a cached price, position, or P/L
 - [ ] Shipping a new build makes the next launch run it, without asking the player to hard-reload
+
+## Verification Status
+
+`npm --prefix app test`: **76 passed**. `tsc --noEmit`: clean. `npm run build`: passes the
+protocol-type gate and emits `sw.js` unhashed at the site root. Gateway: **154 passed, 1 skipped**.
+
+### Verified
+
+The FSM (23 tests): a held button fires once, no axis reaches the machine at all, the clutch has
+hysteresis, hiding the tab or unplugging the pad cancels an arm on the spot, an outstanding cid
+blocks a new open but never an exit, and `confirmHoldMs` withholds a fire without adding a state.
+The chord (10 tests): a single bumper changes timeframe on release, both together are a memo, a
+refused chord still does not zoom the chart, and clutching mid-memo stops and submits. Telemetry
+(7 tests): 600 frames in, at most 10 samples out. Socket client (9 tests): an outstanding intent
+replays under its original cid, and an unknown protocol version stops the client rather than
+guessing. Service worker (6 tests): no data route is cacheable and a new deploy activates without
+a hard reload. Agent (13 tests): a two-handed gesture becomes exactly one intent, and `flatten()`
+works with no pad at all.
+
+### Not verified — no 8BitDo in this environment
+
+The whole manual matrix: dongle pairing, wired fallback, the L4/R4 probe against real paddles,
+rumble, and the installed-PWA window. Those need the hardware and the Mac.
+
+### Not built in this pass
+
+`GameOverlay`, the TanStack Router tree, Lightweight Charts, the desk/sentinel stubs, and the
+`AdherenceBadge`/`CheckIn` components as separate files. The 21 existing prototype screens in
+`app/src/screens/` already carry those surfaces as fixed-data mockups; wiring them to live state
+is UI work that adds no safety property and would have crowded out the agent layer. What landed
+instead is `LiveHudScreen` — the one screen holding a real socket, a real pad, and the real FSM,
+with the R-first P/L toggle, the stood-down counter, the grading placeholder, the check-in, and
+the pad-free FLATTEN exit.
+
+### Deviations from this phase as written
+
+- **Paths.** `app/` rather than `apps/web/`, continuing phase 1's decision not to scaffold a
+  second React app beside the existing one.
+- **The check-in rides HTTP, not the socket.** Protocol v1 was frozen in phase 1 with no check-in
+  message, and adding one now would be exactly the v2 migration that freeze existed to prevent.
+  `POST /api/journal/checkin` and `/api/journal/stand-down` use the `/api/journal/*` surface phase
+  1 already declared — the same reasoning that puts voice audio and the decks on HTTP.
+- **`sw-policy.ts` split from `sw.ts`.** The worker registers listeners at import time, so the
+  cache policy lives in its own module to stay testable without a worker global.
+
+### Findings from this phase
+
+- **A spent arm survived into `UNKNOWN`.** After a fire timeout the FSM still held the old side,
+  so a stale "buy" read as a live arm. The arm is now cleared the moment it fires.
+- **`{ ...DEFAULTS, ...options }` disabled every fire.** Passing `confirmHoldMs: undefined`
+  clobbered the default of `0`, making `nowMs - confirmDownAt >= undefined` always false. Options
+  now fall back individually. This one is worth remembering: the bug was invisible in the FSM's
+  own tests, which never passed an explicit `undefined`.
 
 ## Risk Assessment
 

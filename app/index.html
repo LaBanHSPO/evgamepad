@@ -3,10 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EVGamePad — arcade screens</title>
+    <meta name="theme-color" content="#07090b" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/icon-192.png" />
+    <title>Evening Forex Gold Gamepad</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script type="module">
+      // App-shell caching only. The worker never caches /ws or /api/*, and it activates on the
+      // next launch rather than waiting for every tab to close.
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("/sw.js", { type: "module" }).catch(() => {});
+        });
+      }
+    </script>
   </body>
 </html>

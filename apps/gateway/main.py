@@ -15,6 +15,7 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 from broker import reactor_setup
 
@@ -25,6 +26,7 @@ _REACTOR = reactor_setup.install(_LOOP)
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
+from pydantic import BaseModel, Field  # noqa: E402
 
 from api.conflate import Conflator  # noqa: E402
 from api.ws import GameSocket, GatewayState, origin_allowed  # noqa: E402
@@ -48,6 +50,19 @@ RECONNECT_BACKOFF_S = (2, 5, 15, 30, 60)
 FREEZE_SWEEP_S = 30
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+class CheckInRequest(BaseModel):
+    """Pre/post self-rating. `rating: null` is a deliberate skip, not a low score."""
+
+    phase: Literal["pre", "post"]
+    rating: int | None = Field(default=None, ge=1, le=5)
+
+
+class StandDownRequest(BaseModel):
+    """The conditions that were live when the player chose not to fire."""
+
+    conditions: list[str] = Field(default_factory=list)
 
 
 def boot_config() -> AppConfig:
@@ -219,6 +234,46 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
             "protocol": PROTOCOL_VERSION,
             "broker": broker.snapshot(),
         }
+
+    def session_id_now() -> str:
+        window = SessionWindow.from_config(
+            config.timezone, config.session.days, config.session.start, config.session.end
+        )
+        return window.local(int(time.time() * 1000)).strftime("%Y-%m-%d")
+
+    @app.post("/api/journal/checkin")
+    def checkin(body: CheckInRequest) -> dict[str, object]:
+        """Pre/post self-rating, 1-5, skippable.
+
+        This rides HTTP rather than the game socket on purpose. Protocol v1 was frozen in phase 1
+        with no check-in message, and a journal write has no business on the socket whose job is
+        prioritising order acks — the same reasoning that puts voice audio and the decks here.
+        """
+        session_id = session_id_now()
+        journal = JournalWriter(connect(config.paths.db))
+        try:
+            journal.open_session(session_id, timezone=config.timezone,
+                                 opened_at=int(time.time() * 1000), balance=None, equity=None)
+            journal.write_checkin(session_id, phase=body.phase, rating=body.rating,
+                                  ts_ms=int(time.time() * 1000))
+            return {"ok": True, "sessionId": session_id, "skipped": body.rating is None}
+        finally:
+            journal.conn.close()
+
+    @app.post("/api/journal/stand-down")
+    def stand_down(body: StandDownRequest) -> dict[str, object]:
+        """A cancelled arm under a live stand-down condition. Standing down reads as a win."""
+        session_id = session_id_now()
+        journal = JournalWriter(connect(config.paths.db))
+        try:
+            journal.open_session(session_id, timezone=config.timezone,
+                                 opened_at=int(time.time() * 1000), balance=None, equity=None)
+            count = journal.increment_stood_down(session_id)
+            journal.append_event(kind="stand_down", ts_ms=int(time.time() * 1000),
+                                 payload={"conditions": body.conditions})
+            return {"ok": True, "stoodDown": count}
+        finally:
+            journal.conn.close()
 
     @app.websocket(config.gateway.ws_path)
     async def game_socket(websocket: WebSocket) -> None:

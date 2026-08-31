@@ -321,8 +321,12 @@ class GameSocket:
         )
 
     async def _pad_telemetry(self, envelope: Envelope) -> None:
-        """Accepted and journalled now; phase 9 turns it into a tilt score."""
-        self.journal.append_event(kind="telemetry", ts_ms=self.now_ms(), payload=dict(envelope.p))
+        """Accepted and journalled now; phase 9 turns it into a tilt score.
+
+        The client batches at 1 Hz, so this is one row per second per session at most — cheap
+        enough to keep always-on, and impossible to reconstruct later if it is not.
+        """
+        self.journal.write_pad_event(self.state.session_id, dict(envelope.p))
 
     # -- quotes ----------------------------------------------------------------------
 
