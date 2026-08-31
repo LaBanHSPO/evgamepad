@@ -1,6 +1,6 @@
 ---
 title: "Phase 8: Voice — capture, upload, whisper.cpp, coach TTS"
-status: todo
+status: deferred
 phase: 8
 priority: P1
 effort: 14h
@@ -8,6 +8,27 @@ dependencies: [1, 3, 4, 5]
 ---
 
 # Phase 8: Voice — capture, upload, whisper.cpp, coach TTS
+
+> **Deferred by the player, 2026-08-31.** Skipped in the build order, to be picked up later.
+> The runtime this phase needs — `ffmpeg` and `whisper-cli` — exists only in the Docker image, not
+> in the build environment, so its transcription path would be as unverifiable here as the broker
+> link. Nothing downstream is blocked: phase 9's voice-arousal input is an optional 5% component
+> that redistributes when absent, and phase 3 already ships the LB+RB chord as an inert control
+> event. Phase 11's memo evidence degrades the same way.
+>
+> Still owed when it resumes: the `voice` channel messages are already in the frozen catalog, the
+> config blocks and their boot-fails already exist, and the image already carries the `tiny.en`
+> floor — so this phase starts at its step 4, not at zero.
+>
+> Phase 9 shipped after this and added two items to that list. Both are built and tested; only their
+> feeds are missing, and both feeds are memo-shaped:
+>
+> - `TiltTracker.observe_memo()` and `.acknowledge()` halve the recency terms, which is the way out
+>   of a tilt cooldown. Nothing calls either one yet, so today the only way out is to wait the 300 s.
+>   Wire them from the memo pipeline and the scorched-band prompt.
+> - `arousal.ts` — the `AnalyserNode` RMS on the PTT stream — plus the `speechRate_z` / `loudness_z`
+>   feed into `TiltInputs`. The component and its 5% weight already exist and renormalise away while
+>   absent; only the measurement is missing.
 
 ## Overview
 

@@ -11,6 +11,7 @@ the gates, `intent.close` and `intent.panic` do not.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable
@@ -81,9 +82,17 @@ class GameSocket:
     playbooks: Any | None = None
     active_playbook_id: str | None = None
 
+    # Phase 9. Absent, or disabled in config, removes tilt entirely.
+    tilt: Any | None = None
+    # A shared cell the desk's read-only `get_tilt` tool reads. Aggregates only, and it is written
+    # here rather than handed to the desk directly so the copilot never holds the tracker.
+    tilt_view: dict[str, Any] | None = None
+
     seq: int = 0
     subscriptions: set[str] = field(default_factory=set)
     _outbox: list[Envelope] = field(default_factory=list, init=False)
+    _band: str = field(default="calm", init=False)
+    _desk_tasks: set[Any] = field(default_factory=set, init=False)
 
     def now_ms(self) -> int:
         return int(time.time() * 1000)
@@ -184,6 +193,9 @@ class GameSocket:
 
     def _open_context(self, symbol: str, lots: float, clutch: bool) -> OpenContext:
         now = self.now_ms()
+        # The cooldown reaches the gate as a plain field. It gates opens only, because every risk
+        # rule does — `evaluate_exit` runs none of them.
+        cooldown_until = self.tilt.cooldown_until if self.tilt is not None else None
         return OpenContext(
             now_ms=now,
             symbol=symbol,
@@ -201,6 +213,7 @@ class GameSocket:
             min_seconds_between_orders=self.min_seconds_between_orders,
             heartbeat_age_s=self.state.heartbeat_age_s(now),
             heartbeat_dead_s=self.heartbeat_dead_s,
+            cooldown_until_ms=cooldown_until,
         )
 
     async def _reject(self, cid: str | None, reason: str, detail: str | None = None) -> None:
@@ -258,6 +271,9 @@ class GameSocket:
             return
 
         self.state.last_order_ms = now
+        if self.tilt is not None:
+            grade = self.playbooks.grade_for(cid) if self.playbooks else None
+            self.tilt.observe_fire(lots=lots, clean=None if grade is None else grade["clean"])
         self.journal.settle_cid(cid, state=ACKED, ts_ms=now)
         self.journal.append_event(kind="fill", ts_ms=now, cid=cid, payload=result.detail)
         await self.emit(
@@ -412,12 +428,71 @@ class GameSocket:
         await self.emit("grade", "session", grade.payload(), cid=cid)
 
     async def _pad_telemetry(self, envelope: Envelope) -> None:
-        """Accepted and journalled now; phase 9 turns it into a tilt score.
+        """Journalled, then scored.
 
         The client batches at 1 Hz, so this is one row per second per session at most — cheap
         enough to keep always-on, and impossible to reconstruct later if it is not.
         """
-        self.journal.write_pad_event(self.state.session_id, dict(envelope.p))
+        sample = dict(envelope.p)
+        self.journal.write_pad_event(self.state.session_id, sample)
+        if self.tilt is None:
+            return
+
+        self.tilt.observe_telemetry(sample)
+        await self.push_tilt()
+
+    async def push_tilt(self) -> None:
+        """Score, record the sample, and tell the HUD. Never touches the FSM."""
+        if self.tilt is None:
+            return
+        result = self.tilt.score(self.now_ms())
+        self.journal.write_tilt_sample(
+            self.tilt.sample_row(result, self.state.session_id, self.now_ms())
+        )
+        payload = result.payload()
+        if self.tilt_view is not None:
+            # What the desk may see: the band, the score, and the sentences already on screen.
+            self.tilt_view.clear()
+            self.tilt_view.update(
+                {"band": result.band, "score": payload["score"], "top": result.top[:3]}
+            )
+        await self.emit("tilt", "session", payload)
+
+        crossed_into_hot = result.band in ("hot", "scorched") and self._band in ("calm", "warm")
+        self._band = result.band
+        if crossed_into_hot:
+            self._spawn_hot_advice()
+
+    def _spawn_hot_advice(self) -> None:
+        """One monitor advice on the way into the hot band, off the socket's read loop.
+
+        Fire-and-forget on purpose: the desk speaks over the network, and nothing it does may sit
+        between an intent and the broker. Its own rate limit keeps it from nagging.
+        """
+        if self.desk is None:
+            return
+        task = asyncio.ensure_future(self._hot_advice())
+        self._desk_tasks.add(task)
+        task.add_done_callback(self._desk_tasks.discard)
+
+    async def _hot_advice(self) -> None:
+        try:
+            answer = await self.desk.monitor(self.now_ms())
+        except Exception:
+            log.exception("desk monitor failed at the hot band; the HUD keeps its own driver line")
+            return
+        if answer is None:
+            return
+        await self.emit(
+            "ai.advice", "ai",
+            {"cid": None, "kind": "advise", "text": answer.text,
+             "citations": answer.sources, "ts": self.now_ms()},
+        )
+
+    async def drain_desk(self) -> None:
+        """Await any in-flight desk work. Tests use it; the socket never needs to."""
+        while self._desk_tasks:
+            await asyncio.gather(*tuple(self._desk_tasks), return_exceptions=True)
 
     # -- quotes ----------------------------------------------------------------------
 

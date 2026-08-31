@@ -56,6 +56,9 @@ from risk.session import SessionWindow  # noqa: E402
 from sentinel.engine import SentinelEngine  # noqa: E402
 from signals.calendar import CalendarCache, currencies_for  # noqa: E402
 from signals.tv_webhook import TvAlert, WebhookGuard, to_signal  # noqa: E402
+from tilt.baseline import load_baseline  # noqa: E402
+from tilt.score import Bands  # noqa: E402
+from tilt.tracker import TiltTracker  # noqa: E402
 
 log = logging.getLogger("ev-gateway")
 
@@ -86,7 +89,7 @@ def build_deck(config: AppConfig) -> DeckRepository:
 
 
 def build_desk(config: AppConfig, sentinel: SentinelEngine, broker: Broker,
-               deck: DeckRepository) -> DeskLoops:
+               deck: DeckRepository, tilt_view: dict[str, object] | None = None) -> DeskLoops:
     """Assemble the desk from read-only tools.
 
     Everything it can see is passed in through the registry; it has no reference to the broker's
@@ -117,6 +120,8 @@ def build_desk(config: AppConfig, sentinel: SentinelEngine, broker: Broker,
         get_setup=lambda: sentinel_state(),
         # Process aggregates only. No account credentials, no raw journal, no money field.
         get_progress=deck.summary,
+        # Phase 9. Band, score, and driver sentences — never a component value or a pad frame.
+        get_tilt=None if tilt_view is None else (lambda: dict(tilt_view)),
     )
 
     async def publish(_t: str, _ch: str, _payload: dict) -> None:
@@ -316,7 +321,9 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
     )
     deck = build_deck(config)
     playbooks = PlaybookRepository(config.paths.db)
-    desk = build_desk(config, sentinel, broker, deck)
+    # One cell per process: the live socket writes it, the desk's read-only tool reads it.
+    tilt_view: dict[str, object] = {"band": "calm", "score": 0.0, "top": []}
+    desk = build_desk(config, sentinel, broker, deck, tilt_view)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -562,6 +569,13 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
             session_id, timezone=config.timezone, opened_at=now_ms,
             balance=opening.get("balance"), equity=opening.get("equity"),
         )
+        tilt = TiltTracker(
+            bands=Bands(warm=config.tilt.warm, hot=config.tilt.hot,
+                        scorched=config.tilt.scorched),
+            baseline=load_baseline(config.paths.db),
+            cooldown_s=config.tilt.cooldown_s,
+            enabled=config.tilt.enabled,
+        )
         game = GameSocket(
             send=websocket.send_text,
             broker=broker,
@@ -577,6 +591,8 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
             desk=desk,
             sentinel=sentinel,
             playbooks=playbooks,
+            tilt=tilt,
+            tilt_view=tilt_view,
         )
         try:
             while True:

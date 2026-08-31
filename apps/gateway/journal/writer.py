@@ -246,6 +246,24 @@ class JournalWriter:
         keys = ("session_id", "pre_rating", "pre_at", "post_rating", "post_at", "stood_down_count")
         return dict(zip(keys, row, strict=True))
 
+    # -- tilt (phase 9) ----------------------------------------------------------------
+
+    def write_tilt_sample(self, row: dict[str, Any]) -> None:
+        """One sample. Tilt is never stored as a trait — this is a record of an evening."""
+        self.conn.execute(
+            "INSERT INTO tilt_sample (session_id, ts, score, band, components, missing, "
+            "top_driver) VALUES (?,?,?,?,?,?,?)",
+            (row["session_id"], row["ts"], row["score"], row["band"], row["components"],
+             row["missing"], row["top_driver"]),
+        )
+
+    def tilt_samples(self, session_id: str) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT ts, score, band, top_driver FROM tilt_sample WHERE session_id = ? ORDER BY ts",
+            (session_id,),
+        ).fetchall()
+        return [{"ts": r[0], "score": r[1], "band": r[2], "topDriver": r[3]} for r in rows]
+
     # -- playbooks and grading (phase 7) -----------------------------------------------
 
     def upsert_playbook(self, playbook: dict[str, Any], rules: list[dict[str, Any]]) -> None:

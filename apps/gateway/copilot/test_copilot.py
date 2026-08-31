@@ -28,6 +28,7 @@ def registry() -> ToolRegistry:
         get_calendar=lambda: [],
         get_setup=lambda: {"kind": "range"},
         get_progress=lambda: {"stoodDown": 2},
+        get_tilt=lambda: {"band": "hot", "score": 0.71, "top": ["size at 2.0x your session median"]},
     )
 
 
@@ -188,3 +189,22 @@ def test_the_public_route_is_rate_limited_before_anything_is_parsed() -> None:
     assert [guard.allow(now=100.0) for _ in range(4)] == [True, True, True, False]
     # A minute later the window has rolled.
     assert guard.allow(now=200.0) is True
+
+
+def test_the_tilt_tool_hands_over_aggregates_and_nothing_else() -> None:
+    """Behavioural telemetry stays on the box. The desk sees the band and the sentences only."""
+    view = registry().call("get_tilt")
+    assert set(view) == {"band", "score", "top"}
+    for forbidden in ("components", "lots", "pnl", "balance", "usd", "session_id"):
+        assert forbidden not in {key.lower() for key in view}
+
+
+def test_a_desk_built_without_tilt_simply_has_no_tilt_tool() -> None:
+    """`tilt.enabled: false` removes it entirely, including from the desk's surface."""
+    tools = build_registry(
+        get_sentinel=lambda: {}, get_positions=lambda: [], get_account=lambda: {},
+        get_calendar=lambda: [], get_setup=lambda: None, get_progress=lambda: {},
+    )
+    assert "get_tilt" not in tools.names()
+    with pytest.raises(PermissionError):
+        tools.call("get_tilt")

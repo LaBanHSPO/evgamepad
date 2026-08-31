@@ -67,6 +67,7 @@ def build_registry(
     get_calendar: Callable[[], list[dict[str, Any]]],
     get_setup: Callable[[], dict[str, Any] | None],
     get_progress: Callable[[], dict[str, Any]],
+    get_tilt: Callable[[], dict[str, Any]] | None = None,
 ) -> ToolRegistry:
     """The full read-only surface. Every name here is a noun, deliberately."""
     registry = ToolRegistry()
@@ -80,4 +81,8 @@ def build_registry(
     # Phase 6 and 11 read the journal through this one; it stays a read.
     registry.register("get_progress", "Process figures for this session and recent ones",
                       get_progress)
+    # Phase 9. Aggregates only — band, score, and the driver sentences the HUD already shows.
+    # The per-component values and the raw pad telemetry never leave the box.
+    if get_tilt is not None:
+        registry.register("get_tilt", "Current tilt band and what is driving it", get_tilt)
     return registry

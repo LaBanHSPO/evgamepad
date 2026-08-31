@@ -324,3 +324,185 @@ def test_only_the_huds_own_origin_may_open_the_socket() -> None:
     assert origin_allowed("https://evgamepad.example/", "https://evgamepad.example")
     assert not origin_allowed("https://evil.example", "https://evgamepad.example")
     assert not origin_allowed(None, "https://evgamepad.example")
+
+
+# -- tilt (phase 9) -------------------------------------------------------------------
+
+
+def tilted(socket: GameSocket, band: str = "scorched") -> None:
+    """Force the tracker into a band without waiting for an evening to go wrong."""
+    from tilt.tracker import TiltTracker
+
+    tracker = TiltTracker()
+    tracker.session.observe_fire(0.01)
+    tracker.losses_tonight = 5
+    tracker.last_loss_ms = socket.now_ms()
+    tracker.pending_lots = 0.10
+    tracker.recent_grades.extend([False, False, False])
+    tracker.clutch_cycles.extend([10.0, 10.0, 10.0])
+    tracker.arm_flips.extend([5.0, 5.0, 5.0])
+    tracker.last_btn_rate = 20.0
+    tracker.session.observe_telemetry(2.0)
+    socket.tilt = tracker
+    if band == "scorched":
+        socket.tilt.cooldown_until = socket.now_ms() + 300_000
+
+
+@pytest.mark.asyncio
+async def test_at_the_scorched_band_an_open_is_rejected_with_cooldown(socket: GameSocket) -> None:
+    tilted(socket)
+    await socket.route(open_intent())
+    assert socket.broker.placed == []
+    assert last(socket, "order.reject")["p"]["reason"] == "cooldown"
+
+
+@pytest.mark.asyncio
+async def test_tilt_at_one_still_lets_a_close_and_a_panic_through(socket: GameSocket) -> None:
+    """The safety property the whole phase rests on."""
+    tilted(socket)
+    socket.broker.open_positions = [{"positionId": 7}, {"positionId": 8}]
+
+    await socket.route(Envelope(t="intent.close", seq=1, ts=1, ch="orders", cid=new_cid(),
+                                p={"positionId": 7, "clutch": True, "armedAt": 1}))
+    assert socket.broker.closed == [7]
+
+    await socket.route(Envelope(t="intent.panic", seq=2, ts=1, ch="orders", cid=new_cid(),
+                                p={"clutch": True, "armedAt": 1}))
+    assert socket.broker.closed == [7, 7, 8]
+
+
+@pytest.mark.asyncio
+async def test_an_expired_cooldown_stops_blocking(socket: GameSocket) -> None:
+    tilted(socket)
+    socket.tilt.cooldown_until = socket.now_ms() - 1
+    await socket.route(open_intent())
+    assert len(socket.broker.placed) == 1
+
+
+@pytest.mark.asyncio
+async def test_telemetry_produces_a_tilt_frame_and_a_sample_row(socket: GameSocket) -> None:
+    from tilt.tracker import TiltTracker
+
+    socket.tilt = TiltTracker()
+    await socket.route(Envelope(t="pad.telemetry", seq=1, ts=1, ch="session", p={
+        "ts": 1, "from": "IDLE", "to": "ARM", "clutchMs": 900, "armMs": 300, "clutchCycles": 4,
+        "armFlips": 2, "btnRateHz": 6.0, "lotStepsSince": 0,
+    }))
+
+    frame = last(socket, "tilt")["p"]
+    assert set(frame) >= {"score", "band", "top"}
+    assert 0.0 <= frame["score"] <= 1.0
+
+    row = socket.journal.conn.execute(
+        "SELECT band, top_driver FROM tilt_sample"
+    ).fetchone()
+    assert row[0] == frame["band"]
+
+
+@pytest.mark.asyncio
+async def test_the_top_driver_is_a_sentence_not_a_number(socket: GameSocket) -> None:
+    tilted(socket, band="hot")
+    socket.tilt.cooldown_until = None
+    await socket.push_tilt()
+    top = last(socket, "tilt")["p"]["top"]
+    assert top and isinstance(top[0], str)
+    assert any(char.isalpha() for char in top[0])
+
+
+@pytest.mark.asyncio
+async def test_disabling_tilt_removes_it_entirely(socket: GameSocket) -> None:
+    from tilt.tracker import TiltTracker
+
+    socket.tilt = TiltTracker(enabled=False)
+    socket.tilt.losses_tonight = 5
+    socket.tilt.last_loss_ms = socket.now_ms()
+    socket.tilt.pending_lots = 1.0
+
+    await socket.push_tilt()
+    assert last(socket, "tilt")["p"]["score"] == 0.0
+    await socket.route(open_intent())
+    assert len(socket.broker.placed) == 1
+
+
+@pytest.mark.asyncio
+async def test_with_no_tracker_at_all_the_socket_still_trades(socket: GameSocket) -> None:
+    socket.tilt = None
+    await socket.route(Envelope(t="pad.telemetry", seq=1, ts=1, ch="session", p={
+        "ts": 1, "from": "IDLE", "to": "ARM", "clutchMs": 1, "armMs": 1, "clutchCycles": 1,
+        "armFlips": 0, "btnRateHz": 1.0, "lotStepsSince": 0,
+    }))
+    await socket.route(open_intent())
+    assert len(socket.broker.placed) == 1
+
+
+class FakeDesk:
+    """A desk that answers instantly. The real one speaks over the network; neither may block."""
+
+    def __init__(self, text: str = "spread is wide; wait for it to settle") -> None:
+        self.text = text
+        self.monitor_calls: list[int] = []
+
+    async def monitor(self, now_ms: int) -> Any:
+        self.monitor_calls.append(now_ms)
+        from copilot.client import DeskAnswer
+
+        return DeskAnswer(text=self.text, sources=[])
+
+
+@pytest.mark.asyncio
+async def test_crossing_into_the_hot_band_emits_one_desk_advice(socket: GameSocket) -> None:
+    """One advice on the way in, not one per telemetry batch."""
+    desk = FakeDesk()
+    socket.desk = desk
+    tilted(socket, band="hot")
+    socket.tilt.cooldown_until = None
+
+    await socket.push_tilt()
+    await socket.drain_desk()
+    assert len(desk.monitor_calls) == 1
+    assert last(socket, "ai.advice")["p"]["text"] == desk.text
+
+    # Still hot a second later: the desk stays quiet, because nothing was crossed.
+    await socket.push_tilt()
+    await socket.drain_desk()
+    assert len(desk.monitor_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_calm_evening_never_wakes_the_desk(socket: GameSocket) -> None:
+    from tilt.tracker import TiltTracker
+
+    desk = FakeDesk()
+    socket.desk = desk
+    socket.tilt = TiltTracker()
+    await socket.push_tilt()
+    await socket.drain_desk()
+    assert desk.monitor_calls == []
+
+
+@pytest.mark.asyncio
+async def test_a_broken_desk_does_not_break_the_tilt_frame(socket: GameSocket) -> None:
+    class Exploding:
+        async def monitor(self, now_ms: int) -> Any:
+            raise RuntimeError("no network")
+
+    socket.desk = Exploding()
+    tilted(socket, band="hot")
+    socket.tilt.cooldown_until = None
+
+    await socket.push_tilt()
+    await socket.drain_desk()
+    assert last(socket, "tilt")["p"]["band"] in ("hot", "scorched")
+
+
+@pytest.mark.asyncio
+async def test_the_desk_only_ever_sees_tilt_aggregates(socket: GameSocket) -> None:
+    """Component values and raw pad frames stay on the box; the desk gets what the HUD shows."""
+    view: dict[str, Any] = {}
+    socket.tilt_view = view
+    tilted(socket, band="hot")
+    socket.tilt.cooldown_until = None
+    await socket.push_tilt()
+
+    assert set(view) == {"band", "score", "top"}
+    assert all(isinstance(line, str) for line in view["top"])

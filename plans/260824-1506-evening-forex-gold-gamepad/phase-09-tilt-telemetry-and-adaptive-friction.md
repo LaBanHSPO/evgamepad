@@ -1,6 +1,6 @@
 ---
 title: "Phase 9: Tilt telemetry and adaptive friction"
-status: todo
+status: in-progress
 phase: 9
 priority: P1
 effort: 10h
@@ -150,28 +150,80 @@ voice AnalyserNode + transcript (opt.)   ─┘          |
 
 ## Todo
 
-- [ ] `007-tilt.sql` + pure tilt composition + renormalisation fixtures
-- [ ] Own-baseline rolling medians + cold-start guard
-- [ ] `pad.telemetry` consumption at 1 Hz
-- [ ] HUD pip + top-driver sentence
-- [ ] `confirmHoldMs` friction (client) at the hot band
-- [ ] Server cooldown gate, opens only, reusing the dead-man predicate
-- [ ] Memo/acknowledge halves recency
-- [ ] tilt=1.0 cannot block close or panic
-- [ ] `tilt.enabled: false` removes it cleanly
+- [x] `007-tilt.sql` + pure tilt composition + renormalisation fixtures
+- [x] Own-baseline rolling medians + cold-start guard
+- [x] `pad.telemetry` consumption at 1 Hz
+- [x] HUD pip + top-driver sentence
+- [x] `confirmHoldMs` friction (client) at the hot band
+- [x] Server cooldown gate, opens only, reusing the dead-man predicate
+- [x] Memo/acknowledge halves recency
+- [x] tilt=1.0 cannot block close or panic
+- [x] `tilt.enabled: false` removes it cleanly
 
 ## Success Criteria
 
-- [ ] With `tilt = 1.0` forced, panic flatten still executes and `intent.close` is still accepted
-- [ ] `tilt.gate_close: true` refuses to boot
-- [ ] Two losing trades then a double-size re-entry inside 60 s pushes the band to hot and names
+- [x] With `tilt = 1.0` forced, panic flatten still executes and `intent.close` is still accepted
+- [x] `tilt.gate_close: true` refuses to boot
+- [x] Two losing trades then a double-size re-entry inside 60 s pushes the band to hot and names
       "revenge sizing" as the top driver
-- [ ] At the hot band, firing requires a 750 ms confirm hold; closing does not change at all
-- [ ] At the scorched band, `intent.open` is rejected with `reason: 'cooldown'` and the HUD counts down
-- [ ] Recording a memo during cooldown measurably lowers the score
-- [ ] A reconnect during cooldown **allows** trading if the clock is unusable (fails open)
-- [ ] The phase 3 `fsm.test.ts` suite passes unchanged
-- [ ] Tilt appears nowhere in the phase 11 Process Score inputs
+- [x] At the hot band, firing requires a 750 ms confirm hold; closing does not change at all
+- [x] At the scorched band, `intent.open` is rejected with `reason: 'cooldown'` and the HUD counts down
+- [x] Recording a memo during cooldown measurably lowers the score *(composition proved; the feed lands with phase 8 — see Deviations)*
+- [x] A reconnect during cooldown **allows** trading if the clock is unusable (fails open)
+- [x] The phase 3 `fsm.test.ts` suite passes unchanged
+- [x] Tilt appears nowhere in the phase 11 Process Score inputs
+
+## Verification Status
+
+Gateway `uv run pytest -q`: **316 passed, 1 skipped** (the skip is phase 2's broker volume test,
+which waits on a real cTrader dump). `uv run ruff check .`: clean. Web `npm test`: **93 passed**;
+`npx tsc --noEmit` and `npm run build` (protocol drift gate included): clean.
+
+Where each safety claim is actually proved:
+
+| Claim | Proof |
+|---|---|
+| `tilt = 1.0` never blocks a close or a panic | `tilt/test_score.py::test_with_tilt_forced_to_one_a_close_and_a_panic_still_execute` scores 1.0 and asserts `evaluate_exit()` runs **no** rules; `api/test_ws.py::test_tilt_at_one_still_lets_a_close_and_a_panic_through` drives both intents through the real socket with the tracker maxed |
+| Open-only by construction, not by convention | The cooldown is a `scope="risk"` entry in the one `method/rules.py` registry. `risk/rules.py` builds `OPEN_RULES` from `rules_for("risk")` and `evaluate_exit` iterates nothing, so no close can reach the gate even by mistake |
+| `tilt.gate_close: true` refuses to boot | `test_config.py` parametrised boot-fail case, from phase 1 |
+| The cooldown fails open | `cooldown_active` returns `False` for a missing `cooldown_until` **and** for an unusable clock (`test_the_cooldown_fails_open`); `test_a_reconnect_with_no_cooldown_recorded_allows_trading` drives the same case through the gate, and `test_an_expired_cooldown_stops_blocking` through the real socket |
+| Tilt never reaches the Process Score | `test_tilt_never_reaches_the_process_score` reads `deck/metrics.py` and fails on the word |
+| The FSM is unchanged | `fsm.test.ts` (23 tests) passes untouched; `tilt.test.ts` greps `pad/fsm.ts` and fails if the word appears. Tilt reaches the client only as `agent.setConfirmHoldMs()` — a parameter of the existing fire predicate |
+| Friction is described in terms of opens only | `tilt.test.ts` asserts `BAND_FRICTION` contains "fire" and none of close / panic / flatten / lock |
+| The desk sees aggregates only | `test_the_desk_only_ever_sees_tilt_aggregates` pins the shared cell to exactly `{band, score, top}`; `test_copilot.py` asserts `get_tilt` carries no money or component key, and that the tool is simply absent when tilt is off |
+| The two copies of `confirm_hold_ms` cannot drift | `tilt.test.ts` parses `config/default.yaml` and fails the web build if it stops matching `HOT_HOLD_MS` |
+
+## Deviations
+
+- **The two ways out of a cooldown are wired to nothing until phase 8.** `score_tilt` halves the
+  recency terms on a memo or an acknowledgement, proved by `test_a_memo_halves_the_recency_terms`
+  and `test_an_acknowledgement_halves_them_too`, and `TiltTracker.observe_memo` /
+  `.acknowledge` set the flags. Neither has a caller: both interventions are memo-shaped and the
+  memo pipeline is phase 8's. Nobody is trapped meanwhile — the cooldown is 300 s, it fails open,
+  and it never touched an exit — but until phase 8 resumes, waiting is the only way out. This is
+  recorded in the phase 8 doc as work its resume owes.
+- **Voice contributes nothing yet.** Phase 8 is deferred, so `TiltTracker.inputs()` passes
+  `speech_rate_z`, `loudness_z` and `seconds_since_memo` as `None`. That is the *measured* path, not
+  a stub: the component drops out and its 0.05 renormalises across the behavioural six, exactly as a
+  memo-less evening already does. `apps/web/src/voice/arousal.ts` from the file list belongs to
+  phase 8 and was not written — writing an `AnalyserNode` with no PTT stream to attach it to would
+  be scaffolding, not behaviour. `score.py` and `test_score.py` already cover the voice component
+  end to end; only its feed is missing.
+- **The confirm overlay shows the evening's realised R, not the prospective trade's.** The plan
+  asks for "the trade's R". The pad fires market orders and the agent sends no `relativeSl`, so
+  there is no stop distance from which a prospective R could be computed — any number there would
+  be invented. What is shown instead is real and broker-sourced: the driver sentence plus `dayPnl`
+  converted at the HUD's R unit. A prospective R becomes computable when a stop model lands.
+- **The hot-band desk advice is edge-triggered and fire-and-forget.** The plan says "one advice" at
+  the hot band. It fires on the *crossing* into hot or scorched, not per telemetry batch, and runs
+  as its own task so a desk speaking over the network can never sit between an intent and the
+  broker. A failing desk is logged and the tilt frame ships regardless.
+- **The migration ledger skips 006.** `007-tilt.sql` follows `005`; 006 was never issued. The
+  ledger is per-id rather than a high-water mark, so the gap is legal and the file says so in its
+  header — this is recorded here so a later reader does not go looking for a lost migration.
+- **`RECENT_ARMS` is defined in both `score.py` and `tracker.py`.** The scorer documents the window
+  its component sentences describe; the tracker owns the actual `deque` maxlen. They are the same
+  number for the same reason, and only the tracker's value has any runtime effect.
 
 ## Risk Assessment
 

@@ -6,6 +6,8 @@ import type { Grade, GradePreview, Playbook } from "../playbook/types";
 import { GameAgent } from "../agent";
 import type { AgentView } from "../agent";
 import { PadPoller } from "../pad/poll";
+import { HOT_HOLD_MS, TiltPip, confirmHoldMsFor } from "../hud/TiltPip";
+import type { TiltState } from "../hud/TiltPip";
 import { newCid } from "../net/cid";
 import { GameClient } from "../net/ws";
 import type { SocketStatus } from "../net/ws";
@@ -47,6 +49,10 @@ export function LiveHudScreen(): JSX.Element {
   const [activePlaybook, setActivePlaybook] = useState<string | null>(null);
   const [preview, setPreview] = useState<GradePreview | null>(null);
   const [grade, setGrade] = useState<Grade | null>(null);
+  const [tilt, setTilt] = useState<TiltState | null>(null);
+  // The evening's realised P/L in R, straight from the broker's `dayPnl`. Never re-derived from
+  // summed fills, and shown only in the hot-band confirm block.
+  const [dayR, setDayR] = useState<number | null>(null);
   const clientRef = useRef<GameClient | null>(null);
 
   const bidRef = useRef<HTMLSpanElement>(null);
@@ -82,6 +88,7 @@ export function LiveHudScreen(): JSX.Element {
         }
         case "pnl": {
           const open = Number(payload.openPnl ?? 0);
+          setDayR(payload.dayPnl == null ? null : Number(payload.dayPnl) / rUsdRef.current);
           if (pnlRef.current) {
             pnlRef.current.textContent = showDollars
               ? `${open >= 0 ? "+" : ""}${open.toFixed(2)} USD`
@@ -98,6 +105,13 @@ export function LiveHudScreen(): JSX.Element {
         case "maint":
           note(`maint: ${payload.note ?? "broker unavailable"}`);
           break;
+        case "tilt": {
+          // The band raises the confirm hold. It never touches a close, and never a state.
+          const state = envelope.p as unknown as TiltState;
+          setTilt(state);
+          agentRef.current?.setConfirmHoldMs(confirmHoldMsFor(state.band, HOT_HOLD_MS));
+          break;
+        }
         case "grade": {
           // The authoritative grade, pushed at FIRE. The preview above it was only a look.
           setGrade(envelope.p as unknown as Grade);
@@ -263,7 +277,7 @@ export function LiveHudScreen(): JSX.Element {
       <section style={panel}>
         <div>{PHASE_COPY[view?.phase ?? "LOCKED"]}</div>
         {view?.side ? <div>armed: {view.side}</div> : null}
-        <ConfirmGrade preview={preview} />
+        <ConfirmGrade preview={preview} tilt={tilt} dayR={dayR} />
         <div style={row}>
           <button type="button" onClick={() => void previewGrade("buy")}>
             preview buy
@@ -272,6 +286,7 @@ export function LiveHudScreen(): JSX.Element {
             preview sell
           </button>
         </div>
+        <TiltPip tilt={tilt} />
         <div style={row}>
           <span>stood down tonight: {view?.stoodDown ?? 0}</span>
           <span>pad: {view?.padConnected ? "connected" : "absent"}</span>

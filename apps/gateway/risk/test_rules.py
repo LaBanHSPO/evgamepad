@@ -9,6 +9,7 @@ import pytest
 
 from risk.rules import (
     OPEN_REJECT_REASONS,
+    OPEN_RULES,
     REJECT_COOLDOWN,
     OpenContext,
     evaluate_exit,
@@ -69,7 +70,9 @@ def test_every_outcome_is_reported_even_after_the_first_failure() -> None:
     decision = evaluate_open(ctx(clutch=False, lots=0.5))
     failed = {o.id for o in decision.outcomes if not o.passed}
     assert failed == {"clutch", "max_lots"}
-    assert len(decision.outcomes) == 8
+    # Every enforced rule reports, not just the ones that bit. Counted from the registry so a new
+    # gate does not silently stop being reported.
+    assert len(decision.outcomes) == len(OPEN_RULES)
 
 
 def test_exits_are_exempt_from_every_open_gate() -> None:

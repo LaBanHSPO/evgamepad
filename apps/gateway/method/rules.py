@@ -62,6 +62,9 @@ class RuleContext:
     spread: float | None = None
     spread_cap: float | None = None
     seconds_to_high_impact: float | None = None
+    # Phase 9. `None` means no cooldown is in force; an unusable clock also reads as None, which
+    # is how the gate fails *open*.
+    cooldown_until_ms: int | None = None
     # Manual answers, keyed by rule code. Absent means the player has not answered yet.
     manual_answers: dict[str, bool] = field(default_factory=dict)
 
@@ -133,6 +136,26 @@ def _max_lots(ctx: RuleContext, _p: dict[str, Any]) -> RuleResult:
 def _daily_loss(ctx: RuleContext, _p: dict[str, Any]) -> RuleResult:
     return _ok(ctx.day_loss_usd < ctx.max_day_loss_usd, ctx.day_loss_usd,
                f"< {ctx.max_day_loss_usd}")
+
+
+def _cooldown(ctx: RuleContext, _p: dict[str, Any]) -> RuleResult:
+    """Phase 9's soft block on opens at the scorched band.
+
+    Deliberately **fails open**: a missing cooldown or an unusable clock allows the trade. The
+    dead-man rule fails closed because it guards unattended input; this one is a judgement call,
+    and a judgement call should not be enforced by a broken clock.
+
+    Being a risk rule makes it open-only by construction — `evaluate_exit` runs no rules at all,
+    so a close and a panic never see this.
+    """
+    from tilt.score import cooldown_active
+
+    blocked = cooldown_active(ctx.cooldown_until_ms, ctx.now_ms)
+    remaining = (
+        max(0, (ctx.cooldown_until_ms - ctx.now_ms) // 1000)
+        if blocked and ctx.cooldown_until_ms else 0
+    )
+    return _ok(not blocked, f"{remaining}s remaining" if blocked else "clear", "no cooldown")
 
 
 def _order_rate(ctx: RuleContext, _p: dict[str, Any]) -> RuleResult:
@@ -227,6 +250,9 @@ _RULES: tuple[Rule, ...] = (
          reason="max_lots"),
     Rule("daily_loss", "Daily loss", "risk", "auto",
          "past the daily loss the evening is close-only", _daily_loss, reason="daily_loss"),
+    Rule("cooldown", "Tilt cooldown", "risk", "auto",
+         "at the scorched band opens pause; closes and panics never do", _cooldown,
+         reason="cooldown"),
     Rule("order_rate", "Order spacing", "risk", "auto",
          "a minimum gap between orders, so one twitch is not two fires", _order_rate,
          reason="rate_limited"),

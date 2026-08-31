@@ -83,6 +83,16 @@ export class GameAgent {
     return this.options.lotSteps ?? DEFAULT_LOT_STEPS;
   }
 
+  /**
+   * Phase 9's friction, as a parameter of the fire predicate.
+   *
+   * Tilt changes exactly this and whether the server accepts an open. The FSM gains no state, so
+   * `fsm.test.ts` stays valid unchanged.
+   */
+  setConfirmHoldMs(ms: number): void {
+    this.options.confirmHoldMs = ms;
+  }
+
   /** One pad frame. Called from the rAF poller; it never renders anything itself. */
   onFrame(frame: RawFrame): void {
     this.padConnected = frame.input.padConnected;

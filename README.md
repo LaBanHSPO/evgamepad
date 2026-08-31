@@ -186,15 +186,15 @@ acceptance gates follow migration, navigation, and evidence contracts from `1` t
 
 | # | Phase | Effort | Status |
 |---|-------|--------|--------|
-| 1 | [Repo, protocol, Docker config](./plans/260824-1506-evening-forex-gold-gamepad/phase-01-repo-protocol-docker-config.md) | 12h | Pending |
-| 2 | [cTrader exec and socket gateway](./plans/260824-1506-evening-forex-gold-gamepad/phase-02-ctrader-exec-and-socket-gateway.md) | 22h | Pending |
-| 3 | [Web game and 8BitDo client agent](./plans/260824-1506-evening-forex-gold-gamepad/phase-03-web-game-and-8bitdo-client-agent.md) | 18h | Pending |
-| 4 | [AI desk: sentinel, news, Volman, advise](./plans/260824-1506-evening-forex-gold-gamepad/phase-04-ai-desk-sentinel-news-volman.md) | 18h | Pending |
-| 5 | [Ubuntu Docker deploy](./plans/260824-1506-evening-forex-gold-gamepad/phase-05-ubuntu-docker-deploy.md) | 7h | Pending |
-| 6 | [Performance and psychology deck](./plans/260824-1506-evening-forex-gold-gamepad/phase-06-performance-and-psychology-deck.md) | 14h | Pending |
-| 7 | [Playbook, rule registry, trade grading](./plans/260824-1506-evening-forex-gold-gamepad/phase-07-playbook-and-trade-grading.md) | 12h | Pending |
-| 8 | [Voice: capture, whisper.cpp, coach](./plans/260824-1506-evening-forex-gold-gamepad/phase-08-voice-capture-whisper-and-coach.md) | 14h | Pending |
-| 9 | [Tilt telemetry and adaptive friction](./plans/260824-1506-evening-forex-gold-gamepad/phase-09-tilt-telemetry-and-adaptive-friction.md) | 10h | Pending |
+| 1 | [Repo, protocol, Docker config](./plans/260824-1506-evening-forex-gold-gamepad/phase-01-repo-protocol-docker-config.md) | 12h | Built |
+| 2 | [cTrader exec and socket gateway](./plans/260824-1506-evening-forex-gold-gamepad/phase-02-ctrader-exec-and-socket-gateway.md) | 22h | Built |
+| 3 | [Web game and 8BitDo client agent](./plans/260824-1506-evening-forex-gold-gamepad/phase-03-web-game-and-8bitdo-client-agent.md) | 18h | Built |
+| 4 | [AI desk: sentinel, news, Volman, advise](./plans/260824-1506-evening-forex-gold-gamepad/phase-04-ai-desk-sentinel-news-volman.md) | 18h | Built |
+| 5 | [Ubuntu Docker deploy](./plans/260824-1506-evening-forex-gold-gamepad/phase-05-ubuntu-docker-deploy.md) | 7h | Pending — needs the VPS |
+| 6 | [Performance and psychology deck](./plans/260824-1506-evening-forex-gold-gamepad/phase-06-performance-and-psychology-deck.md) | 14h | Built |
+| 7 | [Playbook, rule registry, trade grading](./plans/260824-1506-evening-forex-gold-gamepad/phase-07-playbook-and-trade-grading.md) | 12h | Built |
+| 8 | [Voice: capture, whisper.cpp, coach](./plans/260824-1506-evening-forex-gold-gamepad/phase-08-voice-capture-whisper-and-coach.md) | 14h | Deferred |
+| 9 | [Tilt telemetry and adaptive friction](./plans/260824-1506-evening-forex-gold-gamepad/phase-09-tilt-telemetry-and-adaptive-friction.md) | 10h | Built |
 | 10 | [Trade replay](./plans/260824-1506-evening-forex-gold-gamepad/phase-10-trade-replay.md) | 12h | Pending |
 | 11 | [Process Score and radar deck](./plans/260824-1506-evening-forex-gold-gamepad/phase-11-process-score-and-radar-deck.md) | 8h | Pending |
 | 12 | [Daily journal cockpit and preparation](./plans/260824-1506-evening-forex-gold-gamepad/phase-12-daily-journal-cockpit-and-preparation.md) | 24h | Pending |
@@ -366,6 +366,64 @@ the process with them. It cannot see a balance, and it still has no order tool.
 
 Process framing after Brett Steenbarger (*The Daily Trading Coach*, *Trading Psychology 2.0*,
 *Enhancing Trader Performance*) — cited, not reproduced.
+
+## Tilt: what it measures, and what it cannot do
+
+Edgewonk asks you to rate your emotional state after the fact. The pad is already telling us. Every
+component of the tilt score is a **measured behaviour** with a name, never an inferred feeling,
+which is why the HUD can always say *why* instead of just showing a colour:
+
+| Component | What it measures | Weight |
+|---|---|---|
+| **Revenge size** | Pending lots against your own session median | 0.25 |
+| **Re-entry speed** | Seconds since a *losing* close — 1 under a minute, 0 by ten | 0.20 |
+| **Rule-break recency** | Adherence failures in your last three fires | 0.20 |
+| **Hesitation** | Clutch cycles before each arm, over the last three | 0.10 |
+| **Arm flip** | Side changes while armed | 0.10 |
+| **Input aggression** | Button rate against your own session median | 0.10 |
+| **Voice arousal** | Speech rate and loudness against your own 30-session baseline | 0.05 |
+
+Everything compares you to **you**. There is no population claim anywhere in the number, and a
+component that was not measured drops out and the rest renormalise — an evening without a voice
+memo is scored on behaviour alone, not on a guess.
+
+What the bands do:
+
+| Band | HUD | What changes about firing |
+|---|---|---|
+| `< 0.35` calm | green pip | nothing |
+| `0.35` warm | amber pip, top driver named | **nothing** — a warning that costs nothing is one you keep listening to |
+| `0.60` hot | red pip, driver + the evening's R in the confirm overlay, one desk advice | ARM → FIRE needs the confirm **held 750 ms** instead of a tap |
+| `0.80` scorched | countdown and a prompt to log a memo | opens paused for 300 s |
+
+Narrating the state is the intervention, so a memo recorded during a cooldown — or an explicit
+acknowledgement — **halves the recency terms**. The productive way out is rewarded; the door is not
+merely locked.
+
+What tilt cannot do, structurally rather than by convention:
+
+- **It cannot slow or block an exit.** `intent.close`, `intent.panic`, the HUD Flatten button and
+  `session.lock` run no gates at all. `tilt.gate_close: true` refuses to boot, and a test forces the
+  score to 1.0 and asserts a close and a panic both still execute.
+- **It cannot reach the Process Score.** Taxing an evening for a bad ten minutes would reintroduce
+  the punishment this whole design exists to avoid. A test greps the deck's metrics module for the
+  word.
+- **It cannot move the FSM.** It changes exactly two things: the `confirmHoldMs` parameter of the
+  existing fire predicate, and whether the server accepts an open. The pad's state machine is
+  byte-identical with tilt on or off.
+- **It cannot classify you.** No keyword scoring, no profanity detection, no affect model, no LLM
+  anywhere in the score. Voice contributes two arithmetic deviations from your own baseline, capped
+  at 5%, and is designed to be deleted rather than defended if a month of data does not support it.
+- **It cannot trap you.** The cooldown **fails open** — deliberately the opposite of the dead-man.
+  An unusable clock or a lost cooldown allows trading, because the dead-man is about unattended
+  input and this is a judgement call.
+- **It cannot become a trait.** Tilt is per-session state plus `tilt_sample` rows for the deck's
+  retrospective. Nothing is persisted about you, only about an evening.
+- **`tilt.enabled: false` removes it entirely** — the gate, the friction, the pip, and the desk's
+  `get_tilt` tool with it.
+
+The desk sees the band, the score, and the driver sentences already on your screen. It never sees a
+component value or a pad frame.
 
 ## Non-goals
 
