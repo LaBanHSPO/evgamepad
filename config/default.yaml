@@ -1,0 +1,125 @@
+# Evening Forex Gold Gamepad — gateway config.
+# Every commented "exits" below is a boot-fail in apps/gateway/config.py, not a preference.
+# Secrets never live here; they arrive via env (see .env.example).
+
+mode: demo                    # demo only; live = exit
+timezone: "Asia/Ho_Chi_Minh"  # IANA required; "local" = exit
+
+paths:
+  data_dir: "/data"           # journal.db, voice/, models/, secure/ — one volume, one backup root
+
+broker:
+  adapter: ctrader            # only value
+  host: "demo.ctraderapi.com" # live.ctraderapi.com = exit
+  port: 5035
+  proto: protobuf
+  account_id_env: CT_ACCOUNT_ID
+  token_env: CT_ACCESS_TOKEN
+  refresh_env: CT_REFRESH_TOKEN
+  client_id_env: CT_CLIENT_ID
+  client_secret_env: CT_CLIENT_SECRET
+
+symbols:
+  - name: XAUUSD
+    max_spread: 0.80
+    max_lots: 0.10
+    default_lots: 0.01
+    lot_step: 0.01
+  - name: EURUSD
+    max_lots: 0.50
+    default_lots: 0.10
+    lot_step: 0.01
+  - name: GBPUSD
+    max_lots: 0.50
+    default_lots: 0.10
+    lot_step: 0.01
+  - name: USDJPY
+    max_lots: 0.50
+    default_lots: 0.10
+    lot_step: 0.01
+
+session:
+  days: [sun, mon, tue, wed, thu, fri]
+  start: "18:00"
+  end: "23:30"
+
+risk:
+  max_positions: 1
+  max_daily_loss_usd: 200
+  min_seconds_between_orders: 2
+  panic_flatten_on_disconnect: false
+  r_unit_usd: 20              # R when no SL at entry; see phase 2 for the single R definition
+  default_stop:               # per-symbol, price units
+    XAUUSD: 2.00
+    EURUSD: 0.0010
+    GBPUSD: 0.0012
+    USDJPY: 0.15
+
+gateway:
+  listen: "127.0.0.1:8444"    # non-loopback exits unless EV_DEV=1 or EV_CONTAINER_BIND=1
+  static_dir: "app/dist"      # gateway serves the HUD build itself
+  ws_path: "/ws"              # same origin as the HUD
+  public_origin: "https://YOUR_DOMAIN"
+  token_env: EV_WS_TOKEN
+  heartbeat_s: 1
+  heartbeat_dead_s: 3
+  max_frame_bytes: 65536      # must equal protocol v1's cap
+
+ui:
+  theme: dark                 # the only supported theme in v1
+  desktop_only: true
+
+voice:                        # phase 8
+  enabled: true
+  stt:
+    mode: local               # local | off — anything else exits; there is no cloud path
+    model: small.en           # boot benchmark may downgrade: small -> base -> tiny -> disabled
+    lang: en
+  bindings: ["LB+RB", "key:V"]  # exits if this resolves to LT/RT/A/B/X/Y
+  hold_stream: true           # keeps the tab recording indicator lit; false costs 200-400ms/press
+  max_seconds: 60
+  max_bytes: 262144
+  max_uploads_per_hour: 60
+  stt_timeout_s: 60
+  audio_retention_days: 365   # transcripts kept indefinitely
+  tts: "off"                  # off | browser — quoted: bare `off` is YAML boolean false
+
+tape:                         # phase 2 records, phase 10 replays
+  dt_s: 1                     # 1 Hz bid+ask OHLC
+  ring_minutes: 90
+  pre_roll_s: 300
+  post_roll_s: 300
+  retention_days: 730
+
+tilt:                         # phase 9
+  enabled: true
+  gate_close: false           # true exits: tilt may never gate a close or a panic
+  warm: 0.35
+  hot: 0.60
+  scorched: 0.80
+  confirm_hold_ms: 750        # friction 1, applied to opens only
+  cooldown_s: 300             # friction 2, opens only, fails open on reconnect
+
+score:                        # phase 11
+  trades_max: 6
+  band_width: 1
+  decline_credit_max: 15
+  weights:                    # must sum to 1.0 or the process exits
+    adherence: 0.30
+    selectivity: 0.25
+    risk_discipline: 0.20
+    preparation: 0.15
+    review: 0.10
+
+playbook:                     # phase 7
+  seed_volman: true
+  allow_custom: true
+
+copilot:                      # phase 4
+  enabled: true
+  on_hot_path: false          # true exits: the desk may never sit on the order path
+
+tradingview:                  # phase 4
+  enabled: false
+  auto_trade: false           # true exits: a webhook may never place an order
+  webhook_secret_env: TV_WEBHOOK_SECRET

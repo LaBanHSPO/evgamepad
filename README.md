@@ -20,7 +20,8 @@ backup, restore, and deliberate deletion.
 > **The end goal is confidence and enjoyment — improving decision quality, not the money.**
 > Demo only. Not advice. Entertainment, not alpha.
 
-**Status:** planning complete, implementation not started. The authority for everything below is
+**Status:** phase 1 landed — repo, frozen protocol, config boot-fails, migration runner, single
+gateway image. Phases 2–14 not started; no order can be placed yet. The authority for everything below is
 [`plans/260824-1506-evening-forex-gold-gamepad/plan.md`](./plans/260824-1506-evening-forex-gold-gamepad/plan.md).
 
 ---
@@ -180,34 +181,44 @@ acceptance gates follow migration, navigation, and evidence contracts from `1` t
 
 Total: 203h ≈ 26 working days.
 
-## Planned repo layout
+## Repo layout
 
 ```text
+app/              React PWA (Vite), built and served by the gateway. Node is
+                  build-time only.
+  src/protocol/   GENERATED from the gateway catalog — schema.json + types.ts
+  scripts/        check-protocol-types.mjs — fails the build on type drift
 apps/
-  web/            React PWA (Vite + TanStack Router/Query), built to dist/ and
-                  served by the gateway. Node is build-time only.
   gateway/        Python — one process, one container:
-    protocol/     Frozen v1 envelope + Pydantic message catalog
-    broker/       cTrader Open API via ctrader-open-api (OpenApiPy/Twisted)
-    risk/         cid reserve, limits, dead-man, session lock
-    method/       Rule registry (risk + playbook), Volman method profile
+    protocol/     Frozen v1 envelope + Pydantic message catalog (phase 1)
+    broker/       cTrader Open API via ctrader-open-api — stub until phase 2
+    risk/         cid reserve, limits, dead-man, session lock (phase 2)
+    method/       Rule registry (risk + playbook), Volman method profile (phase 4/7)
     copilot/      AI desk worker task (read-only tools, never on the hot path)
     journal/      SQLite writes, tape, replay, score
     api/          WS /ws, REST /api/*, static HUD
+    db/           migrate.py + versioned migrations/
 config/           default.yaml
-deploy/           fetch-models.sh, compose glue
+deploy/           fetch-models.sh, reverse-proxy notes
 docs/             release checklist and verified operating decisions
 plans/            Plan of record, phase files, research, journals
 ```
 
+**Where the journal lives.** One Docker volume, `ev-journal`, mounted at `/data`:
+`/data/journal.db` (SQLite — trades, plans, grades, tilt samples, scores), `/data/voice/` (memo
+audio), `/data/models/` (whisper `small.en`), `/data/secure/` (refreshed cTrader tokens, `0600`).
+One volume means one backup root; nothing durable lives in the image, the repo, or the browser.
+
 ## Getting started
 
-Nothing is implemented yet — phase 1 scaffolds the workspace. Once it lands the setup is:
+Phase 1 has landed: the protocol is frozen, the config boot-fails, the migration runner works, and
+the gateway answers `/healthz`. The broker is a stub that refuses every order until phase 2, so
+nothing can be traded yet.
 
 **Prerequisites**
 
 - Ubuntu VPS, 4+ vCPU / 4 GB+ RAM, Docker + Compose, existing TLS on :443
-- Python 3.11+ with `uv`; Node + pnpm for the web build only
+- Python 3.11+ with `uv`; Node 22 for the web build only
 - Chrome on the desktop, 8BitDo Ultimate 2 with its 2.4G dongle
 - A cTrader ID with an **IC Markets demo** account
 
@@ -227,16 +238,44 @@ into an image, exported, or included in backups.
 **Run**
 
 ```bash
-uv sync                   # gateway deps, including ctrader-open-api
-uv run pytest             # protocol round-trips, risk rules, volume conversion
-pnpm -C apps/web install
-pnpm -C apps/web build    # emits apps/web/dist, baked into the gateway image
+cd apps/gateway
+uv sync                   # gateway deps
+uv run pytest             # protocol round-trips, config boot-fails, migrations
+uv run ruff check .
+cd ../..
+
+npm --prefix app ci
+npm --prefix app run build   # checks generated protocol types, then builds the HUD bundle
+
+cp .env.example .env      # then fill in the cTrader credentials above
 docker compose build
 docker compose up -d      # ev-gateway on 127.0.0.1:8444 — the only service
+curl -s http://127.0.0.1:8444/healthz
 ```
 
 Then open `https://YOUR_DOMAIN` in a focused Chrome tab, connect the pad, and the HUD and socket come
 from the same origin.
+
+**Protocol types are generated, never hand-written.** The Pydantic catalog in
+`apps/gateway/protocol/` is the single source of truth; `app/src/protocol/schema.json` and
+`types.ts` are built from it:
+
+```bash
+cd apps/gateway && uv run python -m protocol.export_ts          # regenerate
+cd apps/gateway && uv run python -m protocol.export_ts --check  # fail if stale
+```
+
+Three gates catch drift: `uv run pytest`, `npm --prefix app run build`, and the image build itself.
+
+**Local dev without Docker.** The gateway refuses a non-loopback bind unless `EV_DEV=1` (your own
+machine) or `EV_CONTAINER_BIND=1` (inside the container, where Docker publishes the port to host
+loopback only). `EV_DATA_DIR` moves the whole volume — DB, voice, models, tokens — somewhere
+writable:
+
+```bash
+cd apps/gateway
+EV_CONFIG=../../config/default.yaml EV_DATA_DIR=../../data uv run python main.py
+```
 
 ## Non-goals
 

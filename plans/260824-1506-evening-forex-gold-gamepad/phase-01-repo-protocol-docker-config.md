@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Repo, protocol, Docker config"
-status: todo
+status: in-progress
 phase: 1
 priority: P1
 effort: 12h
@@ -240,33 +240,64 @@ Volume in cTrader is **not lots**. The broker module converts HUD lots → proto
 
 ## Todo
 
-- [ ] `uv` project + protocol tests
-- [ ] Broker module interface (in-process, no wire protocol)
-- [ ] JSON Schema export + generated TS types for the web
-- [ ] Versioned migration runner with per-id tracking
-- [ ] Config boot-fails (live, local TZ, auto_trade, 0.0.0.0)
+- [x] `uv` project + protocol tests
+- [x] Broker module interface (in-process, no wire protocol)
+- [x] JSON Schema export + generated TS types for the web
+- [x] Versioned migration runner with per-id tracking
+- [x] Config boot-fails (live, local TZ, auto_trade, 0.0.0.0)
 - [ ] Single gateway Dockerfile with the web build stage
 - [ ] compose.yaml skeleton, one service, real build context
-- [ ] Journal-layer messages + `voice` channel in the frozen catalog for phases 7–14
-- [ ] Journal-layer config blocks (`voice`, `tape`, `tilt`, `score`, `playbook`, `risk.r_unit_usd`)
-- [ ] Boot-fails: stt mode, voice bindings, `tilt.gate_close`, score weights
+- [x] Journal-layer messages + `voice` channel in the frozen catalog for phases 7–14
+- [x] Journal-layer config blocks (`voice`, `tape`, `tilt`, `score`, `playbook`, `risk.r_unit_usd`)
+- [x] Boot-fails: stt mode, voice bindings, `tilt.gate_close`, score weights
 - [ ] `ffmpeg` + `whisper-cli` + baked tiny.en in the gateway image; `deploy/fetch-models.sh`
-- [ ] README: cTrader ID -> IC Markets demo -> Open API app -> manual token paste
+- [x] README: cTrader ID -> IC Markets demo -> Open API app -> manual token paste
 
 ## Success Criteria
 
-- [ ] `uv run pytest` protocol round-trips
-- [ ] `mode: live` or `host: live.ctraderapi.com` exits non-zero
+- [x] `uv run pytest` protocol round-trips
+- [x] `mode: live` or `host: live.ctraderapi.com` exits non-zero
 - [ ] `docker compose build` succeeds for the single gateway image
 - [ ] `docker compose config` validates with a real `build:` context, not a placeholder, and lists
       **one** service
-- [ ] Generated TS types match the exported JSON Schema; a deliberate catalog change fails the web
+- [x] Generated TS types match the exported JSON Schema; a deliberate catalog change fails the web
       build until the types are regenerated
-- [ ] Fresh DB applies an ordered migration fixture once; a second run is a no-op and a failed
+- [x] Fresh DB applies an ordered migration fixture once; a second run is a no-op and a failed
       migration rolls back without being marked applied
-- [ ] `voice.stt.mode: cloud`, `voice.bindings: [RT]`, `tilt.gate_close: true`, and score weights
+- [x] `voice.stt.mode: cloud`, `voice.bindings: [RT]`, `tilt.gate_close: true`, and score weights
       summing to 0.95 each exit non-zero
 - [ ] `whisper-cli --help` and `ffmpeg -version` succeed inside the built gateway image
+
+## Verification Status
+
+Verified on this machine (`uv run pytest`: 40 passed; `ruff check`: clean; `npm --prefix app run
+build`: passes through the protocol gate; gateway boots, serves `/healthz` and the HUD, and creates
+`journal.db` at the configured data dir). Each of the nine boot-fails was also run as a real
+process and exits `2`.
+
+Not verifiable here — no Docker daemon in this environment. Run on the VPS before closing the phase:
+
+- `docker compose config` lists exactly one service with a real build context
+- `docker compose build` succeeds for the single gateway image
+- `whisper-cli --help` and `ffmpeg -version` succeed inside the built image
+- the `WHISPER_REF` build arg pins a tag that still exists upstream (default `v1.7.4` is unverified
+  from here; GitHub was unreachable in this session)
+
+### Deviations from this phase as written
+
+- **No `apps/web` stub.** `app/` already holds 21 built screens; a second React scaffold would have
+  duplicated it. `gateway.static_dir` points at the existing app's build output instead. TanStack
+  Router and the PWA manifest are therefore still unstarted — they belong to phase 3, which owns
+  the client agent anyway.
+- **`EV_CONTAINER_BIND` and `EV_LISTEN`.** The phase requires both a loopback bind and a Docker
+  port publish, which cannot both hold: Docker only forwards a published port to a process bound
+  on the container's `0.0.0.0`. The bind guard now accepts a non-loopback listen only when
+  `EV_DEV=1` or `EV_CONTAINER_BIND=1` is set, so the loopback guarantee moves to the publish
+  (`127.0.0.1:8444:8444`) plus the host firewall. A test asserts the override cannot bypass it.
+- **`paths.data_dir`.** The phase never named the journal's path. One volume root at `/data`
+  (`journal.db`, `voice/`, `models/`, `secure/`), overridable with `EV_DATA_DIR`.
+- **ASGI stack, ULID, and YAML libraries** were unnamed in the plan: FastAPI + uvicorn,
+  `python-ulid`, `PyYAML`.
 
 ## Risk Assessment
 

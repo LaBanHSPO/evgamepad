@@ -1,0 +1,1787 @@
+{
+  "channels": [
+    "quotes",
+    "orders",
+    "session",
+    "ai",
+    "voice"
+  ],
+  "envelope": {
+    "additionalProperties": false,
+    "description": "The only frame shape on the wire.\n\n`cid` is the client's idempotency key: the same `cid` replayed after a reconnect must not\nplace a second order. `seq` is per-connection and monotonic, so `hello`/`lastSeq` can resync.",
+    "properties": {
+      "ch": {
+        "description": "Channel this message rides",
+        "enum": [
+          "quotes",
+          "orders",
+          "session",
+          "ai",
+          "voice"
+        ],
+        "title": "Ch",
+        "type": "string"
+      },
+      "cid": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "ULID idempotency key",
+        "title": "Cid"
+      },
+      "p": {
+        "additionalProperties": true,
+        "description": "Message payload",
+        "title": "P",
+        "type": "object"
+      },
+      "seq": {
+        "description": "Per-connection monotonic sequence",
+        "minimum": 0,
+        "title": "Seq",
+        "type": "integer"
+      },
+      "t": {
+        "description": "Message type, e.g. `intent.open`",
+        "title": "T",
+        "type": "string"
+      },
+      "ts": {
+        "description": "Unix milliseconds at send",
+        "minimum": 0,
+        "title": "Ts",
+        "type": "integer"
+      },
+      "v": {
+        "default": 1,
+        "description": "Protocol version",
+        "title": "V",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "t",
+      "seq",
+      "ts",
+      "ch"
+    ],
+    "title": "Envelope",
+    "type": "object"
+  },
+  "maxFrameBytes": 65536,
+  "messages": {
+    "ai.advice": {
+      "ch": "ai",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Desk answer. Advisory only \u2014 it holds no order tool.",
+        "properties": {
+          "cid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cid"
+          },
+          "citations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "research",
+              "plan",
+              "advise",
+              "news",
+              "coach"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "ts": {
+            "minimum": 0,
+            "title": "Ts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "text",
+          "ts"
+        ],
+        "title": "AiAdvice",
+        "type": "object"
+      }
+    },
+    "ai.ask": {
+      "ch": "ai",
+      "direction": "c2s",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Desk request. Off the order hot path, always.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "research",
+              "plan",
+              "advise",
+              "news",
+              "coach"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "sym": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sym"
+          },
+          "tf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tf"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "AiAsk",
+        "type": "object"
+      }
+    },
+    "candle": {
+      "ch": "quotes",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "M5 trendbar.",
+        "properties": {
+          "c": {
+            "title": "C",
+            "type": "number"
+          },
+          "h": {
+            "title": "H",
+            "type": "number"
+          },
+          "l": {
+            "title": "L",
+            "type": "number"
+          },
+          "o": {
+            "title": "O",
+            "type": "number"
+          },
+          "sym": {
+            "title": "Sym",
+            "type": "string"
+          },
+          "tf": {
+            "title": "Tf",
+            "type": "string"
+          },
+          "ts": {
+            "minimum": 0,
+            "title": "Ts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sym",
+          "tf",
+          "o",
+          "h",
+          "l",
+          "c",
+          "ts"
+        ],
+        "title": "Candle",
+        "type": "object"
+      }
+    },
+    "error": {
+      "ch": "session",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Protocol or handler failure the client should surface, not swallow.",
+        "properties": {
+          "cid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cid"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorMsg",
+        "type": "object"
+      }
+    },
+    "grade": {
+      "ch": "session",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Playbook grading for one fire. Graded after the fact; it never blocks the fire.",
+        "properties": {
+          "cid": {
+            "title": "Cid",
+            "type": "string"
+          },
+          "clean": {
+            "title": "Clean",
+            "type": "boolean"
+          },
+          "playbookId": {
+            "title": "Playbookid",
+            "type": "string"
+          },
+          "required_pass": {
+            "minimum": 0,
+            "title": "Required Pass",
+            "type": "integer"
+          },
+          "required_total": {
+            "minimum": 0,
+            "title": "Required Total",
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "cid",
+          "playbookId",
+          "required_pass",
+          "required_total",
+          "clean"
+        ],
+        "title": "Grade",
+        "type": "object"
+      }
+    },
+    "grade.answer": {
+      "ch": "session",
+      "direction": "c2s",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Player's answer to one playbook grading question.",
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "boolean"
+          },
+          "cid": {
+            "title": "Cid",
+            "type": "string"
+          },
+          "ruleId": {
+            "title": "Ruleid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cid",
+          "ruleId",
+          "answer"
+        ],
+        "title": "GradeAnswer",
+        "type": "object"
+      }
+    },
+    "hello": {
+      "ch": "session",
+      "direction": "c2s",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Opens a socket. `lastSeq` asks the gateway to replay from where the client dropped.",
+        "properties": {
+          "clientVersion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Clientversion"
+          },
+          "lastSeq": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Lastseq"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "Hello",
+        "type": "object"
+      }
+    },
+    "intent.close": {
+      "ch": "orders",
+      "direction": "c2s",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Full close. Never gated by tilt, cooldown, or any open-only rule.",
+        "properties": {
+          "armedAt": {
+            "minimum": 0,
+            "title": "Armedat",
+            "type": "integer"
+          },
+          "clutch": {
+            "const": true,
+            "title": "Clutch",
+            "type": "boolean"
+          },
+          "positionId": {
+            "title": "Positionid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "positionId",
+          "clutch",
+          "armedAt"
+        ],
+        "title": "IntentClose",
+        "type": "object"
+      }
+    },
+    "intent.modify": {
+      "ch": "orders",
+      "direction": "c2s",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Absolute SL/TP on an existing position \u2014 broker-changing, so same clutch+confirm gate.",
+        "properties": {
+          "armedAt": {
+            "minimum": 0,
+            "title": "Armedat",
+            "type": "integer"
+          },
+          "clutch": {
+            "const": true,
+            "title": "Clutch",
+            "type": "boolean"
+          },
+          "positionId": {
+            "title": "Positionid",
+            "type": "integer"
+          },
+          "sl": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sl"
+          },
+          "tp": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tp"
+          }
+        },
+        "required": [
+          "positionId",
+          "clutch",
+          "armedAt"
+        ],
+        "title": "IntentModify",
+        "type": "object"
+      }
+    },
+    "intent.open": {
+      "ch": "orders",
+      "direction": "c2s",
+      "payload": {
+        "additionalProperties": false,
+        "description": "MARKET open. Protection is *relative* \u2014 cTrader rejects absolute SL/TP on market orders.",
+        "properties": {
+          "armedAt": {
+            "description": "Unix ms the pad reached ARM",
+            "minimum": 0,
+            "title": "Armedat",
+            "type": "integer"
+          },
+          "clutch": {
+            "const": true,
+            "title": "Clutch",
+            "type": "boolean"
+          },
+          "lots": {
+            "exclusiveMinimum": 0,
+            "title": "Lots",
+            "type": "number"
+          },
+          "relativeSl": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "1/100000 price distance",
+            "title": "Relativesl"
+          },
+          "relativeTp": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "1/100000 price distance",
+            "title": "Relativetp"
+          },
+          "side": {
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "sym": {
+            "title": "Sym",
+            "type": "string"
+          },
+          "type": {
+            "const": "market",
+            "default": "market",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sym",
+          "side",
+          "lots",
+          "clutch",
+          "armedAt"
+        ],
+        "title": "IntentOpen",
+        "type": "object"
+      }
+    },
+    "intent.panic": {
+      "ch": "orders",
+      "direction": "c2s",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Flatten everything. Exempt from every open-only gate, by design and by test.",
+        "properties": {
+          "armedAt": {
+            "minimum": 0,
+            "title": "Armedat",
+            "type": "integer"
+          },
+          "clutch": {
+            "const": true,
+            "title": "Clutch",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "clutch",
+          "armedAt"
+        ],
+        "title": "IntentPanic",
+        "type": "object"
+      }
+    },
+    "journal.memo.link": {
+      "ch": "voice",
+      "direction": "c2s",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Attach a finished memo to a trade after the fact.",
+        "properties": {
+          "cid": {
+            "title": "Cid",
+            "type": "string"
+          },
+          "voiceId": {
+            "title": "Voiceid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "voiceId",
+          "cid"
+        ],
+        "title": "JournalMemoLink",
+        "type": "object"
+      }
+    },
+    "maint": {
+      "ch": "session",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Broker or gateway maintenance window; the HUD stops offering opens.",
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Note"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Until"
+          }
+        },
+        "required": [
+          "active"
+        ],
+        "title": "Maint",
+        "type": "object"
+      }
+    },
+    "news.item": {
+      "ch": "ai",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Cited headline from the allowlisted domains. Rendered as text, never as raw HTML.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "ts": {
+            "minimum": 0,
+            "title": "Ts",
+            "type": "integer"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "url",
+          "source",
+          "ts"
+        ],
+        "title": "NewsItem",
+        "type": "object"
+      }
+    },
+    "order.ack": {
+      "ch": "orders",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Broker accepted the intent carrying this `cid`.",
+        "properties": {
+          "cid": {
+            "title": "Cid",
+            "type": "string"
+          },
+          "lots": {
+            "title": "Lots",
+            "type": "number"
+          },
+          "orderId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Orderid"
+          },
+          "positionId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Positionid"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Price"
+          },
+          "side": {
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "sym": {
+            "title": "Sym",
+            "type": "string"
+          },
+          "ts": {
+            "minimum": 0,
+            "title": "Ts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cid",
+          "sym",
+          "side",
+          "lots",
+          "ts"
+        ],
+        "title": "OrderAck",
+        "type": "object"
+      }
+    },
+    "order.reject": {
+      "ch": "orders",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Refused by risk or by the broker. `cooldown` is reserved for phase 9.",
+        "properties": {
+          "cid": {
+            "title": "Cid",
+            "type": "string"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Detail"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "ts": {
+            "minimum": 0,
+            "title": "Ts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cid",
+          "reason",
+          "ts"
+        ],
+        "title": "OrderReject",
+        "type": "object"
+      }
+    },
+    "order.upd": {
+      "ch": "orders",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Lifecycle update on a known order: partial fill, amendment, close.",
+        "properties": {
+          "cid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cid"
+          },
+          "orderId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Orderid"
+          },
+          "positionId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Positionid"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "ts": {
+            "minimum": 0,
+            "title": "Ts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "state",
+          "ts"
+        ],
+        "title": "OrderUpd",
+        "type": "object"
+      }
+    },
+    "pad.telemetry": {
+      "ch": "session",
+      "direction": "c2s",
+      "payload": {
+        "additionalProperties": false,
+        "description": "1 Hz batch, never per-frame. An idle heartbeat still reports the FSM state pair.",
+        "properties": {
+          "armFlips": {
+            "minimum": 0,
+            "title": "Armflips",
+            "type": "integer"
+          },
+          "armMs": {
+            "minimum": 0,
+            "title": "Armms",
+            "type": "integer"
+          },
+          "btnRateHz": {
+            "minimum": 0,
+            "title": "Btnratehz",
+            "type": "number"
+          },
+          "clutchCycles": {
+            "minimum": 0,
+            "title": "Clutchcycles",
+            "type": "integer"
+          },
+          "clutchMs": {
+            "minimum": 0,
+            "title": "Clutchms",
+            "type": "integer"
+          },
+          "from": {
+            "title": "From",
+            "type": "string"
+          },
+          "lotStepsSince": {
+            "minimum": 0,
+            "title": "Lotstepssince",
+            "type": "integer"
+          },
+          "lots": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Lots"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "sym": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sym"
+          },
+          "to": {
+            "title": "To",
+            "type": "string"
+          },
+          "ts": {
+            "minimum": 0,
+            "title": "Ts",
+            "type": "integer"
+          },
+          "ttfMs": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Time to fire, ARM -> FIRE",
+            "title": "Ttfms"
+          }
+        },
+        "required": [
+          "ts",
+          "from",
+          "to",
+          "clutchMs",
+          "armMs",
+          "clutchCycles",
+          "armFlips",
+          "btnRateHz",
+          "lotStepsSince"
+        ],
+        "title": "PadTelemetry",
+        "type": "object"
+      }
+    },
+    "ping": {
+      "ch": "session",
+      "direction": "c2s",
+      "payload": {
+        "additionalProperties": false,
+        "description": "1 Hz heartbeat. The clutch here is dead-man only \u2014 it can lock opens, never a close.",
+        "properties": {
+          "clutch": {
+            "title": "Clutch",
+            "type": "boolean"
+          },
+          "pad": {
+            "title": "Pad",
+            "type": "boolean"
+          },
+          "visible": {
+            "title": "Visible",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "visible",
+          "pad",
+          "clutch"
+        ],
+        "title": "Ping",
+        "type": "object"
+      }
+    },
+    "playbook.list": {
+      "ch": "session",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Available setups, seeded from the Volman profile plus any custom ones.",
+        "properties": {
+          "playbooks": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Playbooks",
+            "type": "array"
+          }
+        },
+        "title": "PlaybookList",
+        "type": "object"
+      }
+    },
+    "playbook.select": {
+      "ch": "session",
+      "direction": "c2s",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Choose the setup being traded, before the fire.",
+        "properties": {
+          "cid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cid"
+          },
+          "playbookId": {
+            "title": "Playbookid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "playbookId"
+        ],
+        "title": "PlaybookSelect",
+        "type": "object"
+      }
+    },
+    "pnl": {
+      "ch": "session",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Account figures pulled from the broker, never re-derived from summed fills.",
+        "properties": {
+          "balance": {
+            "title": "Balance",
+            "type": "number"
+          },
+          "dayPnl": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Daypnl"
+          },
+          "equity": {
+            "title": "Equity",
+            "type": "number"
+          },
+          "openPnl": {
+            "title": "Openpnl",
+            "type": "number"
+          },
+          "ts": {
+            "minimum": 0,
+            "title": "Ts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "balance",
+          "equity",
+          "openPnl",
+          "ts"
+        ],
+        "title": "Pnl",
+        "type": "object"
+      }
+    },
+    "pong": {
+      "ch": "session",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Heartbeat reply. Round-trip feeds the HUD's link indicator.",
+        "properties": {
+          "ts": {
+            "minimum": 0,
+            "title": "Ts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ts"
+        ],
+        "title": "Pong",
+        "type": "object"
+      }
+    },
+    "pos.snap": {
+      "ch": "orders",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Authoritative position list. cTrader is the source of truth, not local accounting.",
+        "properties": {
+          "positions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Positions",
+            "type": "array"
+          },
+          "ts": {
+            "minimum": 0,
+            "title": "Ts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ts"
+        ],
+        "title": "PosSnap",
+        "type": "object"
+      }
+    },
+    "quote": {
+      "ch": "quotes",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Conflated bid/ask, 10-20 Hz. Sourced from cTrader spots, never synthesised.",
+        "properties": {
+          "ask": {
+            "title": "Ask",
+            "type": "number"
+          },
+          "bid": {
+            "title": "Bid",
+            "type": "number"
+          },
+          "sym": {
+            "title": "Sym",
+            "type": "string"
+          },
+          "ts": {
+            "minimum": 0,
+            "title": "Ts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sym",
+          "bid",
+          "ask",
+          "ts"
+        ],
+        "title": "Quote",
+        "type": "object"
+      }
+    },
+    "resync": {
+      "ch": "session",
+      "direction": "c2s",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Ask for missed frames after a reconnect.",
+        "properties": {
+          "lastSeq": {
+            "minimum": 0,
+            "title": "Lastseq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "lastSeq"
+        ],
+        "title": "Resync",
+        "type": "object"
+      }
+    },
+    "risk": {
+      "ch": "session",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Live view of the enforced gates, so the HUD can grey a control before it is pressed.",
+        "properties": {
+          "blocked": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocked",
+            "type": "array"
+          },
+          "dayLossUsd": {
+            "title": "Daylossusd",
+            "type": "number"
+          },
+          "maxDayLossUsd": {
+            "title": "Maxdaylossusd",
+            "type": "number"
+          },
+          "maxLots": {
+            "title": "Maxlots",
+            "type": "number"
+          },
+          "maxPositions": {
+            "title": "Maxpositions",
+            "type": "integer"
+          },
+          "positions": {
+            "title": "Positions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "maxLots",
+          "maxPositions",
+          "positions",
+          "dayLossUsd",
+          "maxDayLossUsd"
+        ],
+        "title": "RiskState",
+        "type": "object"
+      }
+    },
+    "score.session": {
+      "ch": "session",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Process score. A vacuous axis lands in `na` and its weight is redistributed, not zeroed.",
+        "properties": {
+          "axes": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Axes",
+            "type": "object"
+          },
+          "na": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Na",
+            "type": "array"
+          },
+          "total": {
+            "maximum": 100,
+            "minimum": 0,
+            "title": "Total",
+            "type": "number"
+          },
+          "weightsVersion": {
+            "title": "Weightsversion",
+            "type": "string"
+          }
+        },
+        "required": [
+          "total",
+          "weightsVersion"
+        ],
+        "title": "ScoreSession",
+        "type": "object"
+      }
+    },
+    "sentinel.tick": {
+      "ch": "ai",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Cheap local market-state paint. Never waits on the AI provider.",
+        "properties": {
+          "spread": {
+            "title": "Spread",
+            "type": "number"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "sym": {
+            "title": "Sym",
+            "type": "string"
+          },
+          "ts": {
+            "minimum": 0,
+            "title": "Ts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sym",
+          "spread",
+          "state",
+          "ts"
+        ],
+        "title": "SentinelTick",
+        "type": "object"
+      }
+    },
+    "session": {
+      "ch": "session",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Trading window, lock state, and why the gateway is or is not accepting opens.",
+        "properties": {
+          "endsAt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Endsat"
+          },
+          "locked": {
+            "title": "Locked",
+            "type": "boolean"
+          },
+          "open": {
+            "title": "Open",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "startsAt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Startsat"
+          }
+        },
+        "required": [
+          "open",
+          "locked"
+        ],
+        "title": "SessionState",
+        "type": "object"
+      }
+    },
+    "session.lock": {
+      "ch": "session",
+      "direction": "c2s",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Player stands down for the evening.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          }
+        },
+        "title": "SessionLock",
+        "type": "object"
+      }
+    },
+    "session.unlock": {
+      "ch": "session",
+      "direction": "c2s",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Release a self-imposed lock.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          }
+        },
+        "title": "SessionUnlock",
+        "type": "object"
+      }
+    },
+    "signal.item": {
+      "ch": "ai",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Volman detector hit, or a TradingView webhook. `tv` can never auto-trade.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "volman",
+              "tv"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "sym": {
+            "title": "Sym",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "ts": {
+            "minimum": 0,
+            "title": "Ts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "sym",
+          "text",
+          "ts"
+        ],
+        "title": "SignalItem",
+        "type": "object"
+      }
+    },
+    "snap": {
+      "ch": "session",
+      "direction": "c2s",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Ask for a full state snapshot instead of a delta replay.",
+        "properties": {
+          "what": {
+            "default": "all",
+            "enum": [
+              "positions",
+              "session",
+              "all"
+            ],
+            "title": "What",
+            "type": "string"
+          }
+        },
+        "title": "Snap",
+        "type": "object"
+      }
+    },
+    "sub": {
+      "ch": "session",
+      "direction": "c2s",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Subscribe to symbols on a channel.",
+        "properties": {
+          "ch": {
+            "enum": [
+              "quotes",
+              "orders",
+              "session",
+              "ai",
+              "voice"
+            ],
+            "title": "Ch",
+            "type": "string"
+          },
+          "syms": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Syms",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ch"
+        ],
+        "title": "Sub",
+        "type": "object"
+      }
+    },
+    "tilt": {
+      "ch": "session",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Tilt band and its top drivers. May add friction to opens; may never gate a close.",
+        "properties": {
+          "band": {
+            "enum": [
+              "calm",
+              "warm",
+              "hot",
+              "scorched"
+            ],
+            "title": "Band",
+            "type": "string"
+          },
+          "cooldownUntil": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cooldownuntil"
+          },
+          "score": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Score",
+            "type": "number"
+          },
+          "top": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Top",
+            "type": "array"
+          }
+        },
+        "required": [
+          "score",
+          "band"
+        ],
+        "title": "Tilt",
+        "type": "object"
+      }
+    },
+    "voice.begin": {
+      "ch": "voice",
+      "direction": "c2s",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Client started recording a memo. Audio itself uploads over HTTP, not this socket.",
+        "properties": {
+          "cid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cid"
+          },
+          "voiceId": {
+            "title": "Voiceid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "voiceId"
+        ],
+        "title": "VoiceBegin",
+        "type": "object"
+      }
+    },
+    "voice.cancel": {
+      "ch": "voice",
+      "direction": "c2s",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Abandon an in-flight memo.",
+        "properties": {
+          "voiceId": {
+            "title": "Voiceid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "voiceId"
+        ],
+        "title": "VoiceCancel",
+        "type": "object"
+      }
+    },
+    "voice.state": {
+      "ch": "voice",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "STT concurrency is 1; this is how the HUD shows the queue.",
+        "properties": {
+          "busy": {
+            "title": "Busy",
+            "type": "boolean"
+          },
+          "queued": {
+            "minimum": 0,
+            "title": "Queued",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "busy",
+          "queued"
+        ],
+        "title": "VoiceState",
+        "type": "object"
+      }
+    },
+    "voice.transcript": {
+      "ch": "voice",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Result of one whisper.cpp run. `ok=false` still keeps the audio linked to the trade.",
+        "properties": {
+          "cid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cid"
+          },
+          "durMs": {
+            "minimum": 0,
+            "title": "Durms",
+            "type": "integer"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "sttMs": {
+            "minimum": 0,
+            "title": "Sttms",
+            "type": "integer"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Text"
+          },
+          "voiceId": {
+            "title": "Voiceid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "voiceId",
+          "ok",
+          "durMs",
+          "sttMs"
+        ],
+        "title": "VoiceTranscript",
+        "type": "object"
+      }
+    },
+    "welcome": {
+      "ch": "session",
+      "direction": "s2c",
+      "payload": {
+        "additionalProperties": false,
+        "description": "Accepted socket. `resumed` tells the HUD whether it replayed or started clean.",
+        "properties": {
+          "mode": {
+            "const": "demo",
+            "default": "demo",
+            "title": "Mode",
+            "type": "string"
+          },
+          "resumed": {
+            "default": false,
+            "title": "Resumed",
+            "type": "boolean"
+          },
+          "seq": {
+            "minimum": 0,
+            "title": "Seq",
+            "type": "integer"
+          },
+          "serverTime": {
+            "minimum": 0,
+            "title": "Servertime",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "seq",
+          "serverTime"
+        ],
+        "title": "Welcome",
+        "type": "object"
+      }
+    }
+  },
+  "version": 1
+}

@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run protocol:check && tsc -b && vite build",
     "preview": "vite preview",
+    "protocol:check": "node scripts/check-protocol-types.mjs",
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {

@@ -1,0 +1,2 @@
+# Later phases own their tables. Phase 2 lands 001-core-trading.sql here.
+# Naming: NNN-kebab-slug.sql — the numeric prefix is the order and the ledger id.

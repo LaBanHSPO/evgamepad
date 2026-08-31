@@ -1,0 +1,38 @@
+# Exactly one service. A second service appearing in `docker compose config` is a deploy
+# failure, not a variation: the process that owns risk is the process that calls the broker.
+services:
+  ev-gateway:
+    build:
+      context: .
+      dockerfile: apps/gateway/Dockerfile
+    image: evgamepad/ev-gateway:0.1.0
+    restart: unless-stopped
+    init: false # tini is the image's entrypoint; it reaps the whisper child itself.
+    env_file:
+      - .env
+    environment:
+      EV_CONFIG: /app/config/default.yaml
+      # The container binds 0.0.0.0 because Docker cannot forward a published port to a
+      # process bound on the container's loopback. The guarantee that nothing reaches this
+      # from the WAN is the loopback publish below plus the host firewall (443 + SSH only).
+      EV_LISTEN: 0.0.0.0:8444
+      EV_CONTAINER_BIND: "1"
+    ports:
+      - "127.0.0.1:8444:8444"
+    volumes:
+      # One volume, one backup root: journal.db, voice/, models/, secure/ (refresh token, 0600).
+      - ev-journal:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8444/healthz', timeout=3).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  ev-journal:

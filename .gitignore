@@ -2,3 +2,14 @@
 _templates/
 .helpsoft_env
 .siyuan_sync_state.json
+
+# Secrets and local runtime state
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+data/
+app/node_modules/
+app/dist/
