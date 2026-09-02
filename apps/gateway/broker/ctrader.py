@@ -172,7 +172,10 @@ class CTraderBroker(Broker):
         self._client = client
         client.startService()
 
-        await self._await_deferred(client.whenConnected())
+        await asyncio.wait_for(
+            self._await_deferred(client.whenConnected()),
+            timeout=DEFAULT_REQUEST_TIMEOUT_S,
+        )
         self.state.connected = True
 
         await self._authenticate()

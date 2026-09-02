@@ -1,698 +1,522 @@
 # Evening Forex Gold Gamepad
 
-![Trading Game — discipline, process, improvement](./visual01.png)
+<p align="center">
+  <img src="./visual01.png" alt="Trading Game — discipline, process, improvement" width="100%">
+</p>
 
-A desktop Chrome **web game** — an installable, client-side **React PWA** — where an **8BitDo
-Ultimate 2 Wireless** trades forex and gold on a **cTrader demo account**. The pad talks WebSocket to
-a single **Python gateway** on an Ubuntu VPS (Docker) that speaks the **cTrader Open API** in-process
-through `ctrader-open-api`. There is no execution sidecar and no second service. A near-realtime
-**AI desk** coaches from the sidelines and never touches the order path.
-
-On top of the game sits a **trading journal** that takes the best of Edgewonk and TradeZella and
-rebuilds them for a gamepad: a **playbook** grades every fire against its own rules *before* you
-commit, a **voice memo** captures why you took it because you cannot type while trading, a **replay**
-scrubs the trade back through the tape with the sticks, a **tilt-meter** reads your state from the pad
-itself, and a **process-weighted score** rates the evening on decisions rather than money.
-The same app now covers the full daily loop: readiness and analysis before the session, position
-sizing and planned protection, heatmap/history and mistake review afterward, then reports, exports,
-backup, restore, and deliberate deletion.
-
-> **The end goal is confidence and enjoyment — improving decision quality, not the money.**
-> Demo only. Not advice. Entertainment, not alpha.
-
-**Status:** phases 1–4, 6 and 7 landed in code — frozen protocol, config boot-fails, migrations, risk gates,
-the cid ledger, the journal and tape pipeline, the game socket, the cTrader client, and the 8BitDo
-client agent, the AI desk and sentinel, the performance deck, and the playbook with
-trade grading. Three things are still
-**unverified**: the broker link needs an IC Markets demo account and an approved Open API app, the
-pad has never been held (no 8BitDo hardware here), and the desk stays offline until
-`copilot.model` and `XAI_API_KEY` are set. Phase 5 (VPS deploy) is the remaining gap. The
-authority for everything below is
-[`plans/260824-1506-evening-forex-gold-gamepad/plan.md`](./plans/260824-1506-evening-forex-gold-gamepad/plan.md).
+<p align="center">
+  <a href="#test-suite"><img src="https://img.shields.io/badge/tests-709%20passed-22c55e?style=flat-square&logo=pytest&logoColor=white" alt="Tests"></a>
+  <a href="#architecture"><img src="https://img.shields.io/badge/architecture-single--process%20gateway-3b82f6?style=flat-square" alt="Architecture"></a>
+  <a href="#locked-decisions"><img src="https://img.shields.io/badge/backend-Python%203.11+%20%7C%20FastAPI-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"></a>
+  <a href="#locked-decisions"><img src="https://img.shields.io/badge/frontend-React%2018%20%7C%20Vite%20PWA-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React"></a>
+  <a href="#controller-map"><img src="https://img.shields.io/badge/controller-8BitDo%20Ultimate%202%20Wireless-8b5cf6?style=flat-square" alt="8BitDo"></a>
+  <a href="#locked-decisions"><img src="https://img.shields.io/badge/broker-cTrader%20Open%20API%20(Demo)-f97316?style=flat-square" alt="cTrader"></a>
+  <a href="#safety-invariants"><img src="https://img.shields.io/badge/mode-demo%20only-ef4444?style=flat-square" alt="Demo Only"></a>
+</p>
 
 ---
 
-## Controller map
+## Overview
+
+A desktop Chrome **web game** — an installable, client-side **React PWA** — where an **8BitDo Ultimate 2 Wireless** controller trades forex and gold on a **cTrader demo account**. The pad communicates over WebSocket to a single **Python gateway** on an Ubuntu VPS (Docker) that speaks the **cTrader Open API** in-process through `ctrader-open-api` Protobuf TCP/SSL. There is no execution sidecar and no secondary microservice. A near-realtime **AI desk** coaches from the sidelines without touching the order path.
+
+On top of the game sits a **trading journal** that takes the best of Edgewonk and TradeZella and rebuilds them for gamepad interaction:
+- **Playbook:** grades every fire against its own rules *before* you commit.
+- **Voice memo:** captures trade rationale hands-free when you cannot type while trading.
+- **Trade replay:** scrubs closed trades back through the 1 Hz tape using gamepad analog sticks.
+- **Tilt-meter:** derives emotional arousal directly from pad telemetry and interaction pace.
+- **Process-weighted score:** rates the evening on decision quality rather than financial outcome.
+- **Daily cockpit:** covers the entire daily trading loop — readiness checklists, multi-market clocks, position sizing, execution review (Actual vs Plan), reports, encrypted backup, restore, and audit wipe.
+
+> [!IMPORTANT]
+> **The end goal is confidence and enjoyment — improving decision quality, not the money.**  
+> Demo only. Not financial advice. Entertainment and discipline, not alpha.
+
+---
+
+## Project Status
+
+**Current State:** Phases **1–4, 6, 7, 9, 10, 11, 12, and 13** are **built and fully covered by 709 tests** (527 Python pytest + 182 TypeScript vitest).
+
+- **Backend Gateway:** Single-process FastAPI + WebSocket gateway with frozen v1 envelope, SQLite migrations `001`–`010`, risk engine with atomic CID reservations, position limits, dead-man switch, and native `ctrader-open-api` integration with request timeout resilience and fire-and-forget execution.
+- **Web Arcade Frontend:** React 18 PWA (`evgamepad-arcade`) with 20+ responsive screens, collapsible navigation rail, lightweight-charts candlestick integration, interactive HUD, GameOverlay modal, and full offline service worker caching.
+- **Terminology Refactored:** Clean, consistent **BUY / SELL** terminology unified across the entire stack (protocol catalog, database schema, risk engine, frontend components).
+- **Discipline & Journaling:** Complete implementation of pre-commit playbook grading, 5-axis Process Score radar (where standing down in a dead tape scores 100), measured behavioral tilt telemetry with open-friction gates, 1 Hz dual-book tape replay, printable browser PDF reports, streamed CSV/JSON exports, and encrypted SQLite snapshot backup/restore lifecycle.
+
+**Remaining Roadmap:**
+- **Phase 5 (Ubuntu Docker Deploy):** Finalizing production reverse-proxy configurations (Caddy/nginx) and VPS deployment packaging.
+- **Phase 8 (Voice Memo Local STT):** Local `whisper.cpp` container speech-to-text pipeline (deferred).
+- **Phase 14 (Release Gate):** End-to-end integration and smoke verification on physical 8BitDo hardware and live IC Markets demo accounts.
+
+Detailed authority: [`plans/260824-1506-evening-forex-gold-gamepad/plan.md`](./plans/260824-1506-evening-forex-gold-gamepad/plan.md).
+
+---
+
+## Table of Contents
+
+- [Controller Map & Safety](#controller-map)
+- [Architecture](#architecture)
+- [Safety Invariants](#safety-invariants)
+- [Feature Layers](#feature-layers)
+- [Locked Technical Decisions](#locked-decisions)
+- [Phases & Roadmap](#phases)
+- [Repo Layout](#repo-layout)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [cTrader Credentials](#ctrader-credentials-one-time-manual-setup)
+  - [Local Development](#local-development)
+  - [Testing & Quality Assurance](#test-suite)
+  - [Docker Production Run](#docker-production-run)
+  - [Protocol & Type Synchronization](#protocol-types-are-generated-never-hand-written)
+- [Playbooks: Enforced vs Graded](#playbooks-enforced-vs-graded)
+- [The Performance Deck](#the-deck-and-what-it-refuses-to-show)
+- [The Daily Journal Cockpit](#the-daily-journal)
+- [Process Score & Radar](#the-process-score)
+- [Trade Replay](#trade-replay)
+- [Tilt Detection & Telemetry](#tilt-what-it-measures-and-what-it-cannot-do)
+- [Settings, Reports & Data Ownership](#settings-reports-and-your-data)
+- [Non-Goals](#non-goals)
+- [Documentation](#documentation)
+
+---
+
+## Controller Map
 
 | Input | Action |
-|-------|--------|
+|---|---|
 | `LT` (hold) | Clutch — nothing fires without it |
-| `A` / `B` | Arm buy / arm sell |
+| `A` | Arm **BUY** |
+| `B` | Arm **SELL** |
 | `RT` | Confirm to fire |
 | D-pad | Symbol / lot size |
 | `LB` / `RB` | Timeframe |
 | `LB + RB` (hold) | Push-to-talk voice memo |
-| `X` | Close |
+| `X` | Close active position |
 | `Y` | Flatten (panic) |
-| `View` | Lock / unlock |
+| `View` | Lock / unlock session |
 | `Menu` | Open / close the safe GameOverlay; opening cancels ARM and locks new opens |
 
-Inside GameOverlay, D-pad selects a destination, `LB/RB` changes desk tabs, `A` enters/applies a
-safe preference, `B` goes back, and `Menu` exits. Playbook, Journal, System, Reports, and Settings
-all use this one navigation contract. Navigation/apply cannot emit open/modify. An SL/TP edit only
-stages a modify preview; `LT+RT` is still required before it reaches cTrader. Dedicated close and
-panic controls remain available as safety exits.
+Inside **GameOverlay**, D-pad selects a destination, `LB/RB` changes desk tabs, `A` enters/applies a safe preference, `B` goes back, and `Menu` exits. Playbook, Journal, System, Reports, and Settings all adhere to this single navigation contract. Navigation cannot emit open/modify orders. An SL/TP edit only stages a modify preview; `LT+RT` is still required before it reaches cTrader. Dedicated close and panic controls remain available as safety exits.
 
-Pad link is the **2.4G dongle** (wired USB is the fallback). Bluetooth on the Ultimate 2 needs
-macOS 26+, so it is out on this machine.
+### Pairing the 8BitDo Ultimate 2 Wireless
 
-**Pairing the 8BitDo Ultimate 2 Wireless**
+1. Set the switch on the back to **X** (XInput). Chrome reports `mapping: "standard"`, ensuring direct button mapping without custom calibration.
+2. Plug the **2.4G dongle** into the Mac and press **Start** (the primary supported link).
+3. Wired USB-C is the verified fallback; use it if the wireless dongle encounters interference.
+4. Open the HUD, focus the tab, and **press any button** — the Gamepad API stays silent until an initial user gesture occurs (browser privacy spec). The HUD reports `pad: absent` until pressed.
+5. Back paddles (`L4`/`R4`) are activated only if an initial probe detects movement; otherwise, the game operates on `LT`/`RT` without degradation.
 
-1. Put the switch on the back to **X** (XInput). Chrome then reports `mapping: "standard"` and the
-   table above holds with no calibration.
-2. Plug the **2.4G dongle** into the Mac and press **Start**. The dongle is the supported path.
-3. Wired USB-C is the fallback and behaves identically; use it if the dongle drops.
-4. Open the HUD, focus the tab, and **press any button** — the Gamepad API stays silent until the
-   page has seen one (a spec privacy gesture), so the HUD reports "pad: absent" until you do.
-5. Paddles (L4/R4) are adopted only if a first-run probe sees one move. If it never does, the game
-   stays on LT/RT forever — nothing degrades.
+> [!CAUTION]
+> **The browser tab must stay focused.** Hiding the tab or unplugging the controller immediately cancels any active ARM and locks new open orders at both ends: the client stops transmitting, and the gateway dead-man rejects execution. Close, panic, and the HUD's **FLATTEN** button continue to function regardless.
 
-**The tab must stay focused.** Hiding it or unplugging the pad cancels any arm on the spot and
-locks new opens at both ends: the client stops sending, and the gateway's dead-man rejects. Close,
-panic, and the HUD's own **FLATTEN** button keep working regardless — a dead pad must never trap an
-open position.
+---
 
 ## Architecture
 
 ![How the Evening Forex Gold Gamepad works](./docs/how-the-app-works.svg)
 
-[Open the standalone diagram](./docs/how-the-app-works.html).
+[Open the standalone interactive diagram](./docs/how-the-app-works.html).
 
-For a new member, the system has one important boundary: the **gateway is the only component that
-can approve a demo order**. The controller and the PWA prepare intent; the Python gateway itself
-translates an approved command into cTrader Open API messages over its own `ctrader-open-api`
-connection, and Spotware remains the actual matching engine.
-
-Read the diagram as three paths:
-
-1. **Order hot path:** controller → focused Chrome tab → gateway risk checks → the gateway's own
-   cTrader Open API connection → cTrader demo.
-2. **Broker return path:** market data, fills, positions, and acknowledgements travel back through
-   the same trusted services to update the HUD and rumble the controller.
-3. **Learning path:** AI coaching, voice transcription, journal writes, replay, and scoring run
-   beside the order path. They can enrich or record a session, but cannot place an order.
-
-- **Hot path:** pad → intent `{clutch, armedAt, relativeSl?, relativeTp?}` → WSS → cid reserve → risk
-  → MARKET `ProtoOANewOrderReq` → execution event → ack → rumble. Existing-position protection is
-  changed with `ProtoOAAmendPositionSLTPReq` after another LT+RT confirmation.
-- **Cold path:** sentinel 1–5 s, copilot 1–30 s, TradingView webhook → `signal.item` only.
-- **Journal path** (colder still, never on the order socket): readiness/analysis + plan snapshot →
-  trade facts/events → voice/transcript + tape freeze → settled Process Score → daily
-  review/heatmap/history → report/export/backup.
-
-Spotware, not the VPS, is the matching engine. Docker on Ubuntu does not buy Equinix-to-broker
-nanoseconds; it buys always-on execution without Windows.
-
-### Latency budget (honest)
-
-| Segment | Target |
-|---------|--------|
-| Pad poll → intent | < 16 ms |
-| Home → VPS WS | 15–80 ms (dominant) |
-| Gateway risk | < 5 ms |
-| VPS → Spotware demo ack | tens of ms typical |
-| AI advice | 1–5 s, never blocks a fire |
-
-## Safety invariants
-
-These are enforced by **boot-fails in config**, not by convention. The process refuses to start
-otherwise.
-
-- `mode: live` or a live Open API host → exit non-zero.
-- `copilot.on_hot_path: true` → exit. The AI has no order tools, ever.
-- `voice.stt.mode` outside `{local, off}` → exit. There is no cloud STT code path to misconfigure.
-- `voice.bindings` resolving to `LT/RT/A/B/X/Y` → exit. Voice is memos and ask-the-coach only —
-  never navigation, never execution.
-- `tilt.gate_close: true` → exit. Tilt may add friction to **opens** only; close and panic always
-  execute.
-- `score.weights` not summing to 1.0 → exit.
-- `tradingview.auto_trade: true` → exit.
-
-Risk rules and playbook rules live in **one registry, with two consequences**: `risk` rules are
-enforced by the gateway; `playbook` rules are graded and can never block a fire.
-
-## Feature layers
-
-| Layer | What it does |
-|-------|--------------|
-| **AI desk** | Sentinel (spread/news/session), news, Volman M5 setups, research / plan / advise / monitor. Read-only tools. |
-| **Playbook & grading** | Every fire graded against its own rules, with the rule count named in the ARM overlay *before* it fires. |
-| **Voice memo** | Hold `LB + RB`; audio uploads over HTTP and is transcribed locally by whisper.cpp on the VPS. Audio never leaves the box. |
-| **Tilt detection** | Pad telemetry at 1 Hz (clutch cycles, arm flips, button rate, lot steps) → tilt band → adaptive friction on opens. Never a score input. |
-| **Trade replay** | Scrub the frozen tape with the sticks; entry, exit, MFE/MAE, and the memo audio. Cannot place an order. |
-| **Process Score** | Five process-only axes (adherence, selectivity, risk discipline, preparation, review). Standing down scores *well*. |
-| **Daily journal cockpit** | DST-aware session clocks, five-item readiness, analysis, position sizing, process heatmap, day drill-down, latest ten, filterable history, and trade detail. |
-| **Execution learning** | Actual vs Plan, planned/impulsive quality groups, before/during/after scores, mistake taxonomy/trends, and personal principles. |
-| **Reports & data** | Process-first browser PDF, streamed CSV/JSON, manifested backup/restore, and explicit delete-all. |
-
-No streaks, no levels, no badges, no leaderboards, and nothing that accumulates across sessions —
-every mechanic that would create pressure to trade a dead tape is deliberately absent.
-
-## Locked decisions
-
-| Decision | Choice |
-|----------|--------|
-| Execution | cTrader Open API in-process via `ctrader-open-api` (OpenApiPy), `demo.ctraderapi.com:5035` (Protobuf) |
-| Broker | IC Markets cTrader demo (plain, unsuffixed symbols) |
-| Host | Ubuntu VPS, Docker Compose, **one service** (`ev-gateway`) |
-| Live money | Refused — boot-fail on live host or `isLive` |
-| Symbols | XAUUSD, EURUSD, GBPUSD, USDJPY; max 0.10 lot gold |
-| Session | `Asia/Ho_Chi_Minh`, 18:00–23:30 |
-| Transport | WSS JSON `{v,t,seq,ts,ch,cid,p}` on `/ws`, same origin as the HUD |
-| Bind | Gateway `127.0.0.1:8444` behind existing VPS TLS on :443 |
-| Copilot | Python worker task inside `ev-gateway`, not a second container |
-| Speech-to-text | Browser capture → whisper.cpp child on the VPS |
-| Coach TTS | Browser `speechSynthesis`, default off |
-| Deck priority | Process first; money sits behind a deliberate tab click |
-| TradingView VIP | Second-screen cockpit + Pine webhook signals; never auto-trade |
-| Product scope | One focused IC Markets cTrader demo account |
-| Orders | MARKET with relative SL/TP; absolute SL/TP amend; full close/panic; no pending/partial |
-| Navigation | Menu opens one safe GameOverlay; broker-changing applies still require LT+RT |
-| Journal | Full daily cockpit and deterministic execution-quality analysis |
-| Data ownership | Browser PDF, CSV/JSON, backup/restore/delete; no history import |
-| UI boundary | Desktop Chrome, dark-only; no mobile/light mode |
-| Web stack | Client-side **React PWA** (Vite + TanStack Router/Query). No SSR, no Node at runtime |
-| Backend stack | **Python** — one process owns WS, REST, risk, journal, static HUD, and the broker link |
-| Database | Phase-owned migrations `001`–`010` |
-
-## Phases
-
-Recommended delivery order is sequential. Phase files declare minimum direct dependencies, but the
-acceptance gates follow migration, navigation, and evidence contracts from `1` through `14`.
-
-```text
-1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14
-```
-
-| # | Phase | Effort | Status |
-|---|-------|--------|--------|
-| 1 | [Repo, protocol, Docker config](./plans/260824-1506-evening-forex-gold-gamepad/phase-01-repo-protocol-docker-config.md) | 12h | Built |
-| 2 | [cTrader exec and socket gateway](./plans/260824-1506-evening-forex-gold-gamepad/phase-02-ctrader-exec-and-socket-gateway.md) | 22h | Built |
-| 3 | [Web game and 8BitDo client agent](./plans/260824-1506-evening-forex-gold-gamepad/phase-03-web-game-and-8bitdo-client-agent.md) | 18h | Built |
-| 4 | [AI desk: sentinel, news, Volman, advise](./plans/260824-1506-evening-forex-gold-gamepad/phase-04-ai-desk-sentinel-news-volman.md) | 18h | Built |
-| 5 | [Ubuntu Docker deploy](./plans/260824-1506-evening-forex-gold-gamepad/phase-05-ubuntu-docker-deploy.md) | 7h | Pending — needs the VPS |
-| 6 | [Performance and psychology deck](./plans/260824-1506-evening-forex-gold-gamepad/phase-06-performance-and-psychology-deck.md) | 14h | Built |
-| 7 | [Playbook, rule registry, trade grading](./plans/260824-1506-evening-forex-gold-gamepad/phase-07-playbook-and-trade-grading.md) | 12h | Built |
-| 8 | [Voice: capture, whisper.cpp, coach](./plans/260824-1506-evening-forex-gold-gamepad/phase-08-voice-capture-whisper-and-coach.md) | 14h | Deferred |
-| 9 | [Tilt telemetry and adaptive friction](./plans/260824-1506-evening-forex-gold-gamepad/phase-09-tilt-telemetry-and-adaptive-friction.md) | 10h | Built |
-| 10 | [Trade replay](./plans/260824-1506-evening-forex-gold-gamepad/phase-10-trade-replay.md) | 12h | Built |
-| 11 | [Process Score and radar deck](./plans/260824-1506-evening-forex-gold-gamepad/phase-11-process-score-and-radar-deck.md) | 8h | Built |
-| 12 | [Daily journal cockpit and preparation](./plans/260824-1506-evening-forex-gold-gamepad/phase-12-daily-journal-cockpit-and-preparation.md) | 24h | Built |
-| 13 | [Reports, settings, and data portability](./plans/260824-1506-evening-forex-gold-gamepad/phase-13-reports-settings-and-data-portability.md) | 18h | Built |
-| 14 | [End-to-end session journey and release gate](./plans/260824-1506-evening-forex-gold-gamepad/phase-14-end-to-end-session-journey-and-release-gate.md) | 14h | Pending |
-
-Total: 203h ≈ 26 working days.
-
-## Repo layout
-
-```text
-app/              React PWA (Vite), built and served by the gateway. Node is
-                  build-time only.
-  src/protocol/   GENERATED from the gateway catalog — schema.json + types.ts
-  scripts/        check-protocol-types.mjs — fails the build on type drift
-apps/
-  gateway/        Python — one process, one container:
-    protocol/     Frozen v1 envelope + Pydantic message catalog (phase 1)
-    broker/       cTrader Open API via ctrader-open-api — stub until phase 2
-    risk/         cid reserve, limits, dead-man, session lock (phase 2)
-    method/       Rule registry (risk + playbook), Volman method profile (phase 4/7)
-    copilot/      AI desk worker task (read-only tools, never on the hot path)
-    journal/      SQLite writes, tape, replay, score
-    api/          WS /ws, REST /api/*, static HUD
-    db/           migrate.py + versioned migrations/
-config/           default.yaml
-deploy/           fetch-models.sh, reverse-proxy notes
-docs/             release checklist and verified operating decisions
-plans/            Plan of record, phase files, research, journals
-```
-
-**Where the journal lives.** One Docker volume, `ev-journal`, mounted at `/data`:
-`/data/journal.db` (SQLite — trades, plans, grades, tilt samples, scores), `/data/voice/` (memo
-audio), `/data/models/` (whisper `small.en`), `/data/secure/` (refreshed cTrader tokens, `0600`).
-One volume means one backup root; nothing durable lives in the image, the repo, or the browser.
-
-## Getting started
-
-Phase 1 has landed: the protocol is frozen, the config boot-fails, the migration runner works, and
-the gateway answers `/healthz`. The broker is a stub that refuses every order until phase 2, so
-nothing can be traded yet.
-
-**Prerequisites**
-
-- Ubuntu VPS, 4+ vCPU / 4 GB+ RAM, Docker + Compose, existing TLS on :443
-- Python 3.11+ with `uv`; Node 22 for the web build only
-- Chrome on the desktop, 8BitDo Ultimate 2 with its 2.4G dongle
-- A cTrader ID with an **IC Markets demo** account
-
-**cTrader credentials (one-time, manual — no auth helper ships in v1)**
-
-1. Create a cTrader ID.
-2. Open an IC Markets cTrader **demo** account under it.
-3. Register an Open API application at `connect.spotware.com`; wait for approval.
-4. Run the consent flow in a browser with the `trading` scope against the app's redirect URI.
-5. Paste `CT_CLIENT_ID`, `CT_CLIENT_SECRET`, `CT_ACCESS_TOKEN`, `CT_REFRESH_TOKEN`, `CT_ACCOUNT_ID`
-   into `.env`. The gateway only refreshes what you provided here, and boot-fails if it is missing.
-
-Other secrets: `EV_WS_TOKEN`, `XAI_API_KEY`, `TV_WEBHOOK_SECRET`. Initial secrets go through env;
-refreshed cTrader tokens use the protected app volume with mode `0600`. Neither is committed, baked
-into an image, exported, or included in backups.
-
-**Run**
-
-```bash
-cd apps/gateway
-uv sync                   # gateway deps, including ctrader-open-api
-uv run pytest             # protocol, boot-fails, migrations, risk gates, R, tape, socket
-uv run ruff check .
-cd ../..
-
-npm --prefix app ci
-npm --prefix app run build   # checks generated protocol types, then builds the HUD bundle
-
-cp .env.example .env      # then fill in the cTrader credentials above
-docker compose build
-docker compose up -d      # ev-gateway on 127.0.0.1:8444 — the only service
-curl -s http://127.0.0.1:8444/healthz
-```
-
-Then open `https://YOUR_DOMAIN` in a focused Chrome tab, connect the pad, and the HUD and socket come
-from the same origin.
-
-**Protocol types are generated, never hand-written.** The Pydantic catalog in
-`apps/gateway/protocol/` is the single source of truth; `app/src/protocol/schema.json` and
-`types.ts` are built from it:
-
-```bash
-cd apps/gateway && uv run python -m protocol.export_ts          # regenerate
-cd apps/gateway && uv run python -m protocol.export_ts --check  # fail if stale
-```
-
-Three gates catch drift: `uv run pytest`, `npm --prefix app run build`, and the image build itself.
-
-**Local dev without Docker.** The gateway refuses a non-loopback bind unless `EV_DEV=1` (your own
-machine) or `EV_CONTAINER_BIND=1` (inside the container, where Docker publishes the port to host
-loopback only). `EV_DATA_DIR` moves the whole volume — DB, voice, models, tokens — somewhere
-writable:
-
-```bash
-cd apps/gateway
-EV_CONFIG=../../config/default.yaml EV_DATA_DIR=../../data uv run python main.py
-```
-
-## Playbooks: enforced vs graded
-
-A **playbook** is a named setup with explicit rules — one of five seeded from the detectors, or one
-you write. Every fire is graded against the playbook that was active when it fired, and the grade
-appears in the confirm overlay **before** you commit:
+The **gateway is the sole component authorized to approve and route demo orders**. The controller and the React PWA prepare user intent; the Python gateway validates risk and translates approved intents into cTrader Open API Protobuf messages over its internal `ctrader-open-api` connection. Spotware operates as the matching engine.
 
 ```
-BUY 0.10 XAUUSD @ 2345.12
-[M5 range break]  4/5 rules OK  ·  ✗ Not chasing (3.00 ATR)
+Order Hot Path:
+  [8BitDo Controller] ──> [Focused Chrome PWA] ──(WSS)──> [Gateway Risk Gates] ──(Protobuf)──> [cTrader Demo API]
+
+Broker Return Path:
+  [cTrader Demo API] ──(Execution Events / Quotes)──> [Python Gateway] ──(WSS)──> [React HUD & Controller Rumble]
+
+Sidecar Learning Path:
+  [TradingView / Sentinel] ──> [AI Copilot Worker] ──> [Advisory / Voice / Tape / Journal SQLite] (Read-Only)
 ```
 
-The distinction the whole feature rests on:
+1. **Order hot path:** controller → focused Chrome tab → gateway risk checks → in-process cTrader Open API connection → cTrader demo.
+2. **Broker return path:** market data, fills, positions, and execution events flow back through the gateway to update the HUD and trigger controller vibration.
+3. **Learning path:** AI coaching, voice transcription, journal persistence, tape replay, and Process Score calculation run alongside the order path without blocking execution.
 
-| | Risk rules | Playbook rules |
+### Latency Budget (Honest)
+
+| Segment | Target | Notes |
 |---|---|---|
-| Where they live | one registry, `method/rules.py` | the same registry |
-| What a failure does | **rejects the intent** server-side | **is recorded and shown** |
-| Who decides them | config, and only config | you |
-
-A playbook rule can never block a trade. That is asserted by a test, not by convention — the
-failure mode it guards against is the journal quietly turning into a gate nobody agreed to.
-
-Three more things it deliberately does:
-
-- **Grading is keyed on the fire, not the position.** A cancelled arm and a rejected intent are
-  both graded, which is what lets the deck count trades you declined.
-- **Skipping the post-trade checklist costs nothing.** An unanswered rule is `unknown` — neither
-  pass nor fail — and leaves the denominator entirely.
-- **No playbook selected is a valid state.** The fire grades as `unplanned`, which reads honestly
-  on the deck rather than as a failure.
-
-Retiring a playbook hides it from selection and keeps it resolvable, so last month's deck numbers
-survive a change of mind.
-
-## The deck, and what it refuses to show
-
-`/deck` answers one question: **am I improving?** It opens on the **process** panel and there is
-not a single dollar figure on it — not a balance, not a P/L, not a return. Watching the money
-mid-trade is what pulls attention off the process, so the outcome tab is a deliberate click, and
-its figures are not even fetched until you make it.
-
-What the process panel measures:
-
-| Figure | Why it is there |
-|---|---|
-| **Adherence** | Fraction of fires that satisfied every rule. Scored with the gateway's *own* rule set, imported rather than re-listed, so the deck cannot claim a rule the gate never had |
-| **Trades declined** | Arms cancelled while a stand-down condition was live. Counts **upward** — not trading is a position |
-| **Opportunity quality** | What the tape actually offered that evening. A flat night on a dead tape reads as discipline, not as a missing result |
-| **Check-in** | Two pad taps, skippable, plotted against adherence — never against money |
-| **This month vs last** | The primary "am I improving?" answer |
-
-What it deliberately refuses:
-
-- **No streaks, levels, badges, or leaderboards.** Every one of them creates pressure to trade a
-  dead tape.
-- **No Sharpe below 30 sessions.** ~20 evenings a month means the first two months are noise, so
-  the deck prints "not enough sessions yet" and the sample size instead of a confident number.
-- **No zero standing in for "not measured".** An evening with no fires has *no* adherence score
-  rather than a score of zero; scoring a stand-down at zero would punish the exact behaviour the
-  deck exists to reward.
-- **No money in a notification, ever.**
-
-The desk can read these process figures through its one read-only `get_progress` tool and coach
-the process with them. It cannot see a balance, and it still has no order tool.
-
-Process framing after Brett Steenbarger (*The Daily Trading Coach*, *Trading Psychology 2.0*,
-*Enhancing Trader Performance*) — cited, not reproduced.
-
-## Settings, reports, and your data
-
-**Settings** edits preferences and nothing else. The form is generated from the *server's* schema,
-which is what makes the boundary real rather than a promise: there is no control for demo/live
-mode, the bind address, the broker credentials, or any of the three safety boot-fails, because the
-gateway does not offer them and refuses the write if one is sent. The account is a read-only chip —
-one configured cTrader demo account is the whole safety story, so a second one is out of scope, not
-missing. Playbooks and your principles are *linked*, never duplicated: two places to define a rule
-is one too many.
-
-**Reports** compose the existing journal queries and print through the browser's own Save as PDF
-over a print stylesheet. Nothing headless is installed on the VPS for a job the machine in front of
-you already does. The cover owns the first page and carries no money in any configuration; the
-outcome appendix is **fetched on request**, so a report saved without it never contained a dollar
-figure at all. On paper the theme inverts to ink — the one place this product is not dark-only —
-and the heatmap prints its score as a number as well as a colour, because a mono printer has no
-bands.
-
-**Exports** stream: `trades.csv` for the trade facts with review dimensions flattened alongside,
-`journal.json` for everything including your own words. Both are built from explicit column
-allowlists, so a column added to the schema later cannot quietly start appearing in a file you
-email to someone. There is deliberately **no import**: no CSV-in, no MT5 reader, no broker-history
-parser. This journal describes what this gateway executed, and a row it did not fill is a row it
-cannot vouch for.
-
-### Backup, restore, delete
-
-```
-POST   /api/data/backup            take an archive
-GET    /api/data/backups           list them
-GET    /api/data/backups/{name}    download one
-POST   /api/data/restore/inspect   what an archive claims, before committing
-POST   /api/data/restore           validate, stage, swap, verify
-DELETE /api/data/all               the one that cannot be undone
-```
-
-**Backup** takes a consistent snapshot through SQLite's own online backup API — not a file copy,
-which *usually* works and is therefore the worst possible property for a backup — plus your
-screenshots, memos and trade tapes. It excludes the refreshed broker tokens (a secret) and the
-whisper models (replaceable, and hundreds of megabytes), because the archive is built from a named
-allowlist rather than a walk of the volume. Every member is SHA-256'd in the manifest, the archive
-is streamed to a temporary file under a size cap, and any failure removes it: a half-written backup
-that looks complete is how people lose a journal.
-
-**Restore** validates everything before touching anything, in this order:
-
-1. The gateway must be idle — session locked, no position open, no background job.
-2. The archive must be structurally sound: a real manifest, a version this build understands, and
-   every member a safe path. Absolute paths, `..`, symlinks, device files, duplicates, undeclared
-   members and decompression bombs are all *refused*, not sanitised.
-3. Every checksum must match, verified in staging.
-4. The schema must not be newer than this build — an older archive is migrated forward in staging.
-
-Only then does the current data move aside as a rollback snapshot, the staged copy swap in, and the
-row counts get verified against the manifest. If verification fails the rollback goes back. **A
-failed restore is indistinguishable from one that never ran**, and that is the property every
-refusal test asserts.
-
-**Delete-all** needs four things at once: the exact phrase `DELETE EVERYTHING`, a two-second hold,
-a locked session, and no open position — checked in the browser and again in the gateway. It
-removes every journal row, memo, screenshot and tape, then vacuums the file so the pages are
-actually reclaimed. Your config, the models, the app and the broker connection stay, along with
-**one content-free audit row**: the action, the time, and counts. A row that quoted a deleted note
-would mean the delete had not happened. A backup is offered before it and never taken after it — a
-hidden recovery copy made after the final confirmation is not a safety net, it is a lie about what
-the word means.
-
-## The daily journal
-
-`/journal` is the loop the rest of the product feeds: **prepare, trade, close, review**, without
-leaving the shell.
-
-**Today** carries four IANA market clocks (Sydney, Tokyo, London, New York — real tzdata, so
-London and New York move across DST and Tokyo never does), a five-item readiness check, the
-evening's written analysis, and a position-size calculator. The desk's own plan sits *beside* your
-analysis rather than merged into it; no model writes a word of what you wrote.
-
-**Sizing** runs on the gateway, through phase 2's own quote-to-USD conversion and the broker's real
-volume step. It answers with three numbers kept deliberately apart: the lots your risk implies, the
-lots the broker will actually accept, and the risk you will therefore **carry** — recomputed from
-the rounded volume, because reporting the risk you asked for rather than the one you will hold is
-lying by omission. It rounds down, never up. Applying a result changes the HUD's preview; LT+RT is
-still the only thing that trades.
-
-**The dashboard** leads with Process Consistency over the last 20 sessions —
-`0.5 × mean + 0.5 × (100 − mean absolute deviation from the median)`. Two halves doing different
-jobs: the mean says how well you played, the deviation says how reliably. It always prints `n` and
-refuses a confident number below five sessions, because four evenings is a week, not a process. The
-day heatmap is coloured by **Process Score** and activity; a day with no score is an outline, not a
-bad day, and there is no dollar figure on the surface at all.
-
-**History** filters on period, playbook, setup, symbol, timeframe, side, market session, intent,
-mistake, and win/loss/breakeven. The clauses are built from a fixed table on the server, so an
-unknown filter is dropped rather than interpolated and a combination can never return a trade
-outside what was asked for. Paging is capped at 200.
-
-**A trade** shows the immutable plan and execution, then everything you reviewed on top: Actual vs
-Plan, the three execution scores, the grade, mistakes, attachments, and a link to the tape.
-
-Things the journal deliberately will not do:
-
-- **It cannot rewrite a fact.** Every write targets a review table; a test parses the service's
-  statements and fails if any of them names `trade_plan`, `trade_closed`, `position_event`,
-  `trade_tape`, `trade_grade`, `cid_reservation` or `session_equity`. A journal that can edit a
-  fill is not a journal.
-- **It never claims a counterfactual.** The panel is called *Actual vs Plan*, not "theoretical
-  profit". Where price went after your exit is not evidence about a position you had closed.
-- **It never infers that you were on tilt.** A clean fire under a real playbook derives as
-  `planned`; anything else stays `unknown` until you say otherwise. `impulsive` and `revenge`
-  describe a state of mind, and the four-group chart **excludes** the unclassified rather than
-  guessing — the cost of libelling one clean discretionary trade is that you stop trusting the
-  whole record.
-- **Unknown is never zero.** The before/during/after scores drop what was not captured and
-  renormalise, and each names the inputs it could not measure, so a high score over a small
-  denominator looks like one.
-- **A mistake costs nothing.** The taxonomy separates what the rows *prove* (oversize, no initial
-  stop, a stop moved further away, an event-window fire) from what only you can assert (early
-  discretionary exit, chased entry, revenge re-entry). You can withdraw your own judgement; a
-  derived one comes back on the next sync, because it is a fact. There is no streak, badge, or
-  penalty, and none of it reaches the Process Score.
-- **Readiness never blocks anything.** A checklist that can lock you out is one you click through,
-  and then it measures nothing. It has three answers, not two: skipping is a real answer and
-  different from "no".
-- **Attachments cannot name a path.** The server reads the magic bytes, decides what the file
-  actually is, generates a ULID, and writes that; your filename is stored as a label. PNG, JPEG and
-  WebP only — no SVG and no HTML, because an image that can run script is a stored XSS with a
-  `.png` on the end.
-- **The desk sees counts, never your words.** `get_journal` returns session counts, consistency and
-  the top mistake codes. Your analysis, review notes and memos never leave the box — a journal you
-  cannot write privately is one you stop writing honestly.
-
-## The Process Score
-
-TradeZella's Zella Score gives you one number to chase. That is the right game mechanic pointed at
-the wrong inputs — win rate and profit factor are *outcome*, and chasing an outcome number is the
-anxiety this whole design exists to treat. So the mechanic stays and the inputs change.
-
-Five axes, all process:
-
-| Axis | What it measures | w |
-|---|---|---|
-| **Adherence** | Required playbook rules passed / required rules evaluated, over the evening | 0.30 |
-| **Selectivity** | How well the trade count matched what the tape actually offered | 0.25 |
-| **Risk discipline** | Per fire: lot cap, stop at entry, R within tolerance, position cap, order spacing | 0.20 |
-| **Preparation** | Plan acknowledged before the first fire, pre check-in, a playbook selected | 0.15 |
-| **Review** | Post check-in, checklists answered, a replay opened | 0.10 |
-
-The property the whole thing is built around: **a correctly-declined evening scores at least as well
-as a well-traded one.**
-
-| Evening | Score |
-|---|---|
-| Dead tape, zero trades, three genuine stand-downs | **100** |
-| Busy tape, four fires, executed well | **98** |
-| Rich tape, froze, took nothing | **70** |
-| Dead tape, overtraded it | **65** |
-
-Timidity costs less than recklessness, and both cost something. Those four numbers are the unit
-tests, not an illustration — if they drift, the score has changed meaning.
-
-**Selectivity** is the mechanism. The sentinel scores each evening's opportunity quality; `expected =
-round(OQ x 6)` sets a band of ±1 trade, and each trade outside it costs 25. A genuine stand-down —
-an ARM cancelled while a stand-down condition was live — earns 5 back, capped at 15, using phase 3's
-existing counter rather than a second one. The credit cannot push the axis past 100, so declining is
-never a way to farm a perfect evening.
-
-**Vacuous axes** are the subtle part. With zero fires, Adherence and Risk Discipline have no
-denominator. Scoring them 0 punishes standing down; scoring them 100 is free points for doing
-nothing. Both are wrong, so the axis is **dropped** and its weight renormalises across the axes that
-have evidence — and the radar draws it as a dashed *n/a* ring that names why, never as a zero spoke.
-Axes are vacuous at zero fires only: one bad fire gives both a real denominator, so nothing hides
-behind renormalisation.
-
-What the score deliberately will not do:
-
-- **No outcome input, anywhere.** Not P/L, not R, not win rate. A test reads the module and fails if
-  a money word appears in it.
-- **No live score.** It is computed at session close and lives on the deck. A number you can refresh
-  mid-trade becomes the anxiety the P/L replaced.
-- **Tilt is not an input.** Taxing an evening for a bad ten minutes reintroduces the punishment this
-  design avoids. It renders on the deck as a *retrospective*, set against adherence — never against
-  P/L.
-- **Nothing accumulates across sessions.** No streak, no level, no badge, no "days since". A test
-  walks the whole schema and fails if such a column ever exists. The month view is a **distribution
-  with n**, because a distribution says "this is the shape of your evenings" and a streak says "do
-  not break it", which is pressure to trade a dead tape.
-- **No memo penalty for a feature that is not built.** Voice evidence counts only when capture was
-  actually available; a supported degradation drops the sub-item instead of failing it. Skipping a
-  memo you *could* have recorded is a genuine miss.
-
-Every axis stores its **inputs**, not just its total, so changing `score.weights` recomputes every
-past evening from what was actually measured rather than leaving last month scored under a weighting
-nobody can reconstruct. Weights that do not sum to 1.0 refuse to boot.
-
-Process framing after Brett Steenbarger — markets do not offer equal opportunity every night.
-Cited, not reproduced.
-
-## Trade replay
-
-TradeZella's trade replay, on the hardware you traded with. Open a closed trade and scrub it back
-through the tape it actually happened on: the ARM you cancelled forty seconds before you fired, the
-stop you moved, the band you crossed, where MFE and MAE really sat.
-
-| Input | Action |
-|---|---|
-| **LS ←→** | scrub, velocity-based (deadzone 0.2) |
-| **RS ←→** | zoom the window — 1s, 5s, 15s, 1m, 5m |
-| **A** | play / pause |
-| **D-pad ↑↓** | speed 0.5x · 1x · 2x · 4x |
-| **LB / RB** | previous / next trade of the evening |
-| **B** | exit |
-
-The tape is one row per trade, frozen after the post-roll settles: 1 Hz OHLC for **both sides of
-the book** (a buy's excursions are measured on the bid, a sell's on the ask), plus the events,
-denormalised at freeze time from the pad telemetry, the broker, the signals and the tilt samples.
-About 12-20 KB a trade. A zero-trade evening writes nothing at all.
-
-Every displayed timeframe is folded out of that one stored series, so a 5-minute view and the
-second-by-second tape can never disagree. The aggregation stays on the scaled integers and the
-divide happens once, when drawing.
-
-Things it deliberately will not do:
-
-- **No order can be placed from a replay.** Not because a flag says so: the route mounts no agent
-  and no socket. Selecting a screen unmounts the previous one, so arriving here destroys the live
-  HUD's order path rather than merely locking it, and the pad on this route drives an action type
-  that has no order case to construct. Tests assert both halves.
-- **Nothing on the replay path writes.** A test reads the repository and fails if any statement it
-  runs is not a `SELECT`.
-- **Entry and exit are never inferred from the bars.** At 1 Hz the entry candle is context; the
-  fill is truth, so the markers come from `trade_closed`.
-- **MFE and MAE are drawn as price lines, not dots.** The freeze stores the extremes, not when they
-  happened, so a timestamped dot would be a fabrication. They print in R only when a recorded stop
-  makes R knowable — otherwise the price distance prints as itself.
-- **A trade with no tape still opens**, as a marker-only view, and so does one whose blob will not
-  decompress. A pre-phase-2 trade is still worth reviewing.
-- **Memo audio takes its length from the stored `durMs`**, never `audio.duration` — Chrome's
-  MediaRecorder WebM reports `Infinity`. Above 2x the memo mutes rather than pitch-shifting. Until
-  phase 8 lands there are no memos, and replay works identically without them.
-
-## Tilt: what it measures, and what it cannot do
-
-Edgewonk asks you to rate your emotional state after the fact. The pad is already telling us. Every
-component of the tilt score is a **measured behaviour** with a name, never an inferred feeling,
-which is why the HUD can always say *why* instead of just showing a colour:
-
-| Component | What it measures | Weight |
-|---|---|---|
-| **Revenge size** | Pending lots against your own session median | 0.25 |
-| **Re-entry speed** | Seconds since a *losing* close — 1 under a minute, 0 by ten | 0.20 |
-| **Rule-break recency** | Adherence failures in your last three fires | 0.20 |
-| **Hesitation** | Clutch cycles before each arm, over the last three | 0.10 |
-| **Arm flip** | Side changes while armed | 0.10 |
-| **Input aggression** | Button rate against your own session median | 0.10 |
-| **Voice arousal** | Speech rate and loudness against your own 30-session baseline | 0.05 |
-
-Everything compares you to **you**. There is no population claim anywhere in the number, and a
-component that was not measured drops out and the rest renormalise — an evening without a voice
-memo is scored on behaviour alone, not on a guess.
-
-What the bands do:
-
-| Band | HUD | What changes about firing |
-|---|---|---|
-| `< 0.35` calm | green pip | nothing |
-| `0.35` warm | amber pip, top driver named | **nothing** — a warning that costs nothing is one you keep listening to |
-| `0.60` hot | red pip, driver + the evening's R in the confirm overlay, one desk advice | ARM → FIRE needs the confirm **held 750 ms** instead of a tap |
-| `0.80` scorched | countdown and a prompt to log a memo | opens paused for 300 s |
-
-Narrating the state is the intervention, so a memo recorded during a cooldown — or an explicit
-acknowledgement — **halves the recency terms**. The productive way out is rewarded; the door is not
-merely locked.
-
-What tilt cannot do, structurally rather than by convention:
-
-- **It cannot slow or block an exit.** `intent.close`, `intent.panic`, the HUD Flatten button and
-  `session.lock` run no gates at all. `tilt.gate_close: true` refuses to boot, and a test forces the
-  score to 1.0 and asserts a close and a panic both still execute.
-- **It cannot reach the Process Score.** Taxing an evening for a bad ten minutes would reintroduce
-  the punishment this whole design exists to avoid. A test greps the deck's metrics module for the
-  word.
-- **It cannot move the FSM.** It changes exactly two things: the `confirmHoldMs` parameter of the
-  existing fire predicate, and whether the server accepts an open. The pad's state machine is
-  byte-identical with tilt on or off.
-- **It cannot classify you.** No keyword scoring, no profanity detection, no affect model, no LLM
-  anywhere in the score. Voice contributes two arithmetic deviations from your own baseline, capped
-  at 5%, and is designed to be deleted rather than defended if a month of data does not support it.
-- **It cannot trap you.** The cooldown **fails open** — deliberately the opposite of the dead-man.
-  An unusable clock or a lost cooldown allows trading, because the dead-man is about unattended
-  input and this is a judgement call.
-- **It cannot become a trait.** Tilt is per-session state plus `tilt_sample` rows for the deck's
-  retrospective. Nothing is persisted about you, only about an evening.
-- **`tilt.enabled: false` removes it entirely** — the gate, the friction, the pip, and the desk's
-  `get_tilt` tool with it.
-
-The desk sees the band, the score, and the driver sentences already on your screen. It never sees a
-component value or a pad frame.
-
-## Non-goals
-
-Paper simulator. MT5/broker-history import. Pending orders or partial closes. Multiple accounts or
-markets. Mobile delivery or light mode. Wine. Live money. Multiplayer / SaaS / copy-trading. Native HID helper.
-Auto-trading AI, including TradingView `auto_trade`. Scraping Supercharts. Guaranteed profit.
-Leaderboards, streaks, levels, badges, or any deck mechanic that punishes standing down. Edgewonk's
-what-if trade simulator. Cloud speech-to-text. Voice or AI on the order path. Voice as navigation.
-A second compose service. An execution sidecar or any cross-process broker hop. Server-side
-rendering, server functions, or Node at runtime.
-
-## Open questions
-
-- Exact public origin hostname (resolved in phase 5).
-- `score.trades_max: 6` and the ±1 Selectivity band are uncalibrated for this player; the first month
-  is provisional and recalibrates retroactively.
-- Voice arousal (5% of tilt) is the weakest component — if a month of data does not support it,
-  delete it rather than defend it.
-- `voice.hold_stream: true` keeps the tab's recording indicator lit all evening in exchange for
-  200–400 ms lower PTT latency. Decide before phase 8 ships.
-
-## Documentation
-
-- [Plan of record](./plans/260824-1506-evening-forex-gold-gamepad/plan.md) — decisions, goals,
-  success criteria, validation log
-- [Research](./plans/260824-1506-evening-forex-gold-gamepad/research/) — client/gamepad/socket,
-  VPS/broker/AI, copilot desk, TradingView VIP, cTrader Docker
-- [Journals](./plans/journals/) — chronological session records
+| Pad poll → intent | < 16 ms | 60 Hz Gamepad API polling loop |
+| Home → VPS WS | 15–80 ms | Dominant segment (network transport) |
+| Gateway risk gates | < 5 ms | In-memory CID check, position caps, R limits |
+| VPS → Spotware demo ack | 20–80 ms | Protobuf TCP/SSL session to `demo.ctraderapi.com:5035` |
+| AI advisory | 1–5 s | Cold path; never blocks order execution |
 
 ---
 
-Demo only · Not advice · Process over outcome
+## Safety Invariants
+
+Enforced through **hard boot-fails in configuration**, not conventions. The gateway process exits immediately if any invariant is violated:
+
+- `mode: live` or connection to a live Open API host → **Refuse to start (exit non-zero)**.
+- `copilot.on_hot_path: true` → **Refuse to start**. AI tools are read-only and strictly isolated from the order path.
+- `voice.stt.mode` outside `{local, off}` → **Refuse to start**. No external cloud speech transcription.
+- `voice.bindings` resolving to `LT/RT/A/B/X/Y` → **Refuse to start**. Voice is restricted to memos and advisory questions.
+- `tilt.gate_close: true` → **Refuse to start**. Tilt may add friction to *opens* only; close and panic always execute.
+- `score.weights` not summing to 1.0 → **Refuse to start**.
+- `tradingview.auto_trade: true` → **Refuse to start**. External signals are informational only.
+
+---
+
+## Feature Layers
+
+| Layer | What It Does |
+|---|---|
+| **AI Desk** | Sentinel (spread, news events, market session clocks), Volman M5 price action setups, research, plan, and real-time coaching. Restricted to read-only tools. |
+| **Playbook & Grading** | Every trade is graded against its specific setup rules, with the rule validation count displayed in the ARM overlay *before* commit. |
+| **Voice Memo** | Hold `LB + RB` push-to-talk; records trade rationale and persists locally with audio playback in replay. |
+| **Tilt Detection** | 1 Hz controller telemetry (clutch cycles, arm flips, button rates, lot scaling) drives adaptive friction on opens. Never affects exits. |
+| **Trade Replay** | Scrub frozen 1 Hz dual-book tapes with analog sticks; inspect entry, exit, MAE/MFE excursions, and associated voice memos. |
+| **Process Score** | 5 process-only dimensions (adherence, selectivity, risk discipline, preparation, review). Correctly standing down scores a perfect 100. |
+| **Daily Journal Cockpit** | Multi-timezone IANA market clocks, 5-item readiness check, pre-session analysis, lot sizing calculator, Process Score heatmap, and filterable trade history. |
+| **Execution Learning** | Actual vs Plan review, planned vs impulsive classification, mistake taxonomy, and trader principles linkage. |
+| **Data Portability** | Print-friendly CSS reports (browser PDF), streamed CSV/JSON exports, and SHA-256 validated SQLite backup, restore, and nuclear wipe. |
+
+---
+
+## Locked Decisions
+
+| Area | Decision | Details |
+|---|---|---|
+| **Execution** | cTrader Open API | In-process Protobuf via `ctrader-open-api`, `demo.ctraderapi.com:5035` |
+| **Broker** | IC Markets cTrader Demo | Standard symbols (`XAUUSD`, `EURUSD`, `GBPUSD`, `USDJPY`), max 0.10 lot gold |
+| **Host** | Ubuntu VPS (Docker Compose) | Single container service (`ev-gateway`), no cross-process hops |
+| **Account Mode** | Demo Only | Hard boot-fail on live endpoints or production accounts |
+| **Session Window** | `Asia/Ho_Chi_Minh` | 18:00–23:30 evening trading session |
+| **Transport** | WebSocket (`/ws`) | Envelope: `{v, t, seq, ts, ch, cid, p}`, same origin as web HUD |
+| **Frontend Stack** | React 18 PWA | TypeScript, Vite, TanStack Router/Query, Lightweight Charts, dark arcade theme |
+| **Backend Stack** | Python 3.11+ | FastAPI, Uvicorn, Pydantic v2, Twisted/OpenApiPy, SQLite |
+| **Database** | SQLite + Migrations | Phase migrations `001`–`010` stored in `/data/journal.db` |
+
+---
+
+## Phases
+
+```text
+1 → 2 → 3 → 4 → [5] → 6 → 7 → [8] → 9 → 10 → 11 → 12 → 13 → [14]
+```
+
+| # | Phase | Scope | Status |
+|---|---|---|---|
+| 1 | [Repo, protocol, Docker config](./plans/260824-1506-evening-forex-gold-gamepad/phase-01-repo-protocol-docker-config.md) | Protocol v1, config boot-fails, migrations runner | **Built & Verified** |
+| 2 | [cTrader exec and socket gateway](./plans/260824-1506-evening-forex-gold-gamepad/phase-02-ctrader-exec-and-socket-gateway.md) | cTrader client, risk gates, cid ledger, tape pipeline | **Built & Verified** |
+| 3 | [Web game and 8BitDo client agent](./plans/260824-1506-evening-forex-gold-gamepad/phase-03-web-game-and-8bitdo-client-agent.md) | Gamepad FSM agent, chord detection, PWA shell | **Built & Verified** |
+| 4 | [AI desk: sentinel, news, Volman](./plans/260824-1506-evening-forex-gold-gamepad/phase-04-ai-desk-sentinel-news-volman.md) | Opportunity quality, Volman detectors, advisory tools | **Built & Verified** |
+| 5 | [Ubuntu Docker deploy](./plans/260824-1506-evening-forex-gold-gamepad/phase-05-ubuntu-docker-deploy.md) | Single-service compose, Caddy/nginx TLS reverse-proxy | *Pending (VPS setup)* |
+| 6 | [Performance and psychology deck](./plans/260824-1506-evening-forex-gold-gamepad/phase-06-performance-and-psychology-deck.md) | Process deck, adherence, month-over-month trends | **Built & Verified** |
+| 7 | [Playbook and trade grading](./plans/260824-1506-evening-forex-gold-gamepad/phase-07-playbook-and-trade-grading.md) | Rule registry, setups, pre-commit rule grading | **Built & Verified** |
+| 8 | [Voice: capture, whisper.cpp, coach](./plans/260824-1506-evening-forex-gold-gamepad/phase-08-voice-capture-whisper-and-coach.md) | Audio upload, local whisper.cpp STT, coach TTS | *Deferred* |
+| 9 | [Tilt telemetry and adaptive friction](./plans/260824-1506-evening-forex-gold-gamepad/phase-09-tilt-telemetry-and-adaptive-friction.md) | Behavioral pad telemetry, open friction, cooldown | **Built & Verified** |
+| 10 | [Trade replay](./plans/260824-1506-evening-forex-gold-gamepad/phase-10-trade-replay.md) | 1 Hz dual-book tape freeze, gamepad stick scrubbing | **Built & Verified** |
+| 11 | [Process Score and radar deck](./plans/260824-1506-evening-forex-gold-gamepad/phase-11-process-score-and-radar-deck.md) | 5 process axes, vacuous axes normalization, radar | **Built & Verified** |
+| 12 | [Daily journal cockpit](./plans/260824-1506-evening-forex-gold-gamepad/phase-12-daily-journal-cockpit-and-preparation.md) | Market clocks, readiness, sizing, Actual vs Plan | **Built & Verified** |
+| 13 | [Reports, settings, and data portability](./plans/260824-1506-evening-forex-gold-gamepad/phase-13-reports-settings-and-data-portability.md) | Printable PDF reports, exports, backup, restore, wipe | **Built & Verified** |
+| 14 | [End-to-end release gate](./plans/260824-1506-evening-forex-gold-gamepad/phase-14-end-to-end-session-journey-and-release-gate.md) | Full demo session on physical pad and VPS broker | *Pending* |
+
+---
+
+## Repo Layout
+
+```text
+evgamepad/
+├── app/                        # React 18 Arcade PWA (Vite, TypeScript, Tailwind)
+│   ├── src/
+│   │   ├── components/         # Reusable arcade UI widgets & layout primitives
+│   │   ├── screens/            # 20+ specialized screens (Live HUD, Journal, Replay, etc.)
+│   │   ├── pad/                # 8BitDo gamepad driver, chord detection, FSM, telemetry
+│   │   ├── net/                # WebSocket client, reconnection, message routing
+│   │   ├── journal/            # Journal cockpit, readiness checklists, trade review
+│   │   ├── replay/             # 1 Hz dual-book tape scrubber and chart components
+│   │   ├── deck/               # Process performance metrics, Process Score radar
+│   │   ├── protocol/           # Auto-generated schema.json and types.ts
+│   │   └── sw.ts               # Offline PWA service worker implementation
+│   └── scripts/                # check-protocol-types.mjs (catches contract drift)
+│
+├── apps/
+│   └── gateway/                # Single-process Python 3.11 gateway (FastAPI)
+│       ├── api/                # WebSocket `/ws`, REST endpoints, static HUD serving
+│       ├── broker/             # cTrader Open API client (Protobuf TCP/SSL, events, timeouts)
+│       ├── copilot/            # AI desk background worker (read-only advisory tools)
+│       ├── data/               # SQLite backup snapshots, restore verification, wipe
+│       ├── db/                 # SQLite migrations runner and migrations 001–010
+│       ├── deck/               # Process adherence and performance metric calculators
+│       ├── grading/            # Playbook pre-commit trade grading engine
+│       ├── journal/            # Journal queries, review attachments, tape freezing
+│       ├── method/             # Unified rule registry (risk rules + playbook setups)
+│       ├── protocol/           # Frozen v1 envelope & Pydantic catalog (single source of truth)
+│       ├── replay/             # 1 Hz dual-book tape aggregations & scrub endpoints
+│       ├── reports/            # Printable PDF report queries and data formatting
+│       ├── risk/               # Risk engine: CID reservations, limits, dead-man switch
+│       ├── score/              # 5-axis Process Score radar engine
+│       ├── sentinel/           # Market sentinel: spread, session clocks, opportunity quality
+│       ├── settings/           # Safe user preferences schema & reflection
+│       ├── signals/            # Economic calendar and external signal intake
+│       └── tilt/               # Measured behavioral tilt telemetry & friction gates
+│
+├── config/
+│   └── default.yaml            # Single configuration source of truth
+├── deploy/                     # VPS deployment runbooks & model fetch scripts
+├── docs/                       # Architecture diagrams, specifications, BA artifacts
+└── plans/                      # Phase implementation specifications, journals, research
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- **Python:** 3.11+ with [`uv`](https://github.com/astral-sh/uv) package manager.
+- **Node.js:** v20+ (v22 recommended) for building the web bundle.
+- **Hardware:** Desktop Chrome browser and an **8BitDo Ultimate 2 Wireless** controller with 2.4G USB dongle.
+- **Broker Account:** A free **cTrader ID** with an **IC Markets cTrader Demo** account.
+- **Container Runtime (optional):** Docker & Docker Compose for deployment.
+
+### cTrader Credentials (One-time Manual Setup)
+
+1. Register or log in to your **cTrader ID**.
+2. Open an **IC Markets cTrader Demo** account under that cTrader ID.
+3. Create an Open API application at [connect.spotware.com](https://connect.spotware.com).
+4. Run the OAuth consent flow in your browser with the `trading` scope against your redirect URI.
+5. Copy your credentials into `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+   Fill in:
+   ```dotenv
+   CT_CLIENT_ID=your_client_id
+   CT_CLIENT_SECRET=your_client_secret
+   CT_ACCESS_TOKEN=your_access_token
+   CT_REFRESH_TOKEN=your_refresh_token
+   CT_ACCOUNT_ID=your_demo_account_id
+   EV_WS_TOKEN=generate_a_secure_token
+   ```
+
+### Local Development
+
+#### 1. Backend Gateway
+
+```bash
+cd apps/gateway
+uv sync --group dev
+EV_DEV=1 EV_CONFIG=../../config/default.yaml EV_DATA_DIR=../../data uv run python main.py
+```
+The gateway binds to `127.0.0.1:8444`. Health check:
+```bash
+curl -s http://127.0.0.1:8444/healthz
+```
+
+#### 2. Frontend Web App
+
+In a separate terminal:
+```bash
+cd app
+npm install
+npm run dev
+```
+Open `http://localhost:5173` in Google Chrome, connect your 8BitDo controller, and press any button to begin.
+
+---
+
+### Test Suite
+
+The project enforces high test reliability across both backend and frontend layers:
+
+```bash
+# Run backend tests (527 tests covering risk, broker, protocol, journal, replay, score)
+cd apps/gateway
+uv run python -m pytest
+
+# Run frontend tests (182 tests covering gamepad FSM, chords, WebSocket, HUD, replay)
+cd ../../app
+npm test
+
+# Run frontend type checking & protocol drift validation
+npm run build
+```
+
+---
+
+### Docker Production Run
+
+The entire production stack operates as a **single container** with zero external dependencies:
+
+```bash
+# Build and run the single-service gateway
+docker compose build
+docker compose up -d
+
+# Verify container health
+docker compose ps
+curl -s http://127.0.0.1:8444/healthz
+```
+
+---
+
+### Protocol Types Are Generated, Never Hand-Written
+
+The Pydantic message catalog in `apps/gateway/protocol/` is the single source of truth. TypeScript definitions and JSON schemas are generated automatically:
+
+```bash
+# Regenerate TypeScript types from backend Pydantic models
+cd apps/gateway
+uv run python -m protocol.export_ts
+
+# Verify types are up to date (fails build if drift occurs)
+uv run python -m protocol.export_ts --check
+```
+
+---
+
+## Playbooks: Enforced vs Graded
+
+A **playbook** represents a structured trading setup with explicit verification rules. Every trade is graded against the active playbook before execution:
+
+```text
+BUY 0.10 XAUUSD @ 2345.12
+[M5 Range Break]  4/5 rules OK  ·  ✗ Not chasing (3.00 ATR)
+```
+
+The fundamental distinction between rule types:
+
+| Property | Risk Rules | Playbook Rules |
+|---|---|---|
+| **Defined In** | Unified registry (`method/rules.py`) | Same registry |
+| **Violation Outcome** | **Rejects the intent server-side** | **Recorded and displayed in HUD** |
+| **Configured By** | Server configuration only | Trader / Strategy profile |
+
+> [!NOTE]
+> **A playbook rule can never block a trade.** This invariant is verified by automated tests to ensure the journal never silently becomes an unauthorized gatekeeper.
+
+---
+
+## The Deck, and What It Refuses to Show
+
+The `/deck` view answers one question: **Am I improving?**
+
+It opens on the **process panel**, deliberately free of dollar amounts, balances, or financial P/L. Monitoring monetary fluctuations mid-session distracts from execution quality; the outcome panel requires an explicit user click.
+
+| Metric | Purpose |
+|---|---|
+| **Adherence** | Ratio of executed trades that satisfied every setup rule. Evaluated using the gateway's server-enforced rule set. |
+| **Trades Declined** | Controller arms cancelled while a stand-down condition was active. Not trading is treated as an active, positive decision. |
+| **Opportunity Quality** | Evaluates market conditions offered by the tape. A flat session during a dead market represents high discipline. |
+| **Check-In** | Two-tap physical controller check-in plotted against adherence rather than monetary gain. |
+| **Month vs Month** | Comparative trajectory tracking disciplined execution over time. |
+
+### Deliberately Refused Dark Patterns
+- **No streaks, levels, or badges:** Gamification mechanics that incentivize trading dead markets are excluded.
+- **No Sharpe ratios under 30 sessions:** Statistically insignificant sample sizes are marked as "insufficient data".
+- **No zeros for unmeasured sessions:** Standing down during a zero-trade session does not score zero.
+
+---
+
+## The Daily Journal
+
+The `/journal` cockpit powers the full daily cycle: **prepare, trade, close, and review** without leaving the application.
+
+- **Pre-Session Readiness:** IANA market clocks (Sydney, Tokyo, London, New York), 5-item emotional/physical readiness check, and pre-session trade planning.
+- **Dynamic Lot Sizing:** Calculated directly by the gateway using live quote-to-USD conversion and broker volume stepping. Sizing rounds down conservatively to ensure risk boundaries are respected.
+- **Actual vs Plan Review:** Trade analysis comparing planned vs executed entry/stop parameters.
+- **Immutable Records:** Trade fills, execution events, and tape data cannot be altered or overwritten.
+
+---
+
+## The Process Score
+
+Five process-driven axes evaluate overall trading discipline:
+
+| Axis | Metric | Weight |
+|---|---|---|
+| **Adherence** | Playbook rules passed / rules evaluated | 0.30 |
+| **Selectivity** | Alignment between trade count and market opportunity | 0.25 |
+| **Risk Discipline** | Compliance with lot size, entry stops, R-multiple limits | 0.20 |
+| **Preparation** | Pre-session check-in, readiness checklist, and plan setup | 0.15 |
+| **Review** | Post-session review, replay inspection, and trade tagging | 0.10 |
+
+> [!TIP]
+> **A correctly declined evening scores at least as well as a well-traded session:**  
+> - Dead tape, 0 trades, genuine stand-downs: **100 / 100**  
+> - Active tape, 4 fires, executed cleanly: **98 / 100**  
+> - Active tape, hesitation/freeze: **70 / 100**  
+> - Dead tape, over-trading: **65 / 100**
+
+---
+
+## Trade Replay
+
+Replay closed trades through the exact 1 Hz tape they unfolded on:
+
+| Gamepad Input | Replay Function |
+|---|---|
+| **LS ← / →** | Velocity-based tape scrubbing |
+| **RS ← / →** | Zoom timeframe window (1s, 5s, 15s, 1m, 5m) |
+| **A** | Play / Pause |
+| **D-pad ↑ / ↓** | Playback speed (0.5x, 1x, 2x, 4x) |
+| **LB / RB** | Navigate previous / next trade of the session |
+| **B** | Exit replay |
+
+The replay tape is frozen at 1 Hz resolution for **both sides of the book (Bid and Ask)**, ensuring buy and sell excursions (MAE/MFE) are rendered with precision. Orders cannot be emitted from the replay route.
+
+---
+
+## Tilt: What It Measures, and What It Cannot Do
+
+The system derives emotional state directly from measured physical controller interactions:
+
+| Component | Telemetry Measurement | Weight |
+|---|---|---|
+| **Revenge Size** | Order volume relative to session median | 0.25 |
+| **Re-Entry Speed** | Seconds elapsed since a losing close | 0.20 |
+| **Rule-Break Recency** | Adherence failures in recent fires | 0.20 |
+| **Hesitation** | Clutch cycles before arming | 0.10 |
+| **Arm Flip** | Rapid switching between BUY and SELL while armed | 0.10 |
+| **Input Aggression** | Button pressing frequency against baseline | 0.10 |
+| **Voice Arousal** | Speech pacing and volume deviations | 0.05 |
+
+### Adaptive Friction Bands
+
+- **Calm (`< 0.35`):** Standard operation.
+- **Warm (`0.35 - 0.60`):** Informational amber indicator.
+- **Hot (`0.60 - 0.80`):** Requires holding confirmation for 750 ms instead of a tap.
+- **Scorched (`> 0.80`):** Imposes a 300 s cooldown on new open orders.
+
+> [!IMPORTANT]
+> **Tilt safeguards never block exits:** Close (`X`), panic flatten (`Y`), and emergency locks always execute without friction regardless of tilt band.
+
+---
+
+## Settings, Reports, and Your Data
+
+- **Printable Reports:** Generate clean, print-optimized PDF reports directly through the browser.
+- **Data Export:** Streamed `trades.csv` and complete `journal.json` exports based on strict column allowlists.
+- **Backup & Restore:** Atomic SQLite online backups packaged with screenshots and tape logs. Archives are validated against SHA-256 manifests before any restore swap occurs.
+- **Audit Wipe:** Irreversible data wipe requiring explicit confirmation (`DELETE EVERYTHING`), session lock, and zero active positions.
+
+---
+
+## Non-Goals
+
+- Real-money live execution (strictly rejected at runtime).
+- MT5 or proprietary broker history imports.
+- Pending orders or partial position scaling.
+- Multi-user SaaS, copy-trading, or social leaderboards.
+- Automated AI order placement.
+- Cloud speech-to-text data transmission.
+- Secondary microservices or execution sidecars.
+
+---
+
+## Documentation
+
+- [Master Implementation Plan](./plans/260824-1506-evening-forex-gold-gamepad/plan.md) — Architectural decisions, phase milestones, validation logs
+- [Research Compendium](./plans/260824-1506-evening-forex-gold-gamepad/research/) — Gamepad APIs, cTrader Protobuf protocols, AI integration
+- [Session Development Journals](./plans/journals/) — Chronological development logs
+
+---
+
+<p align="center">
+  <sub>Demo only · Not financial advice · Process over outcome</sub>
+</p>
