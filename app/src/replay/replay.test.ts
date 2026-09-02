@@ -108,9 +108,9 @@ describe("resampling", () => {
     for (const candle of candles) expect(candle.time % 60).toBe(0);
   });
 
-  it("charts a long on the bid and a short on the ask", () => {
-    // A long is exited on the bid and a short on the ask. Charting both off one side would put the
-    // spread-sized asymmetry back into every short's adverse move.
+  it("charts a buy on the bid and a sell on the ask", () => {
+    // A buy is exited on the bid and a sell on the ask. Charting both off one side would put the
+    // spread-sized asymmetry back into every sell's adverse move.
     expect(sideForTrade("buy")).toBe("bid");
     expect(sideForTrade("sell")).toBe("ask");
 
@@ -285,25 +285,25 @@ describe("markers", () => {
     expect(markers).toHaveLength(2);
     expect(markers[0].text).toContain(String(TRADE.entry));
     expect(markers[1].text).toContain(String(TRADE.exit));
-    // A long enters with an up arrow below the bar and exits with a down arrow above it.
+    // A buy enters with an up arrow below the bar and exits with a down arrow above it.
     expect(markers[0].shape).toBe("arrowUp");
     expect(markers[1].shape).toBe("arrowDown");
   });
 
-  it("flips the arrows for a short", () => {
+  it("flips the arrows for a sell", () => {
     const markers = tradeMarkers({ ...TRADE, side: "sell" }, 60);
     expect(markers[0].shape).toBe("arrowDown");
     expect(markers[1].shape).toBe("arrowUp");
   });
 
   it("puts the excursions on the right side of the entry", () => {
-    const long = excursionLines(TRADE);
-    expect(long[0].price).toBeGreaterThan(TRADE.entry!);
-    expect(long[1].price).toBeLessThan(TRADE.entry!);
+    const buy = excursionLines(TRADE);
+    expect(buy[0].price).toBeGreaterThan(TRADE.entry!);
+    expect(buy[1].price).toBeLessThan(TRADE.entry!);
 
-    const short = excursionLines({ ...TRADE, side: "sell" });
-    expect(short[0].price).toBeLessThan(TRADE.entry!);
-    expect(short[1].price).toBeGreaterThan(TRADE.entry!);
+    const sell = excursionLines({ ...TRADE, side: "sell" });
+    expect(sell[0].price).toBeLessThan(TRADE.entry!);
+    expect(sell[1].price).toBeGreaterThan(TRADE.entry!);
   });
 
   it("prints an excursion in R only when a stop makes R knowable", () => {

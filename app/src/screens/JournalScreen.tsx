@@ -8,7 +8,7 @@ const TRADES = [
   {
     time: "20:57",
     symbol: "XAUUSD",
-    side: "long" as const,
+    side: "buy" as const,
     entry: "2458.10",
     exit: "2473.00",
     result: 2.4,
@@ -16,7 +16,7 @@ const TRADES = [
   {
     time: "21:38",
     symbol: "XAUUSD",
-    side: "long" as const,
+    side: "buy" as const,
     entry: "2469.40",
     exit: "2464.10",
     result: -1.1,
@@ -24,7 +24,7 @@ const TRADES = [
   {
     time: "22:14",
     symbol: "EURUSD",
-    side: "short" as const,
+    side: "sell" as const,
     entry: "1.09210",
     exit: "1.09080",
     result: 0.9,
@@ -32,7 +32,7 @@ const TRADES = [
   {
     time: "22:51",
     symbol: "EURUSD",
-    side: "short" as const,
+    side: "sell" as const,
     entry: "1.09140",
     exit: "1.09190",
     result: -0.6,
@@ -228,7 +228,7 @@ export function JournalScreen() {
                 color: "var(--text-body)",
               }}
             >
-              Gold has held 2455 twice today. I want one long from a retest with the London low
+              Gold has held 2455 twice today. I want one buy from a retest with the London low
               intact, and nothing else.
             </div>
             <div

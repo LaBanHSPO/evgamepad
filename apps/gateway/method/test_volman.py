@@ -84,7 +84,7 @@ def test_a_break_that_closes_back_inside_points_the_other_way() -> None:
     tag = detect_false_break(candles, box)
     assert tag is not None
     assert tag.kind == "false_break"
-    assert tag.side == "sell", "a failed upside break is a short signal"
+    assert tag.side == "sell", "a failed upside break is a sell signal"
     assert tag.level == pytest.approx(box.top)
 
 

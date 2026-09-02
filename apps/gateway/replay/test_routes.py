@@ -106,7 +106,7 @@ def test_a_frozen_tape_reads_back_with_both_sides_of_the_book(journal: JournalWr
     tape = body["tape"]
     assert tape["n"] > 0
     assert len(tape["ts"]) == tape["n"]
-    # Both sides are stored because a long's excursion is measured on the bid and a short's on the
+    # Both sides are stored because a buy's excursion is measured on the bid and a sell's on the
     # ask. Serving one side would put the asymmetry bug back.
     assert tape["askC"][0] > tape["bidC"][0]
     # Integers all the way out: the client divides once, at the point of drawing.

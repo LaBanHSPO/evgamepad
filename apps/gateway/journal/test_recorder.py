@@ -106,20 +106,20 @@ def test_net_pnl_falls_back_to_price_difference_when_the_broker_gave_none(
     assert closed.net_pnl_usd == pytest.approx(4.0), "1 ounce moved $4"
 
 
-def test_a_long_and_a_short_take_excursions_from_opposite_sides(recorder: TradeRecorder) -> None:
+def test_a_buy_and_a_sell_take_excursions_from_opposite_sides(recorder: TradeRecorder) -> None:
     tape(recorder, seconds=120, start_ms=OPENED_MS, bid=2000.0, drift=0.05)
     fill(recorder)
-    long_closed = recorder.on_close(position_id=9, exit_price=2005.0,
+    buy_closed = recorder.on_close(position_id=9, exit_price=2005.0,
                                     ts_ms=OPENED_MS + 119_000, gross_pnl=5.0)
 
     fill(recorder, cid="01DEF", position_id=10, side="sell")
-    short_closed = recorder.on_close(position_id=10, exit_price=2005.0,
+    sell_closed = recorder.on_close(position_id=10, exit_price=2005.0,
                                      ts_ms=OPENED_MS + 119_000, gross_pnl=-5.0)
 
-    assert long_closed is not None and short_closed is not None
-    assert long_closed.mfe > 0, "a rising bid is the long's gain"
-    assert short_closed.mae > 0, "the same rise is the short's pain"
-    assert short_closed.mae > long_closed.mae
+    assert buy_closed is not None and sell_closed is not None
+    assert buy_closed.mfe > 0, "a rising bid is the buy's gain"
+    assert sell_closed.mae > 0, "the same rise is the sell's pain"
+    assert sell_closed.mae > buy_closed.mae
 
 
 def test_the_tape_is_frozen_only_after_the_post_roll(recorder: TradeRecorder) -> None:

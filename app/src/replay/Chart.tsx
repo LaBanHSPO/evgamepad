@@ -18,8 +18,8 @@ import type { ReplayBody } from "./types";
  * React owns the layout around it and never re-renders on a playhead move. Only a change of
  * timeframe or trade rebuilds the series.
  *
- * The side is chosen from the trade, not defaulted. A long is exited on the bid and a short on the
- * ask; charting a short against the bid would understate every adverse move by the spread, which
+ * The side is chosen from the trade, not defaulted. A buy is exited on the bid and a sell on the
+ * ask; charting a sell against the bid would understate every adverse move by the spread, which
  * is exactly the asymmetry the tape stores both sides to avoid.
  */
 

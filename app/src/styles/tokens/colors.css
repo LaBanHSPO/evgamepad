@@ -74,8 +74,8 @@
   --pnl-down:var(--arcade-red);
   --pnl-down-bg:rgba(232,32,42,.16);
   --pnl-flat:var(--grey-500);
-  --side-long:var(--phos-400);
-  --side-short:var(--arcade-red);
+  --side-buy:var(--phos-400);
+  --side-sell:var(--arcade-red);
 
   /* ---- semantic: status ---- */
   --status-live:var(--phos-400);

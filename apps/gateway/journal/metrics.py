@@ -142,19 +142,19 @@ def worsened_stops(amendments: tuple[dict[str, Any], ...], *, side: str,
                    original_sl: float | None) -> list[dict[str, Any]]:
     """Amendments that moved the stop **away** from the entry — further risk, not less.
 
-    Direction matters: for a long, a lower stop is worse; for a short, a higher one is. Counting
+    Direction matters: for a buy, a lower stop is worse; for a sell, a higher one is. Counting
     every amendment as a mistake would penalise the entirely correct act of trailing a stop up.
     """
     if original_sl is None:
         return []
-    long = side.lower() == "buy"
+    buy = side.lower() == "buy"
     worse: list[dict[str, Any]] = []
     current = original_sl
     for amendment in amendments:
         moved = amendment.get("sl")
         if moved is None:
             continue
-        if (moved < current) if long else (moved > current):
+        if (moved < current) if buy else (moved > current):
             worse.append({"ts": amendment.get("ts"), "from": current, "to": moved})
         current = moved
     return worse

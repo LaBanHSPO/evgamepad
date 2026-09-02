@@ -12,7 +12,7 @@ export type TradeTag = string | { label: string; color?: string };
 export interface TradeRowProps extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
   time?: string;
   symbol?: string;
-  side?: "long" | "short";
+  side?: "buy" | "sell";
   size?: string;
   entry?: string;
   exit?: string;
@@ -26,7 +26,7 @@ export interface TradeRowProps extends Omit<HTMLAttributes<HTMLDivElement>, "chi
 export function TradeRow({
   time,
   symbol,
-  side = "long",
+  side = "buy",
   entry,
   exit,
   result,
@@ -38,7 +38,7 @@ export function TradeRow({
   ...rest
 }: TradeRowProps) {
   const [hover, setHover] = useState(false);
-  const sideColor = side === "short" ? "var(--side-short)" : "var(--side-long)";
+  const sideColor = side === "sell" ? "var(--side-sell)" : "var(--side-buy)";
   const cell: CSSProperties = {
     fontFamily: "var(--font-data)",
     fontSize: "var(--text-xs)",

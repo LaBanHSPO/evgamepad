@@ -2,9 +2,9 @@
 
 Only windows around actual trades are persisted, so a zero-trade evening writes nothing at all.
 
-MFE/MAE read the **correct side of the book**. A long is exited on the bid, so its excursions are
-measured there; a short is exited on the ask. Measuring both from one side would understate every
-short's adverse move by the spread — a silent asymmetry that would quietly flatter half the
+MFE/MAE read the **correct side of the book**. A buy is exited on the bid, so its excursions are
+measured there; a sell is exited on the ask. Measuring both from one side would understate every
+sell's adverse move by the spread — a silent asymmetry that would quietly flatter half the
 journal.
 """
 
@@ -68,11 +68,11 @@ def excursions(bars: list[Bar], *, side: str, entry: float, scale: int) -> Excur
         return Excursions(mfe=0.0, mae=0.0)
 
     if normalised == "buy":
-        # A long is closed by selling into the bid.
+        # A buy is closed by selling into the bid.
         best = max(b.bid_h for b in bars) / scale
         worst = min(b.bid_l for b in bars) / scale
         return Excursions(mfe=max(0.0, best - entry), mae=max(0.0, entry - worst))
-    # A short is closed by buying back at the ask.
+    # A sell is closed by buying back at the ask.
     best = min(b.ask_l for b in bars) / scale
     worst = max(b.ask_h for b in bars) / scale
     return Excursions(mfe=max(0.0, entry - best), mae=max(0.0, worst - entry))

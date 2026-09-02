@@ -4,16 +4,16 @@ import { Button, Checkbox, GamepadKey, Input, StatTile, TradeRow } from "../ds";
 /** History — the prototype's `is_history` artboard. */
 
 const TRADES = [
-  { time: "20:57", symbol: "XAUUSD", side: "long" as const, entry: "2458.10", exit: "2473.00", result: 2.4, selected: true },
-  { time: "21:38", symbol: "XAUUSD", side: "long" as const, entry: "2469.40", exit: "2464.10", result: -1.1 },
-  { time: "22:14", symbol: "EURUSD", side: "short" as const, entry: "1.09210", exit: "1.09080", result: 0.9 },
-  { time: "22:51", symbol: "EURUSD", side: "short" as const, entry: "1.09140", exit: "1.09190", result: -0.6 },
-  { time: "20:41", symbol: "XAUUSD", side: "long" as const, entry: "2451.80", exit: "2459.20", result: 1.8 },
-  { time: "21:09", symbol: "GBPUSD", side: "long" as const, entry: "1.27610", exit: "1.27590", result: -0.2 },
-  { time: "22:02", symbol: "XAUUSD", side: "short" as const, entry: "2466.30", exit: "2460.10", result: 1.5 },
-  { time: "20:52", symbol: "XAUUSD", side: "long" as const, entry: "2444.90", exit: "2441.20", result: -1 },
-  { time: "21:47", symbol: "EURUSD", side: "long" as const, entry: "1.08940", exit: "1.09120", result: 1.2 },
-  { time: "22:36", symbol: "XAUUSD", side: "long" as const, entry: "2457.60", exit: "2457.60", result: 0 },
+  { time: "20:57", symbol: "XAUUSD", side: "buy" as const, entry: "2458.10", exit: "2473.00", result: 2.4, selected: true },
+  { time: "21:38", symbol: "XAUUSD", side: "buy" as const, entry: "2469.40", exit: "2464.10", result: -1.1 },
+  { time: "22:14", symbol: "EURUSD", side: "sell" as const, entry: "1.09210", exit: "1.09080", result: 0.9 },
+  { time: "22:51", symbol: "EURUSD", side: "sell" as const, entry: "1.09140", exit: "1.09190", result: -0.6 },
+  { time: "20:41", symbol: "XAUUSD", side: "buy" as const, entry: "2451.80", exit: "2459.20", result: 1.8 },
+  { time: "21:09", symbol: "GBPUSD", side: "buy" as const, entry: "1.27610", exit: "1.27590", result: -0.2 },
+  { time: "22:02", symbol: "XAUUSD", side: "sell" as const, entry: "2466.30", exit: "2460.10", result: 1.5 },
+  { time: "20:52", symbol: "XAUUSD", side: "buy" as const, entry: "2444.90", exit: "2441.20", result: -1 },
+  { time: "21:47", symbol: "EURUSD", side: "buy" as const, entry: "1.08940", exit: "1.09120", result: 1.2 },
+  { time: "22:36", symbol: "XAUUSD", side: "buy" as const, entry: "2457.60", exit: "2457.60", result: 0 },
 ];
 
 const INSTRUMENTS = [

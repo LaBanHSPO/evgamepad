@@ -580,7 +580,7 @@ stop you moved, the band you crossed, where MFE and MAE really sat.
 | **B** | exit |
 
 The tape is one row per trade, frozen after the post-roll settles: 1 Hz OHLC for **both sides of
-the book** (a long's excursions are measured on the bid, a short's on the ask), plus the events,
+the book** (a buy's excursions are measured on the bid, a sell's on the ask), plus the events,
 denormalised at freeze time from the pad telemetry, the broker, the signals and the tilt samples.
 About 12-20 KB a trade. A zero-trade evening writes nothing at all.
 

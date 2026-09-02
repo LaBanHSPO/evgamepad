@@ -72,7 +72,7 @@ Agents cite evidence in the same breath as the verdict. They never apologise, ne
 
 **Palette.** Near-black surfaces (`#040604` app → `#080C08` panel → `#0D130D` raised → `#131B13` input well), one hero colour — **phosphor green `#00FF41`** — and a small Contra sprite set (red `#E8202A`, orange `#FF8A00`, yellow `#FFD400`, cyan `#22E0FF`, magenta `#FF3DA6`). Neutrals are green-tinted greys so nothing reads as pure grey. Maximum **two** background values per layout. An arcade colour is never a large fill except on the `arcade` button and the pressed pad glyph.
 
-**Colour semantics are locked.** Green = profit and long. Red = loss and short. Magenta = AI agent. Yellow = warning / approaching a limit. Cyan = informational and neutral tags. Nothing else may claim those meanings.
+**Colour semantics are locked.** Green = profit and buy. Red = loss and sell. Magenta = AI agent. Yellow = warning / approaching a limit. Cyan = informational and neutral tags. Nothing else may claim those meanings.
 
 **Type.** Three faces, three jobs. Press Start 2P for arcade display moments only (wordmark, hero, one CTA) — never below 12px, never a paragraph, never more than three lines. JetBrains Mono for everything else including body copy: an all-monospace system is what makes a journal of numbers feel native. VT323 at 16px+ for agent output and logs. Body copy 14/1.5, max 64ch. Labels 10–11px uppercase at 0.18em.
 
@@ -147,7 +147,7 @@ All tokens are CSS custom properties on `:root`, split across `tokens/*.css` and
 | Surfaces | `--surface-app` → `black-1` · `--surface-panel` → `black-2` · `--surface-raised` → `black-3` · `--surface-well` → `black-4` · `--surface-overlay` → `black-a88` · `--surface-hover` → `phos-a08` · `--surface-selected` → `phos-a16` |
 | Text | `--text-primary` → `phos-100` · `--text-body` → `grey-100` · `--text-secondary` → `grey-300` · `--text-muted` → `grey-500` · `--text-disabled` → `grey-700` · `--text-accent` → `phos-400` · `--text-inverse` → `black-1` · `--text-terminal` → `phos-300` |
 | Lines | `--line-hairline` `rgba(0,255,65,.16)` · `--line-strong` `.42` · `--line-solid` → `phos-700` · `--line-neutral` → `grey-900` |
-| Trading | `--pnl-up` → `phos-400` · `--pnl-up-bg` → `phos-a16` · `--pnl-down` → `arcade-red` · `--pnl-down-bg` `rgba(232,32,42,.16)` · `--pnl-flat` → `grey-500` · `--side-long` → `phos-400` · `--side-short` → `arcade-red` |
+| Trading | `--pnl-up` → `phos-400` · `--pnl-up-bg` → `phos-a16` · `--pnl-down` → `arcade-red` · `--pnl-down-bg` `rgba(232,32,42,.16)` · `--pnl-flat` → `grey-500` · `--side-buy` → `phos-400` · `--side-sell` → `arcade-red` |
 | Status | `--status-live` green · `--status-warn` yellow · `--status-danger` red · `--status-info` cyan · `--status-agent` magenta |
 | Gamepad | `--pad-a` green · `--pad-b` red · `--pad-x` cyan · `--pad-y` yellow · `--pad-shoulder` → `grey-300` |
 
@@ -315,7 +315,7 @@ Single Google Fonts `@import`: `Press+Start+2P`, `JetBrains+Mono` (100–800, it
 `value: number|string` · `unit?` (default `"R"`) · `size?: "xs"–"xl"` · `showSign?` · `showArrow?` · `precision?` (default 2)
 
 **TradeRow** — one trade in the journal table. 36px tall, hairline separated, 2px phosphor keyline when selected.
-`time` (`"09:31"`) · `symbol` · `side?: "long"|"short"` · `size?` · `entry?` · `exit?` · `result: number` · `tags?: Array<string | {label, color?}>` · `status?` (`"open"` renders a live badge) · `selected?`
+`time` (`"09:31"`) · `symbol` · `side?: "buy"|"sell"` · `size?` · `entry?` · `exit?` · `result: number` · `tags?: Array<string | {label, color?}>` · `status?` (`"open"` renders a live badge) · `selected?`
 
 ### 6.6 `agents/`
 

@@ -55,8 +55,8 @@ def test_an_out_of_order_spot_after_a_reconnect_is_dropped() -> None:
     assert bars[0].bid_l == price(2000.0), "a stale tick must not widen a committed bar"
 
 
-def test_a_long_measures_excursions_on_the_bid() -> None:
-    """Entry 2000. Bid reaches 2005 and dips to 1997 — that is the long's +5 and -3."""
+def test_a_buy_measures_excursions_on_the_bid() -> None:
+    """Entry 2000. Bid reaches 2005 and dips to 1997 — that is the buy's +5 and -3."""
     bars = [
         Bar(1, price(2000), price(2005), price(1997), price(2001),
             price(2000.3), price(2005.3), price(1997.3), price(2001.3), 10)
@@ -66,8 +66,8 @@ def test_a_long_measures_excursions_on_the_bid() -> None:
     assert result.mae == pytest.approx(3.0)
 
 
-def test_a_short_measures_excursions_on_the_ask() -> None:
-    """Same bar, short from 2000: the ask's low is the gain, the ask's high is the pain."""
+def test_a_sell_measures_excursions_on_the_ask() -> None:
+    """Same bar, sell from 2000: the ask's low is the gain, the ask's high is the pain."""
     bars = [
         Bar(1, price(2000), price(2005), price(1997), price(2001),
             price(2000.3), price(2005.3), price(1997.3), price(2001.3), 10)
@@ -77,15 +77,15 @@ def test_a_short_measures_excursions_on_the_ask() -> None:
     assert result.mae == pytest.approx(5.3), "the ask high 2005.3 minus entry 2000"
 
 
-def test_reading_a_short_from_the_bid_would_understate_its_pain() -> None:
+def test_reading_a_sell_from_the_bid_would_understate_its_pain() -> None:
     """The regression this asymmetry exists to prevent: the two sides must not agree."""
     bars = [
         Bar(1, price(2000), price(2005), price(1997), price(2001),
             price(2000.3), price(2005.3), price(1997.3), price(2001.3), 10)
     ]
-    long_side = excursions(bars, side="buy", entry=2000.0, scale=SCALE)
-    short_side = excursions(bars, side="sell", entry=2000.0, scale=SCALE)
-    assert short_side.mae > long_side.mae
+    buy_side = excursions(bars, side="buy", entry=2000.0, scale=SCALE)
+    sell_side = excursions(bars, side="sell", entry=2000.0, scale=SCALE)
+    assert sell_side.mae > buy_side.mae
 
 
 def test_an_unknown_side_is_refused() -> None:

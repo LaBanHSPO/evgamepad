@@ -189,7 +189,7 @@ def test_each_stage_reads_its_own_inputs() -> None:
 
 
 def test_a_stop_moved_further_away_is_the_only_one_counted() -> None:
-    """Trailing a stop up on a long is correct. Counting it as a mistake would punish good practice."""
+    """Trailing a stop up on a buy is correct. Counting it as a mistake would punish good practice."""
     trailed = worsened_stops(({"ts": 1, "sl": 2457.0}, {"ts": 2, "sl": 2458.5}),
                              side="buy", original_sl=2456.0)
     assert trailed == []
@@ -199,7 +199,7 @@ def test_a_stop_moved_further_away_is_the_only_one_counted() -> None:
     assert widened[0]["from"] == 2456.0 and widened[0]["to"] == 2454.0
 
 
-def test_the_direction_flips_for_a_short() -> None:
+def test_the_direction_flips_for_a_sell() -> None:
     worse = worsened_stops(({"ts": 1, "sl": 152.0},), side="sell", original_sl=151.0)
     assert len(worse) == 1
     assert worsened_stops(({"ts": 1, "sl": 150.0},), side="sell", original_sl=151.0) == []

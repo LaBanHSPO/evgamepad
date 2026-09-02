@@ -259,7 +259,7 @@ export function PreSessionScreen() {
                 color: "var(--text-body)",
               }}
             >
-              Gold has held 2455 twice today. I want one long from a retest with the London low
+              Gold has held 2455 twice today. I want one buy from a retest with the London low
               intact, and nothing else. If it breaks 2455 and closes below, I am done for the night.
             </div>
           </div>

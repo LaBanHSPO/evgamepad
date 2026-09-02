@@ -195,7 +195,7 @@ export function AgentDeskScreen() {
             }}
           >
             <AgentMessage author="user" time="21:09">
-              Is my long still valid if 2455 gives way on this candle?
+              Is my buy still valid if 2455 gives way on this candle?
             </AgentMessage>
             {/* One clause per line — the system's rule for agent output. */}
             <AgentMessage author="agent" name="risk-warden" time="21:09">

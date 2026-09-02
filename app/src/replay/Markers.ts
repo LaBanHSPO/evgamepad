@@ -54,13 +54,13 @@ export function styleFor(kind: string): { colour: string; word: string } {
  */
 export function tradeMarkers(trade: ReplayTrade, seconds: number): ChartMarker[] {
   const out: ChartMarker[] = [];
-  const long = trade.side === "buy";
+  const isBuy = trade.side === "buy";
 
   if (trade.openedAt !== null && trade.entry !== null) {
     out.push({
       time: bucket(trade.openedAt, seconds),
-      position: long ? "belowBar" : "aboveBar",
-      shape: long ? "arrowUp" : "arrowDown",
+      position: isBuy ? "belowBar" : "aboveBar",
+      shape: isBuy ? "arrowUp" : "arrowDown",
       color: COLOURS.entry,
       text: `entry ${trade.entry}`,
     });
@@ -68,8 +68,8 @@ export function tradeMarkers(trade: ReplayTrade, seconds: number): ChartMarker[]
   if (trade.exit !== null) {
     out.push({
       time: bucket(trade.closedAt, seconds),
-      position: long ? "aboveBar" : "belowBar",
-      shape: long ? "arrowDown" : "arrowUp",
+      position: isBuy ? "aboveBar" : "belowBar",
+      shape: isBuy ? "arrowDown" : "arrowUp",
       color: COLOURS.exit,
       text: `exit ${trade.exit}`,
     });
@@ -86,19 +86,19 @@ export function tradeMarkers(trade: ReplayTrade, seconds: number): ChartMarker[]
  */
 export function excursionLines(trade: ReplayTrade): { price: number; colour: string; label: string }[] {
   if (trade.entry === null) return [];
-  const long = trade.side === "buy";
+  const isBuy = trade.side === "buy";
   const lines: { price: number; colour: string; label: string }[] = [];
 
   if (trade.mfe !== null && trade.mfe > 0) {
     lines.push({
-      price: long ? trade.entry + trade.mfe : trade.entry - trade.mfe,
+      price: isBuy ? trade.entry + trade.mfe : trade.entry - trade.mfe,
       colour: COLOURS.mfe,
       label: `MFE ${inR(trade.mfe, trade)}`,
     });
   }
   if (trade.mae !== null && trade.mae > 0) {
     lines.push({
-      price: long ? trade.entry - trade.mae : trade.entry + trade.mae,
+      price: isBuy ? trade.entry - trade.mae : trade.entry + trade.mae,
       colour: COLOURS.mae,
       label: `MAE ${inR(trade.mae, trade)}`,
     });

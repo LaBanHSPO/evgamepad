@@ -403,7 +403,7 @@ export function CityFireScreen() {
                   textShadow: "var(--glow-text),3px 3px 0 #000",
                 }}
               >
-                LONG
+                BUY
               </span>
               <div style={{ display: "grid", gap: 3 }}>
                 <span

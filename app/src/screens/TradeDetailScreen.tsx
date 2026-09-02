@@ -6,7 +6,7 @@ import { Badge, Button, GamepadKey, Tag } from "../ds";
 const FACTS = [
   { label: "Opened", value: "20:57:03 · 2458.10", color: "var(--text-body)" },
   { label: "Closed", value: "21:34:48 · 2473.00", color: "var(--text-body)" },
-  { label: "Side · size", value: "LONG 0.20", color: "var(--side-long)" },
+  { label: "Side · size", value: "BUY 0.20", color: "var(--side-buy)" },
   { label: "Exit reason", value: "target hit", color: "var(--text-body)" },
   { label: "MFE · MAE", value: "+2.60R · -0.40R", color: "var(--text-body)" },
   { label: "Fill latency", value: "71 ms", color: "var(--text-body)" },
@@ -196,7 +196,7 @@ export function TradeDetailScreen() {
                 lineHeight: 1.5,
               }}
             >
-              One long from a retest with the London low intact, and nothing else. Invalidation:
+              One buy from a retest with the London low intact, and nothing else. Invalidation:
               close below 2455.
             </div>
           </div>

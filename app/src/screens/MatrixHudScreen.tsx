@@ -236,7 +236,7 @@ export function MatrixHudScreen() {
           >
             <SectionLabel icon="terminal">Session log</SectionLabel>
             <Term color="var(--phos-400)">21:04 stand down +1 · score 07</Term>
-            <Term color="var(--phos-500)">20:57 fill long 0.20 @ 2458.10</Term>
+            <Term color="var(--phos-500)">20:57 fill buy 0.20 @ 2458.10</Term>
             <Term color="var(--status-agent)">20:56 risk-warden: inside rule 4.</Term>
             <Term color="var(--grey-500)">20:41 limits locked · -3.00R cap</Term>
           </div>
@@ -502,8 +502,8 @@ export function MatrixHudScreen() {
                 >
                   XAU
                 </span>
-                <Caps size={10} weight={700} color="var(--side-long)">
-                  long
+                <Caps size={10} weight={700} color="var(--side-buy)">
+                  buy
                 </Caps>
                 <span style={{ marginLeft: "auto" }}>
                   <PnLValue value={1.4} size="sm" />
@@ -535,8 +535,8 @@ export function MatrixHudScreen() {
                 >
                   EUR
                 </span>
-                <Caps size={10} weight={700} color="var(--side-short)">
-                  short
+                <Caps size={10} weight={700} color="var(--side-sell)">
+                  sell
                 </Caps>
                 <span style={{ marginLeft: "auto" }}>
                   <PnLValue value={-0.6} size="sm" />

@@ -37,8 +37,8 @@ export function timeframeLabel(seconds: number): string {
 /**
  * Fold the tape into `seconds`-wide candles on one side of the book.
  *
- * A long is exited on the bid and a short on the ask, so the side is the caller's choice and never
- * a default — showing a short against the bid understates every adverse move by the spread.
+ * A buy is exited on the bid and a sell on the ask, so the side is the caller's choice and never
+ * a default — showing a sell against the bid understates every adverse move by the spread.
  */
 export function resample(tape: Tape, side: Side, seconds: number): Candle[] {
   if (seconds <= 0) throw new Error("timeframe must be positive");

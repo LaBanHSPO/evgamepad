@@ -19,7 +19,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 RUN git clone --depth 1 --branch ${WHISPER_REF} https://github.com/ggerganov/whisper.cpp /src
 WORKDIR /src
-RUN cmake -B build -DCMAKE_BUILD_TYPE=Release -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON \
+# A container image must not inherit the build host's CPU target. In particular, Linux GCC cannot
+# compile the Apple Silicon target Docker reports from an arm64 macOS host.
+RUN cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF \
+        -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON \
     && cmake --build build --config Release -j "$(nproc)" \
     && cp build/bin/whisper-cli /usr/local/bin/whisper-cli
 
@@ -58,6 +61,7 @@ RUN uv sync --no-dev --no-install-project
 COPY apps/gateway/ ./
 COPY config/ /app/config/
 COPY --from=web /build/dist /app/app/dist
+COPY app/src/protocol/ /app/app/src/protocol/
 # Second gate on generated-type drift: `npm run build` above checks types.ts against the schema
 # it was generated from; this checks both against the live Pydantic catalog. A catalog change
 # that was never regenerated fails the image build here.

@@ -68,7 +68,7 @@ export function ReplayScreen() {
     >
       <ScreenHeader
         title="Replay · cid 8836"
-        meta="XAUUSD long 0.20 · window 20:52 → 21:40"
+        meta="XAUUSD buy 0.20 · window 20:52 → 21:40"
         right={
           <Button variant="danger" size="sm">
             Flatten all

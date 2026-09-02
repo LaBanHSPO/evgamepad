@@ -506,10 +506,10 @@ export function SessionHudScreen({ state = "live" }: { state?: HudState }) {
           >
             <Caps style={{ paddingBottom: 4 }}>Session tape</Caps>
             <Term color="var(--phos-600)">
-              21:04 armed long · released clutch · stood down (7)
+              21:04 armed buy · released clutch · stood down (7)
             </Term>
             <Term color="var(--phos-500)">
-              20:57 filled XAUUSD long 0.20 @ 2458.10 · sl 2455.60 · tp 2473.00
+              20:57 filled XAUUSD buy 0.20 @ 2458.10 · sl 2455.60 · tp 2473.00
             </Term>
             <Term color="var(--grey-500)">
               20:41 limits locked · window 20:00–23:00 · max loss -3.00R
@@ -578,7 +578,7 @@ export function SessionHudScreen({ state = "live" }: { state?: HudState }) {
                         textShadow: "var(--glow-text)",
                       }}
                     >
-                      LONG
+                      BUY
                     </span>
                     <span
                       style={{
@@ -824,8 +824,8 @@ export function SessionHudScreen({ state = "live" }: { state?: HudState }) {
                 >
                   XAUUSD
                 </span>
-                <Caps size={10} weight={700} color="var(--side-long)">
-                  long
+                <Caps size={10} weight={700} color="var(--side-buy)">
+                  buy
                 </Caps>
                 <span
                   style={{
@@ -867,8 +867,8 @@ export function SessionHudScreen({ state = "live" }: { state?: HudState }) {
                 >
                   EURUSD
                 </span>
-                <Caps size={10} weight={700} color="var(--side-short)">
-                  short
+                <Caps size={10} weight={700} color="var(--side-sell)">
+                  sell
                 </Caps>
                 <span
                   style={{
@@ -917,8 +917,8 @@ export function SessionHudScreen({ state = "live" }: { state?: HudState }) {
                 <Term>hold LT to arm. sticks never send an order.</Term>
                 <div style={{ display: "flex", gap: 10 }}>
                   <GamepadKey button="LT" size="md" label="Clutch" />
-                  <GamepadKey button="up" size="md" label="Long" />
-                  <GamepadKey button="down" size="md" label="Short" />
+                  <GamepadKey button="up" size="md" label="Buy" />
+                  <GamepadKey button="down" size="md" label="Sell" />
                 </div>
               </div>
             ) : null}
@@ -940,7 +940,7 @@ export function SessionHudScreen({ state = "live" }: { state?: HudState }) {
                   color="var(--phos-300)"
                   style={{ textShadow: "var(--glow-text)" }}
                 >
-                  Armed long · reviewing
+                  Armed buy · reviewing
                 </Caps>
                 <Term>nothing has been sent yet.</Term>
               </div>

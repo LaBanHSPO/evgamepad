@@ -332,7 +332,7 @@ export function SessionClearScreen() {
             <Caps color="var(--status-agent)">Desk review · session-scribe</Caps>
             <Term color="var(--status-agent)">four fills, three inside plan.</Term>
             <Term color="var(--status-agent)">
-              the 21:48 short had no level behind it. it cost -0.60R.
+              the 21:48 sell had no level behind it. it cost -0.60R.
             </Term>
             <Term color="var(--status-agent)">
               you refused eight arms after 22:10 — the same hour that cost you -4.3R last month.
