@@ -64,6 +64,7 @@ from ctrader_open_api.messages.OpenApiModelMessages_pb2 import (  # noqa: E402
 from ctrader_open_api.messages.OpenApiModelMessages_pb2 import (  # noqa: E402
     SELL as SIDE_SELL,
 )
+from twisted.internet.defer import TimeoutError as TwistedTimeoutError  # noqa: E402
 
 from . import Broker, BrokerResult, contain  # noqa: E402
 from .conversion import AssetGraph  # noqa: E402
@@ -81,6 +82,8 @@ HEARTBEAT_S = 10.0
 
 # Non-historical requests are capped at 50/s per connection, historical at 5/s.
 TRENDBAR_MIN_INTERVAL_S = 0.2
+
+DEFAULT_REQUEST_TIMEOUT_S = 15.0
 
 # cTrader truncates order labels; `evgp` plus a short cid stays inside it.
 LABEL_PREFIX = "evgp"
@@ -201,13 +204,29 @@ class CTraderBroker(Broker):
     async def _await_deferred(self, deferred: Any) -> Any:
         return await deferred.asFuture(self.loop)
 
-    async def _send(self, request: Any, *, expect_response: bool = True) -> Any:
+    async def _send(
+        self, request: Any, *, expect_response: bool = True, timeout_s: float = DEFAULT_REQUEST_TIMEOUT_S
+    ) -> Any:
         if self._client is None:
             raise BrokerError("broker link is not open")
-        deferred = self._client.send(request)
         if not expect_response:
+            try:
+                protocol = await asyncio.wait_for(
+                    self._await_deferred(self._client.whenConnected()),
+                    timeout=timeout_s,
+                )
+                protocol.send(request, instant=True)
+            except (TimeoutError, TwistedTimeoutError) as e:
+                raise BrokerError(
+                    f"broker link not available to send {type(request).__name__}"
+                ) from e
             return None
-        response = await self._await_deferred(deferred)
+        try:
+            deferred = self._client.send(request, responseTimeoutInSeconds=timeout_s)
+            response = await self._await_deferred(deferred)
+        except TwistedTimeoutError as e:
+            req_name = type(request).__name__
+            raise BrokerError(f"broker request timed out after {timeout_s}s: {req_name}") from e
         message = Protobuf.extract(response)
         if isinstance(message, ProtoOAErrorRes):
             self.state.last_error = message.errorCode

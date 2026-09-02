@@ -17,7 +17,13 @@ import pytest
 from ctrader_open_api.messages.OpenApiCommonMessages_pb2 import ProtoMessage
 from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOASpotEvent
 
-from broker.ctrader import LABEL_CID_CHARS, LABEL_PREFIX, CTraderBroker, Quote
+from broker.ctrader import (
+    LABEL_CID_CHARS,
+    LABEL_PREFIX,
+    BrokerError,
+    CTraderBroker,
+    Quote,
+)
 from broker.volume import SymbolSpec, lots_to_volume
 
 FIXTURE = Path(__file__).parent / "fixtures" / "symbols-icmarkets-demo.json"
@@ -154,3 +160,45 @@ def test_volume_converts_against_the_real_broker_fixture() -> None:
     assert volume >= gold.min_volume
     assert volume % gold.step_volume == 0
     assert volume <= gold.max_volume
+
+
+async def test_send_fire_and_forget_sends_via_protocol_instantly() -> None:
+    from unittest.mock import MagicMock
+
+    from ctrader_open_api.messages.OpenApiCommonMessages_pb2 import ProtoHeartbeatEvent
+    from twisted.internet import defer
+
+    client = broker()
+    mock_protocol = MagicMock()
+    mock_client = MagicMock()
+    mock_client.whenConnected.return_value = defer.succeed(mock_protocol)
+    client._client = mock_client
+    client.loop = asyncio.get_running_loop()
+
+    heartbeat = ProtoHeartbeatEvent()
+    await client._send(heartbeat, expect_response=False)
+
+    mock_client.send.assert_not_called()
+    mock_protocol.send.assert_called_once_with(heartbeat, instant=True)
+
+
+async def test_send_timeout_raises_broker_error() -> None:
+    from unittest.mock import MagicMock
+
+    from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOAAssetListReq
+    from twisted.internet import defer
+    from twisted.internet.defer import TimeoutError as TwistedTimeoutError
+
+    client = broker()
+    mock_client = MagicMock()
+    d = defer.Deferred()
+    mock_client.send.return_value = d
+    client._client = mock_client
+    client.loop = asyncio.get_running_loop()
+
+    # Simulate Twisted timeout firing on the deferred
+    d.errback(TwistedTimeoutError(5, "Deferred"))
+
+    with pytest.raises(BrokerError, match="broker request timed out after 15.0s: ProtoOAAssetListReq"):
+        await client._send(ProtoOAAssetListReq(ctidTraderAccountId=123))
+
