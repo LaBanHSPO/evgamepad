@@ -1,0 +1,19 @@
+{
+  "name": "Evening Forex Gold Gamepad",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "gateway",
+      "command": "export PATH=\"$HOME/.local/bin:$PATH\"; cd apps/gateway; set -a; [ -f ../../.env ] && . ../../.env; set +a; EV_DEV=1 EV_CONFIG=../../config/default.yaml EV_DATA_DIR=../../data uv run python main.py"
+    },
+    {
+      "name": "frontend",
+      "command": "cd app && npm run dev"
+    }
+  ],
+  "ports": [
+    { "port": 8444 },
+    { "port": 5173 }
+  ]
+}
