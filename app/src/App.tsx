@@ -357,7 +357,7 @@ export default function App() {
           ) : screen === "journallive" ? (
             // The journal hands a cid to the replay route, which is the review loop the phases
             // were building toward: dashboard -> trade -> the tape it happened on.
-            <Suspense fallback={<p>loading the journal…</p>}>
+            <Suspense fallback={<p style={{ fontFamily: "var(--font-terminal)", color: "var(--phos-400)" }}>&gt; loading the journal…</p>}>
               <Journal
                 onReplay={(cid) => dispatch({ type: "replay", cid })}
               />
@@ -365,7 +365,7 @@ export default function App() {
           ) : screen === "replaylive" ? (
             // Mounting replay unmounts the live HUD, taking its agent, poller and socket with it —
             // which is why no order can be placed from this route. B goes back to the journal.
-            <Suspense fallback={<p>loading the tape…</p>}>
+            <Suspense fallback={<p style={{ fontFamily: "var(--font-terminal)", color: "var(--phos-400)" }}>&gt; loading the tape…</p>}>
               <Replay
                 cid={journey.replayCid ?? undefined}
                 onExit={() => dispatch({ type: "input", action: "back" })}
