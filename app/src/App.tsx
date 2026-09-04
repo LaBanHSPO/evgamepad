@@ -1,5 +1,6 @@
 import { Suspense, lazy, useReducer } from "react";
 import type { CSSProperties } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import { BgmProvider } from "./components/bgm";
 import { AgentDeskScreen } from "./screens/AgentDeskScreen";
 import { AttractScreen } from "./screens/AttractScreen";
@@ -380,6 +381,7 @@ export default function App() {
         </main>
       </div>
       </BgmProvider>
+      <Analytics />
     </CabinetProvider>
   );
 }
