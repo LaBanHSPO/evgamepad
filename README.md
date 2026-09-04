@@ -18,7 +18,7 @@
 
 ## Overview
 
-A desktop Chrome **web game** — an installable, client-side **React PWA** — where an **8BitDo Ultimate 2 Wireless** controller trades forex and gold on a **cTrader demo account**. The pad communicates over WebSocket to a **Python gateway** on an Ubuntu VPS (Docker Compose behind nginx). Production splits the origins: the HUD is a static site, the gateway is `https://gw.bobvolman.com`. There is no execution sidecar and no secondary microservice. A near-realtime **AI desk** coaches from the sidelines without touching the order path.
+A desktop Chrome **web game** — an installable, client-side **React PWA** — where an **8BitDo Ultimate 2 Wireless** controller trades forex and gold on a **cTrader demo account**. The pad communicates over WebSocket to a **Python gateway**. Production splits the origins: the HUD is a static site on **Vercel (Hobby/free)**, the gateway is Docker on your **local machine or Ubuntu VPS** at `https://gw.bobvolman.com`. There is no execution sidecar and no secondary microservice. A near-realtime **AI desk** coaches from the sidelines without touching the order path.
 
 On top of the game sits a **trading journal** that takes the best of Edgewonk and TradeZella and rebuilds them for gamepad interaction:
 - **Playbook:** grades every fire against its own rules *before* you commit.
@@ -63,11 +63,15 @@ Detailed authority: [`plans/260824-1506-evening-forex-gold-gamepad/plan.md`](./p
 - [Repo Layout](#repo-layout)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
-  - [cTrader Credentials](#ctrader-credentials-one-time-manual-setup)
+  - [Recommended production shape](#recommended-production-shape)
+  - [cTrader Open API registration](#ctrader-open-api-registration)
   - [Local Development](#local-development)
   - [Testing & Quality Assurance](#test-suite)
-  - [Docker (local smoke)](#docker-local-smoke)
-  - [Production deploy (Ubuntu VPS)](#production-deploy-ubuntu-vps)
+  - [Deploy the HUD on Vercel (free)](#deploy-the-hud-on-vercel-free)
+  - [Run the gateway with Docker](#run-the-gateway-with-docker)
+    - [On your local machine](#on-your-local-machine)
+    - [On an Ubuntu VPS](#on-an-ubuntu-vps-gwbobvolmancom)
+  - [First evening and operations](#first-evening-and-operations)
   - [Protocol & Type Synchronization](#protocol-types-are-generated-never-hand-written)
 - [Playbooks: Enforced vs Graded](#playbooks-enforced-vs-graded)
 - [The Performance Deck](#the-deck-and-what-it-refuses-to-show)
@@ -183,7 +187,7 @@ Enforced through **hard boot-fails in configuration**, not conventions. The gate
 |---|---|---|
 | **Execution** | cTrader Open API | In-process Protobuf via `ctrader-open-api`, `demo.ctraderapi.com:5035` |
 | **Broker** | IC Markets cTrader Demo | Standard symbols (`XAUUSD`, `EURUSD`, `GBPUSD`, `USDJPY`), max 0.10 lot gold |
-| **Host** | Ubuntu VPS (Docker Compose + nginx) | One container (`ev-gateway`) on loopback `:8444`; nginx terminates TLS at `gw.bobvolman.com` |
+| **Host** | HUD on Vercel Hobby; gateway in Docker | Static `app/` on Vercel (free). One container (`ev-gateway`) on a laptop or Ubuntu VPS; nginx terminates TLS at `gw.bobvolman.com` |
 | **Account Mode** | Demo Only | Hard boot-fail on live endpoints or production accounts |
 | **Session Window** | `Asia/Ho_Chi_Minh` | 18:00–23:30 evening trading session |
 | **Transport** | WebSocket (`/ws`) + REST (`/api/*`) | Envelope: `{v, t, seq, ts, ch, cid, p}`. HUD may be a separate origin; gateway CORS + Origin allowlist |
@@ -205,7 +209,7 @@ Enforced through **hard boot-fails in configuration**, not conventions. The gate
 | 2 | [cTrader exec and socket gateway](./plans/260824-1506-evening-forex-gold-gamepad/phase-02-ctrader-exec-and-socket-gateway.md) | cTrader client, risk gates, cid ledger, tape pipeline | **Built & Verified** |
 | 3 | [Web game and 8BitDo client agent](./plans/260824-1506-evening-forex-gold-gamepad/phase-03-web-game-and-8bitdo-client-agent.md) | Gamepad FSM agent, chord detection, PWA shell | **Built & Verified** |
 | 4 | [AI desk: sentinel, news, Volman](./plans/260824-1506-evening-forex-gold-gamepad/phase-04-ai-desk-sentinel-news-volman.md) | Opportunity quality, Volman detectors, advisory tools | **Built & Verified** |
-| 5 | [Ubuntu Docker deploy](./plans/260824-1506-evening-forex-gold-gamepad/phase-05-ubuntu-docker-deploy.md) | Single-service compose, nginx TLS reverse-proxy to `gw.bobvolman.com` | **Documented** (see [Production deploy](#production-deploy-ubuntu-vps)) |
+| 5 | [Ubuntu Docker deploy](./plans/260824-1506-evening-forex-gold-gamepad/phase-05-ubuntu-docker-deploy.md) | Single-service compose, nginx TLS reverse-proxy to `gw.bobvolman.com` | **Documented** (see [Run the gateway with Docker](#run-the-gateway-with-docker)) |
 | 6 | [Performance and psychology deck](./plans/260824-1506-evening-forex-gold-gamepad/phase-06-performance-and-psychology-deck.md) | Process deck, adherence, month-over-month trends | **Built & Verified** |
 | 7 | [Playbook and trade grading](./plans/260824-1506-evening-forex-gold-gamepad/phase-07-playbook-and-trade-grading.md) | Rule registry, setups, pre-commit rule grading | **Built & Verified** |
 | 8 | [Voice: capture, whisper.cpp, coach](./plans/260824-1506-evening-forex-gold-gamepad/phase-08-voice-capture-whisper-and-coach.md) | Audio upload, local whisper.cpp STT, coach TTS | *Deferred* |
@@ -272,28 +276,182 @@ evgamepad/
 - **Python:** 3.11+ with [`uv`](https://github.com/astral-sh/uv) package manager.
 - **Node.js:** v20+ (v22 recommended) for building the web bundle.
 - **Hardware:** Desktop Chrome browser and an **8BitDo Ultimate 2 Wireless** controller with 2.4G USB dongle.
-- **Broker Account:** A free **cTrader ID** with an **IC Markets cTrader Demo** account.
-- **Container Runtime (optional):** Docker & Docker Compose for deployment.
+- **Broker Account:** A free **cTrader ID** with an **IC Markets cTrader Demo** account and an approved **Open API** application (see below).
+- **Container Runtime:** Docker & Docker Compose to run the gateway on your laptop or a VPS.
+- **HUD hosting (production):** A free [Vercel](https://vercel.com) Hobby account, or any static host.
 
-### cTrader Credentials (One-time Manual Setup)
+### Recommended production shape
 
-1. Register or log in to your **cTrader ID**.
-2. Open an **IC Markets cTrader Demo** account under that cTrader ID.
-3. Create an Open API application at [connect.spotware.com](https://connect.spotware.com).
-4. Run the OAuth consent flow in your browser with the `trading` scope against your redirect URI.
-5. Copy your credentials into `.env`:
+```text
+Chrome  ──HTTPS──►  Vercel Hobby (free)     React HUD  (*.vercel.app or your domain)
+                         │
+                         │  fetch /api/*   and   wss://gw.bobvolman.com/ws
+                         ▼
+              Docker on your VPS or laptop
+              nginx :443  →  127.0.0.1:8444  ev-gateway
+                         │
+                         ▼
+              demo.ctraderapi.com:5035   (cTrader Open API, demo only)
+```
+
+| Piece | Where it runs | Public URL |
+|---|---|---|
+| **HUD** | Vercel Hobby (static `app/dist`) | `https://your-project.vercel.app` (or a custom domain) |
+| **Gateway** | Docker Compose on a laptop or Ubuntu VPS | `https://gw.bobvolman.com` (VPS + nginx) or `http://127.0.0.1:8444` (local only) |
+| **Broker** | Spotware cloud | `demo.ctraderapi.com:5035` — never live |
+
+The session token is pasted into the HUD at connect time. It is never written into the Vercel bundle. cTrader client id, secret, and tokens live only in the gateway `.env`.
+
+A `https://*.vercel.app` page **cannot** call `http://127.0.0.1:8444` (mixed content). Everyday play is **Vercel HUD + VPS gateway**. Local work is **`npm run dev` + gateway on localhost**.
+
+### cTrader Open API registration
+
+The gateway speaks Spotware's **cTrader Open API** (Protobuf TCP on port 5035). There is no in-app OAuth helper in v1: you register once, consent once in a browser, and paste the tokens into `.env`. After that the gateway refreshes them itself.
+
+Official docs: [register an application](https://help.ctrader.com/open-api/api-application/), [app and account authentication](https://help.ctrader.com/open-api/account-authentication/).
+
+#### 1. cTrader ID
+
+1. Open [id.ctrader.com](https://id.ctrader.com) and create a **cTrader ID** (email + password, or the cTrader ID signup from any cTrader platform).
+2. Confirm the email. This ID is the identity that owns demo accounts and Open API apps.
+
+#### 2. IC Markets cTrader demo account
+
+1. Open an **IC Markets** account and choose **cTrader** as the platform, **demo** (not live).
+2. Complete their demo signup so an IC Markets **cTrader demo** account is linked to the same cTrader ID.
+3. Log in once with the cTrader desktop or web terminal and confirm you can see **XAUUSD**, **EURUSD**, **GBPUSD**, and **USDJPY** with no broker suffix.
+4. Note the account number shown in the platform. The Open API id (`ctidTraderAccountId`) is often the same number; confirm it in step 6.
+
+Live accounts are refused at gateway boot. Do not use a live Open API host or a live `ctidTraderAccountId`.
+
+#### 3. Register the Open API application
+
+1. Open the [cTrader Open API portal](https://openapi.ctrader.com/apps) (Spotware). Log in with the **same cTrader ID**.
+2. Click **Add new app**.
+3. Fill **Application name** (for example `Evening Forex Gold Gamepad`) and a **detailed description**. Spotware reviews this; a vague one-liner delays approval. Say it is a **personal demo-only gamepad HUD** that places demo MARKET orders through the Open API and never handles live money.
+4. Save. Status is **Submitted**. Wait for the email that it is **Active**. Credentials do not work while it is submitted.
+5. After approval, open the app → **Edit**. Under **Redirect URIs**, add one URI you control. For this one-person setup use:
+
+   ```text
+   https://localhost
+   ```
+
+   Do **not** use the portal's default Playground redirect URI in the steps below — that URI only works inside the Playground.
+
+6. Open **Credentials** and copy **Client ID** and **Client Secret**. These become `CT_CLIENT_ID` and `CT_CLIENT_SECRET`.
+
+#### 4. Fast path: Playground token (your own cTID)
+
+If you are the only trader (this product is one demo account), the portal Playground is enough:
+
+1. Applications → your app → **Playground**.
+2. Scope **trading** (not `accounts` — view-only cannot place orders).
+3. **Get token**. Copy `accessToken` and `refreshToken`.
+
+Skip to step 6. Use the full OAuth flow below if you want a redirect-URI grant instead of the Playground.
+
+#### 5. Full path: browser consent + token exchange
+
+The authorisation code lasts **one minute**. Have a terminal ready before you click Allow.
+
+1. URL-encode the redirect URI. For `https://localhost` that is `https%3A%2F%2Flocalhost`.
+2. Open this in Chrome (replace `YOUR_CLIENT_ID`):
+
+   ```text
+   https://id.ctrader.com/my/settings/openapi/grantingaccess/?client_id=YOUR_CLIENT_ID&redirect_uri=https%3A%2F%2Flocalhost&scope=trading&product=web
+   ```
+
+3. Sign in with the cTrader ID. Allow access to the **IC Markets demo** account (not a live one).
+4. Chrome lands on `https://localhost/?code=...` (the page itself may fail to load — that is expected). Copy the `code` query value from the address bar immediately.
+5. Exchange it before it expires (replace the placeholders; `redirect_uri` must match the registered URI **exactly**, including `https`):
+
    ```bash
-   cp .env.example .env
+   curl -sS -G 'https://openapi.ctrader.com/apps/token' \
+     --data-urlencode 'grant_type=authorization_code' \
+     --data-urlencode 'code=PASTE_CODE_HERE' \
+     --data-urlencode 'redirect_uri=https://localhost' \
+     --data-urlencode 'client_id=YOUR_CLIENT_ID' \
+     --data-urlencode 'client_secret=YOUR_CLIENT_SECRET'
    ```
-   Fill in:
-   ```dotenv
-   CT_CLIENT_ID=your_client_id
-   CT_CLIENT_SECRET=your_client_secret
-   CT_ACCESS_TOKEN=your_access_token
-   CT_REFRESH_TOKEN=your_refresh_token
-   CT_ACCOUNT_ID=your_demo_account_id
-   EV_WS_TOKEN=generate_a_secure_token
-   ```
+
+6. The JSON body contains `accessToken` and `refreshToken`. The refresh token does not expire; the access token lasts about 30 days and the gateway refreshes it from then on.
+
+`scope=accounts` is view-only and will not trade. Always use `trading`.
+
+#### 6. Demo account id (`CT_ACCOUNT_ID`)
+
+`CT_ACCOUNT_ID` is the Open API **`ctidTraderAccountId`** (an integer), not the cTrader ID email.
+
+Ways to read it:
+
+- Open API portal Playground: after you have a token, send `ProtoOAGetAccountListByAccessTokenReq` and copy `ctidTraderAccountId` for the IC Markets **demo** row (`isLive` must be false).
+- The grant screen in step 5 lists the accounts you allowed; use the demo id.
+- IC Markets cTrader often shows the same number as the account login.
+
+If you paste a live account id, the gateway exits on boot.
+
+#### 7. Write `.env`
+
+From the repo root:
+
+```bash
+cp .env.example .env
+chmod 600 .env
+```
+
+```dotenv
+CT_CLIENT_ID=from_the_portal_credentials
+CT_CLIENT_SECRET=from_the_portal_credentials
+CT_ACCESS_TOKEN=from_playground_or_curl
+CT_REFRESH_TOKEN=from_playground_or_curl
+CT_ACCOUNT_ID=12345678
+EV_WS_TOKEN=  # openssl rand -hex 32
+
+# Browser Origin of the HUD (Chrome's address bar, no trailing slash).
+# Local Vite: http://localhost:5173
+# Vercel:     https://your-project.vercel.app
+EV_PUBLIC_ORIGIN=http://localhost:5173
+```
+
+Treat `CT_*` and `EV_WS_TOKEN` like passwords. They never go into Vercel env, git, or the HUD.
+
+What each cTrader field is:
+
+| `.env` | Where it comes from | Used for |
+|---|---|---|
+| `CT_CLIENT_ID` | App → Credentials | `ProtoOAApplicationAuthReq` |
+| `CT_CLIENT_SECRET` | App → Credentials | Same app auth. Rotate in the portal if it leaks. |
+| `CT_ACCESS_TOKEN` | Playground **Get token**, or the curl in step 5 | `ProtoOAAccountAuthReq`. Lasts about 30 days. |
+| `CT_REFRESH_TOKEN` | Same response as the access token | Gateway refreshes the access token. Does not expire unless you revoke the app. |
+| `CT_ACCOUNT_ID` | `ctidTraderAccountId` integer | Must be the **demo** row (`isLive: false`). |
+
+Older Spotware docs say [connect.spotware.com](https://connect.spotware.com). That portal is the same Open API program; the current apps list is [openapi.ctrader.com/apps](https://openapi.ctrader.com/apps).
+
+#### 8. If tokens stop working
+
+Refresh without another browser consent (replace placeholders):
+
+```bash
+curl -sS -G 'https://openapi.ctrader.com/apps/token' \
+  --data-urlencode 'grant_type=refresh_token' \
+  --data-urlencode 'refresh_token=YOUR_REFRESH_TOKEN' \
+  --data-urlencode 'client_id=YOUR_CLIENT_ID' \
+  --data-urlencode 'client_secret=YOUR_CLIENT_SECRET'
+```
+
+Paste the new `accessToken` (and `refreshToken` if the JSON includes a new one) into `.env`, then `docker compose up -d` or restart the `uv` process.
+
+| Symptom | Fix |
+|---|---|
+| App status **Submitted** | Wait for the approval email. Tokens fail until **Active**. |
+| `redirect_uri mismatch` | The curl `redirect_uri` must match the URI saved on the app **exactly** (including `https`). Do not use the Playground default URI in curl. |
+| `invalid_grant` / empty `code` | The authorisation code lasted ~60s. Repeat step 5 with the terminal already open. |
+| Orders rejected / view-only | You granted `scope=accounts`. Repeat with `scope=trading`. |
+| Gateway exits: account is LIVE | `CT_ACCOUNT_ID` is a live account. Pick the demo `ctidTraderAccountId`. |
+| Gateway exits: missing env | `.env` is incomplete or not loaded. Compose uses the repo-root `.env`. |
+| `account is not on this access token` | The token was issued for a different cTrader ID, or you did not Allow that demo account. |
+
+Official references: [register an application](https://help.ctrader.com/open-api/api-application/), [app and account authentication](https://help.ctrader.com/open-api/account-authentication/), [endpoints](https://help.ctrader.com/open-api/proxies-endpoints/) (`demo.ctraderapi.com:5035` only).
 
 ### Local Development
 
@@ -319,6 +477,8 @@ npm run dev
 ```
 Open `http://localhost:5173` in Google Chrome, connect your 8BitDo controller, and press any button to begin.
 
+For a containerized local gateway (same loopback bind, same `.env`), see [Run the gateway with Docker](#run-the-gateway-with-docker) → [On your local machine](#on-your-local-machine). Do not mix this `http://localhost:5173` HUD with a remote Vercel origin unless that origin is listed in `EV_PUBLIC_ORIGIN` / `EV_CORS_ORIGINS`.
+
 ---
 
 ### Test Suite
@@ -340,65 +500,153 @@ npm run build
 
 ---
 
-### Docker (local smoke)
+### Deploy the HUD on Vercel (free)
 
-The production stack is still **one container**. This is a loopback smoke test, not the public hostname:
+The HUD is a Vite static app in `app/`. A [Vercel Hobby](https://vercel.com/pricing) account is enough: HTTPS, a `*.vercel.app` URL, git deploys on every push, no credit card for this shape. Vercel does **not** run Python, Docker, SQLite, or the cTrader socket.
+
+`app/vercel.json` is in the repo. It tells Vercel: framework Vite, output `dist`, SPA fallback to `index.html`, and `Cache-Control: no-cache` on `index.html` / `sw.js` so a new deploy is picked up.
+
+Pick **one** HUD origin and put it on the gateway as `EV_PUBLIC_ORIGIN` after the first successful deploy.
+
+#### GitHub import (typical)
+
+1. Push this repo to GitHub. Sign in at [vercel.com](https://vercel.com) → Hobby.
+2. **Add New… → Project** → import the GitHub repo.
+3. Before the first deploy, open **Root Directory** and set it to `app` (not the repository root). If you skip this, Vercel looks for a Vite app next to `compose.yaml` and the build fails.
+4. Confirm:
+
+   | Setting | Value |
+   |---|---|
+   | Framework Preset | Vite |
+   | Build Command | `npm run build` |
+   | Output Directory | `dist` |
+   | Install Command | `npm install` |
+   | Node.js Version | 22.x (Project → Settings → General) |
+
+5. **Settings → Environment Variables** → add for **Production** (and **Preview** if you will open preview URLs):
+
+   | Name | Value | Secret? |
+   |---|---|---|
+   | `VITE_GATEWAY_ORIGIN` | `https://gw.bobvolman.com` | No. Hostname only. |
+
+   Vite inlines this at **build** time. After you change it, use **Redeploy** (not only Restart). Do **not** add `CT_CLIENT_ID`, `CT_CLIENT_SECRET`, `CT_ACCESS_TOKEN`, `CT_REFRESH_TOKEN`, `CT_ACCOUNT_ID`, or `EV_WS_TOKEN` — anything `VITE_*` (and anything you paste here) is visible in the browser bundle.
+
+6. **Deploy**. Copy the Production URL, for example `https://evgamepad.vercel.app`.
+7. On the machine that runs Docker, put that origin in `.env` and recreate the container:
+
+   ```dotenv
+   EV_PUBLIC_ORIGIN=https://evgamepad.vercel.app
+   # Optional: allow a specific preview deployment to open /ws
+   # EV_CORS_ORIGINS=https://evgamepad-git-main-yourteam.vercel.app
+   ```
+
+   ```bash
+   docker compose up -d
+   ```
+
+   `EV_PUBLIC_ORIGIN` must match Chrome's origin **exactly**: `https`, no trailing slash, no extra path. A mismatch closes the WebSocket with code `4403`. Each Vercel **preview** URL is a different origin; list those you actually use in `EV_CORS_ORIGINS`.
+
+#### CLI instead of the dashboard
+
+From a laptop with Node, with Root Directory effectively `app/`:
 
 ```bash
-docker compose build
-docker compose up -d
-docker compose ps
-curl -s http://127.0.0.1:8444/healthz
+cd app
+npx vercel login
+npx vercel link          # pick the Hobby project, or create one
+npx vercel env add VITE_GATEWAY_ORIGIN production
+# paste: https://gw.bobvolman.com
+npx vercel --prod
 ```
 
-Compose publishes `127.0.0.1:8444` only. Put nginx in front of that port for TLS — see the next section.
+#### Custom domain (optional, still Hobby)
+
+Vercel → Project → **Domains** → add `bobvolman.com` or `play.bobvolman.com`, follow the DNS instructions. Then set `EV_PUBLIC_ORIGIN=https://bobvolman.com` (or whichever hostname Chrome shows) and `docker compose up -d` again.
+
+`app/.env.production` in git already sets `VITE_GATEWAY_ORIGIN=https://gw.bobvolman.com` for a local `npm run build`. On Vercel the environment variable wins.
+
+#### What Vercel does not host
+
+Python, SQLite, cTrader TCP `:5035`, nginx, `/ws`, or `/api`. Those stay in Docker. A page on `https://….vercel.app` **cannot** use `ws://127.0.0.1:8444` (mixed content). Production is **Vercel HUD + HTTPS gateway on the VPS**. Day-to-day coding stays `npm run dev` against a local gateway — you do not need Vercel for that.
+
+| Check | Expected |
+|---|---|
+| Vercel deploy log | Root Directory `app`, `vite build` wrote `dist/` |
+| Chrome → HUD → DevTools Network | `/api/arcade/hud` and `wss://gw.bobvolman.com/ws`, not the Vercel host |
+| Gateway `.env` | `EV_PUBLIC_ORIGIN` equals the Vercel Production origin |
 
 ---
 
-### Production deploy (Ubuntu VPS)
+### Run the gateway with Docker
 
-This is the path for a new operator. The Python gateway listens on the VPS loopback. nginx on the host terminates HTTPS for **`gw.bobvolman.com`**. The React HUD is a separate static site whose production build points at that gateway.
+The backend is **one** Compose service, `ev-gateway`. Secrets come from the repo-root `.env`. Journal data lives in the `ev-journal` volume (`/data` in the container). Docker runs on **your machine or a VPS** — not on Vercel.
 
-```text
-Chrome (HUD, e.g. https://bobvolman.com)
-        │  fetch /api/*  and  wss://gw.bobvolman.com/ws
-        ▼
-Internet ──TLS:443──► nginx (host) ──► 127.0.0.1:8444  ev-gateway (Docker)
-                                              │
-                                              ▼
-                                   demo.ctraderapi.com:5035
+| Where you run Docker | HUD you open in Chrome | Gateway URL the HUD uses |
+|---|---|---|
+| **Local machine** (laptop) | `npm run dev` at `http://localhost:5173` | Vite proxy → `http://127.0.0.1:8444`. Leave `VITE_GATEWAY_ORIGIN` unset. |
+| **Ubuntu VPS** | Vercel Hobby (`https://….vercel.app`) | `https://gw.bobvolman.com` (nginx TLS → loopback `:8444`) |
+
+Do **not** mix a `https://` HUD with a loopback gateway. Chrome blocks mixed content: a Vercel page cannot call `ws://127.0.0.1:8444`. Production play is Vercel + VPS. Day-to-day coding is Vite + Docker (or `uv run`) on the same computer.
+
+`compose.yaml` publishes **only** `127.0.0.1:8444:8444`. nginx on the VPS is what exposes 443. Never publish `8444` on `0.0.0.0`.
+
+#### On your local machine
+
+Use this for development, tests, and a gateway on the same computer as Chrome. You do not need a VPS or Vercel for this path.
+
+```bash
+cp .env.example .env
+# fill CT_* and EV_WS_TOKEN (see Open API registration)
+# local Vite origin:
+# EV_PUBLIC_ORIGIN=http://localhost:5173
+
+docker compose build
+docker compose up -d
+docker compose ps
+curl -sS http://127.0.0.1:8444/healthz
+ss -lntp | grep 8444
 ```
 
-Two origins, one process that talks to the broker:
+`healthz` must return `"ok": true`. On the host, `ss` must show `127.0.0.1:8444` (loopback), not a WAN bind.
 
-| Piece | Public hostname | What it serves |
-|---|---|---|
-| **HUD** | your site (example: `bobvolman.com`) | Vite `app/dist` (nginx, Pages, or any static host) |
-| **Gateway** | `gw.bobvolman.com` | FastAPI `/healthz`, `/api/*`, `/ws`, `/hooks/tv` |
+In another terminal:
 
-The session token is still pasted into the HUD at connect time. It is never written into the frontend bundle.
+```bash
+cd app
+npm install
+npm run dev
+```
 
-#### 0. What you need
+Chrome → `http://localhost:5173`. Vite proxies `/api` and `/ws` to the container. Leave `VITE_GATEWAY_ORIGIN` unset for this path.
 
-- An Ubuntu 22.04 or 24.04 VPS with a public IPv4 address and SSH.
-- DNS you can edit.
-- A domain whose **A record** for `gw.bobvolman.com` points at the VPS. The HUD hostname is separate; it only has to be a real `https://` origin you control.
-- A cTrader demo application and the values in `.env.example`.
-- Ports **22**, **80**, and **443** open. Port **8444** must not be reachable from the WAN.
+```bash
+docker compose logs -f --tail=200 ev-gateway
+docker compose restart ev-gateway
+docker compose down          # stop; keeps the ev-journal volume
+```
 
-#### 1. DNS
+Do not publish `8444` on `0.0.0.0`. Do not point a Vercel HUD at this loopback port.
 
-Create an A (and AAAA if you have IPv6) record:
+#### On an Ubuntu VPS (`gw.bobvolman.com`)
+
+Everyday production: Vercel HUD + this gateway behind nginx on the VPS.
+
+##### 0. What you need
+
+- Ubuntu 22.04 or 24.04, public IPv4, SSH.
+- DNS you can edit. **A record** `gw.bobvolman.com` → the VPS.
+- `.env` filled from the Open API steps. `EV_PUBLIC_ORIGIN` = the **Vercel** (or custom HUD) origin.
+- Ports **22**, **80**, **443** open. **8444** stays off the WAN.
+
+##### 1. DNS
 
 ```text
 gw.bobvolman.com    A    YOUR_VPS_IPV4
 ```
 
-Wait until `dig +short gw.bobvolman.com` returns the VPS address from your laptop.
+Wait until `dig +short gw.bobvolman.com` returns that address.
 
-If the HUD is also on this VPS, add its hostname the same way (see step 8).
-
-#### 2. Ubuntu packages
+##### 2. Ubuntu packages
 
 ```bash
 sudo apt-get update
@@ -415,8 +663,6 @@ sudo usermod -aG docker "$USER"
 # log out and back in so `docker` works without sudo
 ```
 
-Firewall — SSH + HTTP/HTTPS only. Compose already binds 8444 to loopback; the firewall is the second belt:
-
 ```bash
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
@@ -427,7 +673,7 @@ sudo ufw --force enable
 sudo ufw status
 ```
 
-#### 3. Clone and secrets
+##### 3. Clone and secrets
 
 ```bash
 sudo mkdir -p /opt/evgamepad /var/www/certbot
@@ -438,31 +684,23 @@ cp .env.example .env
 chmod 600 .env
 ```
 
-Edit `.env`. Required:
-
 ```dotenv
 CT_CLIENT_ID=...
 CT_CLIENT_SECRET=...
 CT_ACCESS_TOKEN=...
 CT_REFRESH_TOKEN=...
 CT_ACCOUNT_ID=...
-EV_WS_TOKEN=generate_a_long_random_string
+EV_WS_TOKEN=  # openssl rand -hex 32
 
-# Browser Origin of the HUD — the page Chrome loads, not the gateway host.
-EV_PUBLIC_ORIGIN=https://YOUR_HUD_ORIGIN
-# Optional extras (www, a staging HUD):
-# EV_CORS_ORIGINS=https://www.YOUR_HUD_ORIGIN
+# Must match the Vercel HUD origin (or your custom domain).
+EV_PUBLIC_ORIGIN=https://your-project.vercel.app
+# EV_CORS_ORIGINS=https://your-project-git-main-you.vercel.app
 ```
 
-Generate the socket token with `openssl rand -hex 32`. Never commit `.env`.
-
-`EV_PUBLIC_ORIGIN` must match the HUD origin **exactly** (scheme + host, no trailing slash). If Chrome loads `https://bobvolman.com`, that is the value — not `https://gw.bobvolman.com`. A mismatch closes the WebSocket with code `4403`.
-
-#### 4. Docker Compose on the VPS
-
-From `/opt/evgamepad`:
+##### 4. Compose
 
 ```bash
+cd /opt/evgamepad
 docker compose build
 docker compose up -d
 docker compose ps
@@ -470,49 +708,35 @@ curl -sS http://127.0.0.1:8444/healthz
 ss -lntp | grep 8444
 ```
 
-`healthz` must return `"ok": true`. `ss` must show `127.0.0.1:8444`, not `0.0.0.0:8444` on the host.
-
-Useful commands:
-
 ```bash
 docker compose logs -f --tail=200 ev-gateway
-docker compose restart ev-gateway
-# after pulling a new git revision:
-git pull
-docker compose build
-docker compose up -d
+git pull && docker compose build && docker compose up -d
 ```
 
-The journal, voice files, and models live in the named volume `ev-journal` (`/data` in the container). Back that volume up; do not delete it casually.
+The journal lives in Docker volume `ev-journal` (`/data` in the container). Back it up.
 
-Optional, once, for the later whisper.cpp path:
+Optional, once, for later whisper.cpp:
 
 ```bash
 ./deploy/fetch-models.sh
 ```
 
-#### 5. nginx → `gw.bobvolman.com`
+##### 5. nginx TLS for the gateway
 
-The repo ships the vhost at [`deploy/nginx/gw.bobvolman.com.conf`](./deploy/nginx/gw.bobvolman.com.conf). It proxies everything — including WebSocket `/ws` — to `127.0.0.1:8444`.
+Vhost: [`deploy/nginx/gw.bobvolman.com.conf`](./deploy/nginx/gw.bobvolman.com.conf). It proxies `/healthz`, `/api/*`, `/ws`, and `/hooks/tv` to `127.0.0.1:8444`.
 
 ```bash
 sudo mkdir -p /var/www/certbot
 sudo cp /opt/evgamepad/deploy/nginx/gw.bobvolman.com.conf /etc/nginx/sites-available/gw.bobvolman.com
 sudo ln -sf /etc/nginx/sites-available/gw.bobvolman.com /etc/nginx/sites-enabled/gw.bobvolman.com
-# disable the default site if it is still grabbing :80
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
-```
-
-Issue the certificate (installs and rewrites the vhost for 443):
-
-```bash
 sudo apt-get install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d gw.bobvolman.com --agree-tos -m YOU@YOUR_DOMAIN --redirect
 ```
 
-After certbot, open `/etc/nginx/sites-available/gw.bobvolman.com` and confirm the **443** `location /` block still has:
+After certbot, the **443** `location /` block must still have:
 
 - `proxy_http_version 1.1;`
 - `proxy_set_header Upgrade $http_upgrade;`
@@ -520,68 +744,40 @@ After certbot, open `/etc/nginx/sites-available/gw.bobvolman.com` and confirm th
 - `proxy_read_timeout 86400s;`
 - `proxy_set_header Origin $http_origin;`
 
-`sudo nginx -t && sudo systemctl reload nginx`.
-
-Check from your laptop:
-
 ```bash
+sudo nginx -t && sudo systemctl reload nginx
 curl -sS https://gw.bobvolman.com/healthz
 ```
 
-You want JSON with `"ok": true` and a valid certificate, not a browser warning.
+You want `"ok": true` and a trusted certificate.
 
-#### 6. Frontend production build
+You do **not** need a second nginx vhost for the HUD if Vercel is serving it.
 
-The HUD is **not** the gateway hostname. Production builds bake the gateway URL:
+### First evening and operations
 
-```bash
-cd app
-cp .env.example .env.local   # optional; production defaults live in .env.production
-npm ci
-npm run build
-```
-
-`app/.env.production` is:
-
-```dotenv
-VITE_GATEWAY_ORIGIN=https://gw.bobvolman.com
-```
-
-That is a hostname, not a secret. The session token is still pasted in the HUD and kept in memory.
-
-`dist/` is static files. Publish them however you already host the site:
-
-- **Same VPS, second nginx vhost** — copy [`deploy/nginx/hud.example.conf`](./deploy/nginx/hud.example.conf), set `server_name` to the HUD host, `sudo certbot --nginx -d YOUR_HUD_ORIGIN`, then:
-
-  ```bash
-  sudo mkdir -p /var/www/evgamepad-arcade
-  sudo rsync -a --delete /opt/evgamepad/app/dist/ /var/www/evgamepad-arcade/
-  ```
-
-- **Cloudflare Pages / any static host** — upload `app/dist`. Set the HUD URL as `EV_PUBLIC_ORIGIN` on the VPS and recreate the container (`docker compose up -d`) so CORS and the WebSocket allowlist match.
-
-Local development is unchanged: `npm run dev` leaves `VITE_GATEWAY_ORIGIN` empty and Vite proxies `/api` and `/ws` to `127.0.0.1:8444`.
-
-#### 7. First-evening checklist
-
-1. Chrome, desktop, tab focused. Open the HUD origin (not necessarily `gw.bobvolman.com`).
+1. Chrome, desktop, tab focused. Open the **Vercel** HUD URL (not `gw.bobvolman.com`, unless you still serve a copy from the gateway).
 2. Paste `EV_WS_TOKEN`. Connect. The socket URL should be `wss://gw.bobvolman.com/ws`.
-3. DevTools → Network: `/api/arcade/hud` is `200` from `gw.bobvolman.com`, CORS origin is your HUD, no mixed-content errors.
+3. DevTools → Network: `/api/arcade/hud` is `200` from `gw.bobvolman.com`, request Origin is the Vercel host, no mixed-content errors.
 4. Pair the 8BitDo (XInput, 2.4G dongle). Press a button. The HUD should leave `pad: absent`.
-5. `docker compose logs ev-gateway` should show the broker link coming up against **demo** (`demo.ctraderapi.com:5035`), never live.
+5. `docker compose logs ev-gateway` should show the broker against **demo** (`demo.ctraderapi.com:5035`), never live.
 
-If the socket closes immediately: `EV_PUBLIC_ORIGIN` does not match the HUD origin (including `https` vs `http`, or a missing `www`). If REST works and WS does not: nginx is not forwarding `Upgrade` / `Connection`. If the HUD still calls `localhost` or its own origin for `/api`: you served a build without `VITE_GATEWAY_ORIGIN` — rebuild step 6.
-
-#### 8. Operations
+| Symptom | Likely cause |
+|---|---|
+| Socket closes at once (`4403`) | `EV_PUBLIC_ORIGIN` ≠ Chrome origin (`https` vs `http`, `www`, or a `*.vercel.app` preview URL) |
+| REST works, WS does not | nginx missing `Upgrade` / `Connection` |
+| HUD still calls its own origin for `/api` | Vercel build missing `VITE_GATEWAY_ORIGIN` — redeploy with the env var |
+| Mixed content / failed `wss` | Vercel HUD pointed at `http://` or `localhost` instead of `https://gw.bobvolman.com` |
+| Gateway exits at boot | live host, live account, or missing `CT_*` — see Open API registration |
 
 | Task | Command / note |
 |---|---|
 | Status | `docker compose ps` and `curl -sS https://gw.bobvolman.com/healthz` |
 | Logs | `docker compose logs -f --tail=200 ev-gateway` |
-| Restart after reboot | `restart: unless-stopped` brings the container back; nginx is a systemd service |
-| Renew TLS | `certbot.timer` renews; `sudo certbot renew --dry-run` once to verify |
+| Restart after reboot | `restart: unless-stopped`; nginx is systemd |
+| Renew TLS | `sudo certbot renew --dry-run` |
 | Rotate the HUD token | new `EV_WS_TOKEN` in `.env`, then `docker compose up -d` |
-| Data | Docker volume `ev-journal` — include it in VPS backups |
+| Redeploy HUD | push to GitHub (Vercel) or `npx vercel --prod` from `app/` |
+| Data | volume `ev-journal` — include it in backups |
 
 Do not put a CDN in front of `/ws`. Do not publish `8444` on `0.0.0.0`. Live cTrader hosts still fail boot.
 
