@@ -1,3 +1,6 @@
+import { ConnectStrip } from "../arcade/ConnectStrip";
+import { DASH, dash, formatPrice, padScore, rAtStop } from "../arcade/format";
+import { useArcadeRuntime } from "../arcade/useArcadeRuntime";
 import { BgmControl } from "../components/bgm";
 import { CodeRain } from "../components/CodeRain";
 import { Artboard, Caps, DemoNotice, PadHint, Term } from "../components/primitives";
@@ -5,7 +8,7 @@ import { GamepadKey, MeterBar, PnLValue } from "../ds";
 import { CITY_ART } from "./art";
 
 /**
- * Fire on city art — the prototype's `is_artcontra` artboard.
+ * Fire on city art — live `/api/arcade` figures on the prototype `is_artcontra` artboard.
  *
  * Layout notes carried over from the design chat, since they are the point of
  * the screen rather than incidental: every order figure lives in one 298px left
@@ -14,6 +17,55 @@ import { CITY_ART } from "./art";
  * above the sprite band, because at z-index 1 the hero sprite always covered it.
  */
 export function CityFireScreen() {
+  const rt = useArcadeRuntime("city");
+  const selected = rt.selected;
+  const first = rt.hud?.positions[0];
+  const side = (rt.view?.side === "buy" || rt.view?.side === "sell"
+    ? rt.view.side
+    : first?.side) ?? null;
+  const lots = rt.view?.lots ?? selected?.defaultLots ?? null;
+  const now = rt.price;
+  const stopPx = first?.sl ?? rt.planSl;
+  const targetPx = first?.tp ?? null;
+  const damageR = rAtStop(selected);
+  const phase = rt.view?.phase ?? (rt.online ? "IDLE" : "OFFLINE");
+  const armed = phase === "ARMED" || phase === "FIRE" || phase === "CLUTCH";
+  const qualityPct =
+    rt.hud?.sentinel?.quality != null ? Math.round(rt.hud.sentinel.quality * 100) : null;
+  const threatHigh = rt.threat === "high";
+  const nextEvent = rt.hud?.sentinel?.nextEvent;
+  const tMinus = rt.hud?.sentinel?.nextEventTMinusS;
+  const insideGuard = tMinus != null && tMinus >= 0 && tMinus <= 900;
+  const heartFull = rt.sprite("heartFull", "/sprites/heart-full.png");
+  const heartEmpty = rt.sprite("heartEmpty", "/sprites/heart-empty.png");
+  const stageLabel =
+    phase === "FIRE" ? "THE FILL" : phase === "ARMED" ? "ARMED" : phase === "CLUTCH" ? "CLUTCH" : "WAIT";
+
+  const ladder = [
+    targetPx != null
+      ? {
+          tick: "var(--phos-400)",
+          glow: true,
+          text: `${formatPrice(targetPx)} target`,
+          color: "var(--phos-300)",
+        }
+      : null,
+    {
+      tick: "var(--phos-200)",
+      glow: false,
+      text: `${formatPrice(now)} now`,
+      color: "var(--text-body)",
+    },
+    stopPx != null
+      ? {
+          tick: "var(--arcade-red)",
+          glow: false,
+          text: `${formatPrice(stopPx)} stop${first?.sl == null ? " · plan" : ""}`,
+          color: "var(--arcade-red)",
+        }
+      : null,
+  ].filter((row): row is { tick: string; glow: boolean; text: string; color: string } => row != null);
+
   return (
     <Artboard
       label="Fire on city art"
@@ -21,7 +73,7 @@ export function CityFireScreen() {
         width: 1440,
         height: 810,
         position: "relative",
-        background: `#040604 url('${CITY_ART}') center/cover no-repeat`,
+        background: `#040604 url('${rt.artUrl || CITY_ART}') center/cover no-repeat`,
         border: "1px solid var(--line-strong)",
         boxShadow: "var(--glow-md)",
       }}
@@ -40,7 +92,6 @@ export function CityFireScreen() {
         }}
       />
 
-      {/* ── battle layer: tracers, bursts, muzzle flash ───────── */}
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
         <i
           style={{
@@ -83,7 +134,7 @@ export function CityFireScreen() {
         />
 
         <img
-          src="/sprites/boom-big.png"
+          src={rt.sprite("boomBig", "/sprites/boom-big.png")}
           alt=""
           style={{
             position: "absolute",
@@ -95,7 +146,7 @@ export function CityFireScreen() {
           }}
         />
         <img
-          src="/sprites/boom-mid.png"
+          src={rt.sprite("boomMid", "/sprites/boom-mid.png")}
           alt=""
           style={{
             position: "absolute",
@@ -107,7 +158,7 @@ export function CityFireScreen() {
           }}
         />
         <img
-          src="/sprites/boom-small.png"
+          src={rt.sprite("boomSmall", "/sprites/boom-small.png")}
           alt=""
           style={{
             position: "absolute",
@@ -143,18 +194,18 @@ export function CityFireScreen() {
         />
       </div>
 
-      {/* red alert pulse inside the frame edge */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          boxShadow: "inset 0 0 90px rgba(232,32,42,.55)",
-          animation: "ev-alert 1.6s steps(1,end) infinite",
-        }}
-      />
+      {threatHigh ? (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            boxShadow: "inset 0 0 90px rgba(232,32,42,.55)",
+            animation: "ev-alert 1.6s steps(1,end) infinite",
+          }}
+        />
+      ) : null}
 
-      {/* ── arcade HUD strip ──────────────────────────────────── */}
       <div
         style={{
           position: "absolute",
@@ -164,10 +215,11 @@ export function CityFireScreen() {
           height: 56,
           display: "flex",
           alignItems: "center",
-          gap: 26,
+          gap: 18,
           padding: "0 20px",
           background: "rgba(4,6,4,.9)",
           borderBottom: "1px solid var(--line-strong)",
+          zIndex: 5,
         }}
       >
         <span
@@ -178,10 +230,10 @@ export function CityFireScreen() {
             textShadow: "var(--glow-text)",
           }}
         >
-          1P 07
+          1P {padScore(rt.standDowns)}
         </span>
         <span style={{ fontFamily: "var(--font-display)", fontSize: 12, color: "var(--grey-300)" }}>
-          HI 12
+          HI {padScore(rt.hiScore)}
         </span>
         <span
           style={{
@@ -191,34 +243,26 @@ export function CityFireScreen() {
             color: "var(--arcade-yellow)",
           }}
         >
-          1:12:04
+          {rt.clock}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Caps color="var(--text-muted)">Arms left</Caps>
           <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
-            <img
-              src="/sprites/heart-full.png"
-              alt=""
-              style={{ width: 18, imageRendering: "pixelated" }}
-            />
-            <img
-              src="/sprites/heart-full.png"
-              alt=""
-              style={{ width: 18, imageRendering: "pixelated" }}
-            />
-            <img
-              src="/sprites/heart-empty.png"
-              alt=""
-              style={{ width: 18, imageRendering: "pixelated" }}
-            />
+            {rt.slots.map((lit, i) => (
+              <img
+                key={i}
+                src={lit ? heartFull : heartEmpty}
+                alt=""
+                style={{ width: 18, imageRendering: "pixelated" }}
+              />
+            ))}
           </div>
         </div>
-        <Caps size={10} color="var(--arcade-yellow)" style={{ marginLeft: "auto" }}>
-          Armed · nothing sent yet
-        </Caps>
+        <div style={{ marginLeft: "auto" }}>
+          <ConnectStrip runtime={rt} flattenLabel="Flatten" />
+        </div>
       </div>
 
-      {/* ── boss bar: the citadel ─────────────────────────────── */}
       <div
         style={{
           position: "absolute",
@@ -241,12 +285,15 @@ export function CityFireScreen() {
             fontSize: 10,
             color: "var(--arcade-red)",
             textShadow: "2px 2px 0 #000",
-            animation: "ev-blink 1s steps(1,end) infinite",
+            animation: threatHigh ? "ev-blink 1s steps(1,end) infinite" : undefined,
           }}
         >
-          !! CITADEL !!
+          {threatHigh ? "!! CITADEL !!" : "CITADEL"}
         </span>
-        <Caps color="var(--text-muted)">dxy print · 18:04 · impact xauusd</Caps>
+        <Caps color="var(--text-muted)">
+          {nextEvent ? `${nextEvent} · ${rt.eventEta}` : "no print on the tape"}
+          {selected ? ` · ${selected.name.toLowerCase()}` : ""}
+        </Caps>
         <div
           style={{
             flex: 1,
@@ -261,10 +308,9 @@ export function CityFireScreen() {
             style={{
               display: "block",
               height: "100%",
-              width: "64%",
+              width: `${qualityPct ?? 0}%`,
               background:
                 "repeating-linear-gradient(90deg,var(--arcade-red) 0 10px,rgba(4,6,4,.6) 10px 12px)",
-              animation: "ev-hpdrain 6s linear infinite",
             }}
           />
         </div>
@@ -277,9 +323,11 @@ export function CityFireScreen() {
             fontVariantNumeric: "tabular-nums",
           }}
         >
-          64%
+          {qualityPct == null ? DASH : `${qualityPct}%`}
         </span>
-        <Caps color="var(--arcade-yellow)">Threat high</Caps>
+        <Caps color="var(--arcade-yellow)">
+          {rt.threat === "high" ? "Threat high" : rt.threat === "mid" ? "Threat mid" : "Threat low"}
+        </Caps>
         <span
           style={{
             marginLeft: "auto",
@@ -288,11 +336,14 @@ export function CityFireScreen() {
             color: "var(--arcade-yellow)",
           }}
         >
-          &gt; your news guard is 15 minutes. you are inside it.
+          {insideGuard
+            ? `> your news guard is 15 minutes. you are inside it.`
+            : tMinus != null
+              ? `> next print in ${rt.eventEta}. guard is 15.`
+              : "> news guard quiet."}
         </span>
       </div>
 
-      {/* hazard tape */}
       <div
         style={{
           position: "absolute",
@@ -308,7 +359,6 @@ export function CityFireScreen() {
         }}
       />
 
-      {/* ── order rail: every figure, one column ──────────────── */}
       <div
         style={{
           position: "absolute",
@@ -322,7 +372,6 @@ export function CityFireScreen() {
           zIndex: 3,
         }}
       >
-        {/* stage card */}
         <div
           style={{
             position: "relative",
@@ -330,7 +379,7 @@ export function CityFireScreen() {
             border: "1px solid var(--line-strong)",
             boxShadow: "var(--sprite-shadow-lg)",
             display: "grid",
-            animation: "ev-shake 2.4s steps(5,end) infinite",
+            animation: armed ? "ev-shake 2.4s steps(5,end) infinite" : undefined,
           }}
         >
           <i
@@ -374,19 +423,18 @@ export function CityFireScreen() {
                 textShadow: "2px 2px 0 #000",
               }}
             >
-              STAGE 04
+              {phase}
             </span>
-            <Caps color="var(--text-muted)">The fill</Caps>
-            {/* ammo */}
+            <Caps color="var(--text-muted)">{stageLabel}</Caps>
             <div style={{ display: "flex", gap: 3, marginLeft: "auto" }}>
-              {["var(--phos-400)", "var(--phos-400)", "var(--phos-500)", null, null].map((c, i) => (
+              {rt.slots.map((lit, i) => (
                 <i
                   key={i}
                   style={{
                     width: 7,
                     height: 13,
-                    background: c ?? "var(--black-5)",
-                    border: c ? undefined : "1px solid var(--line-neutral)",
+                    background: lit ? "var(--phos-400)" : "var(--black-5)",
+                    border: lit ? undefined : "1px solid var(--line-neutral)",
                   }}
                 />
               ))}
@@ -403,7 +451,7 @@ export function CityFireScreen() {
                   textShadow: "var(--glow-text),3px 3px 0 #000",
                 }}
               >
-                BUY
+                {side ? side.toUpperCase() : DASH}
               </span>
               <div style={{ display: "grid", gap: 3 }}>
                 <span
@@ -415,10 +463,10 @@ export function CityFireScreen() {
                     color: "var(--text-body)",
                   }}
                 >
-                  XAUUSD · 0.20 lots
+                  {selected?.name ?? "XAUUSD"} · {lots != null ? lots.toFixed(2) : DASH} lots
                 </span>
                 <Caps color="var(--text-muted)" style={{ whiteSpace: "nowrap" }}>
-                  Market · entry ~2461.38
+                  Market · entry ~{formatPrice(now)}
                 </Caps>
               </div>
             </div>
@@ -450,16 +498,17 @@ export function CityFireScreen() {
                   color: "var(--arcade-yellow)",
                 }}
               >
-                21:07:12
+                {rt.hud?.session.id ?? DASH}
               </span>
             </div>
             <Term size={15} color="var(--phos-500)">
-              41s since the signal bar closed
+              {rt.hud?.sentinel?.setup
+                ? `${rt.hud.sentinel.setup}${rt.hud.sentinel.setupSide ? ` · ${rt.hud.sentinel.setupSide}` : ""}`
+                : "waiting on a quote before the sentinel can speak"}
             </Term>
           </div>
         </div>
 
-        {/* damage if wrong */}
         <div
           style={{
             display: "grid",
@@ -471,20 +520,25 @@ export function CityFireScreen() {
           }}
         >
           <Caps color="var(--arcade-red)">Damage if wrong</Caps>
-          <PnLValue value={-1} size="lg" />
+          {damageR == null ? (
+            <span style={{ fontFamily: "var(--font-data)", fontSize: 22, color: "var(--text-muted)" }}>
+              {DASH}
+            </span>
+          ) : (
+            <PnLValue value={-damageR} size="lg" />
+          )}
           <MeterBar
-            value={10}
-            max={30}
+            value={0}
+            max={rt.hud?.risk.maxDayLossUsd || 1}
             segments={10}
             tone="danger"
-            label="Loss meter after a stop"
+            label="Loss meter · waiting on broker"
           />
           <span style={{ fontFamily: "var(--font-data)", fontSize: 11, color: "var(--text-muted)" }}>
-            stop 2455.60 · -1.10R already spent
+            stop {formatPrice(stopPx)} · default stop is 1R
           </span>
         </div>
 
-        {/* reward if right */}
         <div
           style={{
             display: "grid",
@@ -496,14 +550,18 @@ export function CityFireScreen() {
           }}
         >
           <Caps color="var(--phos-300)">Reward if right</Caps>
-          <PnLValue value={2.4} size="lg" />
-          <MeterBar value={24} max={30} segments={10} label="Target 2473.00" />
+          {targetPx == null ? (
+            <span style={{ fontFamily: "var(--font-data)", fontSize: 18, color: "var(--text-muted)" }}>
+              no target set
+            </span>
+          ) : (
+            <MeterBar value={0} max={1} segments={10} label={`Target ${formatPrice(targetPx)}`} />
+          )}
           <span style={{ fontFamily: "var(--font-data)", fontSize: 11, color: "var(--text-muted)" }}>
-            2.4 : 1 · inside rule 4
+            {targetPx == null ? "a fill with a TP would paint R here" : `tp ${formatPrice(targetPx)}`}
           </span>
         </div>
 
-        {/* risk-warden */}
         <div
           style={{
             padding: "10px 12px",
@@ -517,14 +575,18 @@ export function CityFireScreen() {
           }}
         >
           <Term size={15} color="var(--status-agent)">
-            risk-warden: 0.20 on a 2.4R setup — rule 4 allows it.
+            risk-warden: {lots != null ? lots.toFixed(2) : DASH} on {selected?.name ?? "—"} — max{" "}
+            {selected?.maxLots ?? DASH}.
           </Term>
           <Term size={15} color="var(--status-agent)">
-            dxy prints in 18 minutes. your guard is 15.
+            {insideGuard
+              ? `print in ${rt.eventEta}. your guard is 15.`
+              : rt.online
+                ? "inside the window's rules, or waiting on a quote."
+                : "gateway offline — figures are blank on purpose."}
           </Term>
         </div>
 
-        {/* price ladder */}
         <div
           style={{
             display: "grid",
@@ -535,21 +597,7 @@ export function CityFireScreen() {
           }}
         >
           <Caps>Price ladder</Caps>
-          {[
-            {
-              tick: "var(--phos-400)",
-              glow: true,
-              text: "2473.00 target · +2.40R",
-              color: "var(--phos-300)",
-            },
-            { tick: "var(--phos-200)", glow: false, text: "2461.38 now", color: "var(--text-body)" },
-            {
-              tick: "var(--arcade-red)",
-              glow: false,
-              text: "2455.60 stop · -1.00R",
-              color: "var(--arcade-red)",
-            },
-          ].map((row) => (
+          {ladder.map((row) => (
             <div key={row.text} style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <i
                 style={{
@@ -559,9 +607,7 @@ export function CityFireScreen() {
                   boxShadow: row.glow ? "var(--glow-xs)" : undefined,
                 }}
               />
-              <span
-                style={{ fontFamily: "var(--font-data)", fontSize: 11, color: row.color }}
-              >
+              <span style={{ fontFamily: "var(--font-data)", fontSize: 11, color: row.color }}>
                 {row.text}
               </span>
             </div>
@@ -569,7 +615,6 @@ export function CityFireScreen() {
         </div>
       </div>
 
-      {/* ── framing plate, lifted clear of the sprite band ────── */}
       <div
         style={{
           position: "absolute",
@@ -593,13 +638,15 @@ export function CityFireScreen() {
             fontVariantNumeric: "tabular-nums",
           }}
         >
-          range 2461.38 → 2473.00
+          {formatPrice(now)}
+          {targetPx != null ? ` → ${formatPrice(targetPx)}` : ""}
         </span>
-        <Caps color="var(--arcade-red)">Danger · event inside guard</Caps>
+        <Caps color={threatHigh ? "var(--arcade-red)" : "var(--text-muted)"}>
+          {insideGuard ? "Danger · event inside guard" : dash(rt.hud?.sentinel?.qualityBand ?? "quiet")}
+        </Caps>
         <Caps color="var(--status-agent)">2P · desk</Caps>
       </div>
 
-      {/* ── target lock over the citadel ──────────────────────── */}
       <div
         style={{
           position: "absolute",
@@ -724,7 +771,7 @@ export function CityFireScreen() {
             >
               CITADEL
             </span>
-            <Caps color="var(--arcade-yellow)">Target locked</Caps>
+            <Caps color="var(--arcade-yellow)">{now == null ? "No lock" : "Target locked"}</Caps>
           </div>
         </div>
         <div
@@ -739,7 +786,6 @@ export function CityFireScreen() {
         />
       </div>
 
-      {/* ── the two players ──────────────────────────────────── */}
       <div
         style={{
           position: "absolute",
@@ -751,7 +797,7 @@ export function CityFireScreen() {
         }}
       >
         <img
-          src="/sprites/hero-fire.png"
+          src={rt.sprite("heroFire", "/sprites/hero-fire.png")}
           alt="1P"
           style={{
             display: "block",
@@ -786,7 +832,7 @@ export function CityFireScreen() {
         }}
       >
         <img
-          src="/sprites/hero-kneel.png"
+          src={rt.sprite("heroKneel", "/sprites/hero-kneel.png")}
           alt="2P"
           style={{
             display: "block",
@@ -797,7 +843,6 @@ export function CityFireScreen() {
         />
       </div>
 
-      {/* ── the two-hand confirm ──────────────────────────────── */}
       <div
         style={{
           position: "absolute",
@@ -820,7 +865,7 @@ export function CityFireScreen() {
             boxShadow: "var(--glow-sm),var(--sprite-shadow)",
           }}
         >
-          <GamepadKey button="LT" size="lg" pressed label="Held" />
+          <GamepadKey button="LT" size="lg" pressed={armed} label={armed ? "Held" : undefined} />
           <span
             style={{ fontFamily: "var(--font-display)", fontSize: 14, color: "var(--text-disabled)" }}
           >
@@ -833,7 +878,7 @@ export function CityFireScreen() {
               fontSize: 16,
               color: "var(--phos-400)",
               textShadow: "var(--glow-text)",
-              animation: "ev-blink 1s steps(1,end) infinite",
+              animation: phase === "ARMED" ? "ev-blink 1s steps(1,end) infinite" : undefined,
             }}
           >
             FIRE
@@ -859,12 +904,12 @@ export function CityFireScreen() {
             STAND DOWN +1
           </span>
           <Term size={15}>
-            release the clutch and your score goes to 08. nothing reaches the broker.
+            release the clutch and your score goes to {padScore(rt.standDowns + 1)}. nothing reaches
+            the broker.
           </Term>
         </div>
       </div>
 
-      {/* ── pad legend + BGM ──────────────────────────────────── */}
       <div
         style={{
           position: "absolute",

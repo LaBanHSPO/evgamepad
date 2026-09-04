@@ -26,12 +26,14 @@ asyncio.set_event_loop(_LOOP)
 _REACTOR = reactor_setup.install(_LOOP)
 
 from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect  # noqa: E402
-from fastapi.responses import StreamingResponse  # noqa: E402
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel, ConfigDict, Field  # noqa: E402
 
 from api.conflate import Conflator  # noqa: E402
 from api.ws import GameSocket, GatewayState, origin_allowed  # noqa: E402
+from arcade.catalog import asset_path, get_skin, list_skins  # noqa: E402
+from arcade.hud import snapshot as arcade_hud_snapshot  # noqa: E402
 from broker import Broker, StubBroker  # noqa: E402
 from broker.ctrader import CTraderBroker  # noqa: E402
 from broker.events import normalise_execution  # noqa: E402
@@ -544,6 +546,41 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
             "protocol": PROTOCOL_VERSION,
             "broker": broker.snapshot(),
         }
+
+    @app.get("/api/arcade/skins")
+    def arcade_skins() -> dict[str, object]:
+        """Artwork catalog. Screens follow these URLs instead of hard-coded `/uploads` paths."""
+        return {"skins": list_skins()}
+
+    @app.get("/api/arcade/skins/{skin_id}")
+    def arcade_skin(skin_id: str) -> dict[str, object]:
+        skin = get_skin(skin_id)
+        if skin is None:
+            raise HTTPException(status_code=404, detail={"error": "skin_not_found"})
+        return skin
+
+    @app.get("/api/arcade/assets/{name}")
+    def arcade_asset(name: str) -> FileResponse:
+        path = asset_path(name)
+        if path is None:
+            raise HTTPException(status_code=404, detail={"error": "asset_not_found"})
+        media = "image/png" if path.suffix.lower() == ".png" else "application/octet-stream"
+        return FileResponse(
+            path,
+            media_type=media,
+            headers={"Cache-Control": "public, max-age=86400, immutable"},
+        )
+
+    @app.get("/api/arcade/hud")
+    async def arcade_hud() -> JSONResponse:
+        """Live figures for the art HUDs. Always 200; a missing quote is null, never invented."""
+        body = await arcade_hud_snapshot(
+            config=config,
+            broker=broker,
+            sentinel=sentinel,
+            journal=journal_service,
+        )
+        return JSONResponse(body, headers={"Cache-Control": "no-store"})
 
     def session_id_now() -> str:
         window = SessionWindow.from_config(
