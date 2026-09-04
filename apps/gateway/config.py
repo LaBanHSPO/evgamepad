@@ -96,7 +96,11 @@ class GatewayConfig(Base):
     listen: str
     static_dir: str
     ws_path: str = "/ws"
+    # Browser Origin of the HUD (the page that opens /ws), not the gateway hostname.
+    # Split deploy: HUD at e.g. https://bobvolman.com, gateway at https://gw.bobvolman.com.
     public_origin: str
+    # Extra HUD origins allowed to open /ws and call /api (CORS). public_origin is always included.
+    cors_origins: list[str] = Field(default_factory=list)
     token_env: str = "EV_WS_TOKEN"
     heartbeat_s: float = Field(gt=0)
     heartbeat_dead_s: float = Field(gt=0)
@@ -109,6 +113,16 @@ class GatewayConfig(Base):
     @property
     def port(self) -> int:
         return int(self.listen.rsplit(":", 1)[1])
+
+    @property
+    def allowed_origins(self) -> tuple[str, ...]:
+        """HUD origins allowed to talk to this gateway (CORS + WebSocket Origin)."""
+        seen: list[str] = []
+        for item in (self.public_origin, *self.cors_origins):
+            cleaned = item.rstrip("/")
+            if cleaned and cleaned not in seen:
+                seen.append(cleaned)
+        return tuple(seen)
 
     @model_validator(mode="after")
     def _dead_after_beat(self) -> GatewayConfig:
@@ -367,6 +381,21 @@ def _check_bind(cfg: AppConfig, *, dev: bool, container: bool) -> None:
         )
 
 
+def hud_origins(cfg: AppConfig, env: dict[str, str] | None = None) -> list[str]:
+    """Origins the browser may send when talking to this gateway.
+
+    `gateway.public_origin` plus `gateway.cors_origins`, and when `EV_DEV=1` also the
+    Vite dev server so `npm run dev` can open a remote or local gateway without editing YAML.
+    """
+    env = dict(os.environ) if env is None else env
+    origins = list(cfg.gateway.allowed_origins)
+    if env.get("EV_DEV") == "1":
+        for extra in ("http://localhost:5173", "http://127.0.0.1:5173"):
+            if extra not in origins:
+                origins.append(extra)
+    return origins
+
+
 def _check_secrets(cfg: AppConfig, env: dict[str, str]) -> None:
     """Refuse to half-start on missing credentials; point at the README instead."""
     names = [cfg.broker.client_id_env, cfg.broker.client_secret_env, cfg.broker.token_env,
@@ -399,14 +428,29 @@ def load_config(
     if not isinstance(raw, dict):
         raise ConfigError(f"config must be a mapping, got {type(raw).__name__}")
 
-    # Two fields the deploy and a dev checkout have to override without editing the file:
-    # where to listen (see `_check_bind`) and where the durable volume is mounted.
+    # Deploy and a dev checkout override these without editing the file: listen bind
+    # (see `_check_bind`), durable volume, and the HUD origin allowlist for CORS / WS.
     listen_override = env.get("EV_LISTEN")
     if listen_override:
         gateway = raw.get("gateway")
         if not isinstance(gateway, dict):
             raise ConfigError("EV_LISTEN set but config has no `gateway` block to override")
         gateway["listen"] = listen_override
+
+    public_override = (env.get("EV_PUBLIC_ORIGIN") or "").strip()
+    if public_override:
+        gateway = raw.get("gateway")
+        if not isinstance(gateway, dict):
+            raise ConfigError("EV_PUBLIC_ORIGIN set but config has no `gateway` block to override")
+        gateway["public_origin"] = public_override
+
+    cors_override = (env.get("EV_CORS_ORIGINS") or "").strip()
+    if cors_override:
+        gateway = raw.get("gateway")
+        if not isinstance(gateway, dict):
+            raise ConfigError("EV_CORS_ORIGINS set but config has no `gateway` block to override")
+        extra = [item.strip() for item in cors_override.split(",") if item.strip()]
+        gateway["cors_origins"] = extra
 
     data_dir_override = env.get("EV_DATA_DIR")
     if data_dir_override:

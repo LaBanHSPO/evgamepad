@@ -324,6 +324,8 @@ def test_only_the_huds_own_origin_may_open_the_socket() -> None:
     assert origin_allowed("https://evgamepad.example/", "https://evgamepad.example")
     assert not origin_allowed("https://evil.example", "https://evgamepad.example")
     assert not origin_allowed(None, "https://evgamepad.example")
+    assert origin_allowed("https://bobvolman.com", ["https://gw.bobvolman.com", "https://bobvolman.com"])
+    assert not origin_allowed("https://evil.example", ["https://bobvolman.com"])
 
 
 # -- tilt (phase 9) -------------------------------------------------------------------

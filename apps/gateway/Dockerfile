@@ -8,7 +8,11 @@ WORKDIR /build
 COPY app/package.json app/package-lock.json ./
 RUN npm ci
 COPY app/ ./
-RUN npm run build
+# Image-served HUD stays same-origin. Split-origin HUDs are built on the HUD host
+# with `app/.env.production` (`VITE_GATEWAY_ORIGIN=https://gw.bobvolman.com`).
+ARG VITE_GATEWAY_ORIGIN=
+ENV VITE_GATEWAY_ORIGIN=$VITE_GATEWAY_ORIGIN
+RUN rm -f .env.production .env.production.local && npm run build
 
 # --- whisper.cpp build -----------------------------------------------------------------------
 # whisper-cli is a binary, so it stays a spawned child of the gateway in any language.

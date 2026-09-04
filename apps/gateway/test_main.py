@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
+import yaml
 from fastapi import WebSocketDisconnect
 from fastapi.testclient import TestClient
 
@@ -45,10 +47,52 @@ def test_generated_web_types_match_the_catalog() -> None:
 
 
 def test_the_socket_refuses_a_foreign_origin(client: TestClient) -> None:
-    """One origin: the HUD and the socket are served from the same place."""
+    """A page that is not a configured HUD origin cannot open the game socket."""
     with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect("/ws", headers={"origin": "https://evil.example"}):
             pass
+
+
+def test_cors_preflight_allows_the_hud_origin(client: TestClient) -> None:
+    origin = client.app.state.config.gateway.public_origin
+    response = client.options(
+        "/api/arcade/hud",
+        headers={
+            "origin": origin,
+            "access-control-request-method": "GET",
+        },
+    )
+    assert response.status_code in (200, 204)
+    assert response.headers.get("access-control-allow-origin") == origin
+
+
+def test_cors_preflight_refuses_a_foreign_origin(client: TestClient) -> None:
+    response = client.options(
+        "/api/arcade/hud",
+        headers={
+            "origin": "https://evil.example",
+            "access-control-request-method": "GET",
+        },
+    )
+    assert response.headers.get("access-control-allow-origin") != "https://evil.example"
+
+
+def test_an_extra_cors_origin_may_open_the_socket(tmp_path: Path, monkeypatch) -> None:
+    """Split deploy: the HUD origin is listed, the gateway hostname is not the Origin header."""
+    raw = yaml.safe_load(DEFAULT.read_text(encoding="utf-8"))
+    raw["gateway"]["public_origin"] = "https://bobvolman.com"
+    raw["gateway"]["cors_origins"] = ["https://www.bobvolman.com"]
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    cfg = load_config(path, env=dict(VALID_ENV))
+    cfg.paths.data_dir = str(tmp_path / "data")
+    monkeypatch.setenv(cfg.gateway.token_env, "tok")
+    with TestClient(create_app(cfg)) as client:
+        with client.websocket_connect(
+            "/ws?token=tok", headers={"origin": "https://www.bobvolman.com"}
+        ) as ws:
+            ws.send_text('{"v":1,"t":"hello","seq":1,"ts":1,"ch":"session","p":{"token":"tok"}}')
+            assert json.loads(ws.receive_text())["t"] == "welcome"
 
 
 def test_the_socket_refuses_a_missing_token(client: TestClient, monkeypatch) -> None:
