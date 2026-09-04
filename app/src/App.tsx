@@ -100,7 +100,7 @@ const GROUPS: {
 // the others need a way to hand a cid onward, and none of them fits a zero-argument component.
 const SCREENS: Record<Exclude<ScreenId, "session" | "replaylive" | "journallive">,
                       () => JSX.Element> = {
-  // The three surfaces wired to the real gateway; the rest are the design prototype.
+  // Live HUD / deck / journal keep the socket. Matrix and city poll `/api/arcade`.
   live: LiveHudScreen,
   deck: Deck,
   systemlive: SystemPrinciples,
