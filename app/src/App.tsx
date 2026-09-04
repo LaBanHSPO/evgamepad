@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState } from "react";
+import { Suspense, lazy, useReducer } from "react";
 import type { CSSProperties } from "react";
 import { BgmProvider } from "./components/bgm";
 import { AgentDeskScreen } from "./screens/AgentDeskScreen";
@@ -22,45 +22,21 @@ import { ProcessScoreScreen } from "./screens/ProcessScoreScreen";
 import { ReplayScreen } from "./screens/ReplayScreen";
 import { ReportScreen } from "./screens/ReportScreen";
 import { SessionClearScreen } from "./screens/SessionClearScreen";
-import { SessionHudScreen, HUD_STATES, type HudState } from "./screens/SessionHudScreen";
+import { SessionHudScreen, HUD_STATES } from "./screens/SessionHudScreen";
 import { SessionOverScreen } from "./screens/SessionOverScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { SizeCalculatorScreen } from "./screens/SizeCalculatorScreen";
 import { TradeDetailScreen } from "./screens/TradeDetailScreen";
+import { CabinetProvider, useCabinetInput } from "./journey/Cabinet";
+import { initialJourney, reduceJourney } from "./journey/reducer";
+import type { ScreenId } from "./journey/types";
+import { GameOverlay } from "./overlay/GameOverlay";
 
 /**
- * Click-through shell — the prototype's sidebar, in the order the design chat
- * settled on: the run of a real session, then setup and reference.
+ * Playable cabinet. START walks the evening; Menu lists every screen; the rail still warps
+ * for design review. Prototype artboards keep fixed data. Live HUD / journal / replay / deck
+ * talk to the gateway when it is up.
  */
-
-type ScreenId =
-  | "settingslive"
-  | "reportlive"
-  | "journallive"
-  | "systemlive"
-  | "replaylive"
-  | "title"
-  | "boot"
-  | "pre"
-  | "session"
-  | "live"
-  | "deck"
-  | "artmatrix"
-  | "artcontra"
-  | "desk"
-  | "detail"
-  | "calc"
-  | "clear"
-  | "over"
-  | "report"
-  | "journal"
-  | "replay"
-  | "history"
-  | "score"
-  | "pad"
-  | "data"
-  | "settings"
-  | "philosophy";
 
 const GROUPS: {
   heading: string;
@@ -214,13 +190,21 @@ const shortStyle: CSSProperties = {
   textAlign: "center",
 };
 
+function CabinetListeners(): null {
+  useCabinetInput();
+  return null;
+}
+
 export default function App() {
-  const [screen, setScreen] = useState<ScreenId>("title");
-  const [replayCid, setReplayCid] = useState<string | null>(null);
-  const [hud, setHud] = useState<HudState>("live");
+  const [journey, dispatch] = useReducer(reduceJourney, undefined, initialJourney);
+  const screen = journey.screen;
+  const hud = journey.hud;
 
   return (
-    <BgmProvider>
+    <CabinetProvider state={journey} dispatch={dispatch}>
+      <CabinetListeners />
+      <GameOverlay />
+      <BgmProvider>
       <div
         style={{
           display: "grid",
@@ -292,7 +276,7 @@ export default function App() {
                   <button
                     key={item.id}
                     className="ev-nav-item"
-                    onClick={() => setScreen(item.id)}
+                    onClick={() => dispatch({ type: "warp", screen: item.id })}
                     style={navStyle(screen === item.id)}
                     title={item.label}
                   >
@@ -314,10 +298,7 @@ export default function App() {
                       <button
                         key={state.id}
                         className="ev-nav-item"
-                        onClick={() => {
-                          setScreen("session");
-                          setHud(state.id);
-                        }}
+                        onClick={() => dispatch({ type: "warp", screen: "session", hud: state.id })}
                         style={navStyle(screen === "session" && hud === state.id)}
                         title={state.label}
                       >
@@ -343,7 +324,7 @@ export default function App() {
               <span className="ev-nav-short" style={shortStyle}>
                 &gt;
               </span>
-              <span className="ev-nav-label">Click-through</span>
+              <span className="ev-nav-label">Play</span>
             </span>
             <span
               className="ev-nav-label"
@@ -354,7 +335,7 @@ export default function App() {
                 color: "var(--phos-600)",
               }}
             >
-              &gt; screens are real, data is fixed.
+              &gt; START walks the evening. Menu lists every screen.
             </span>
           </div>
         </nav>
@@ -376,16 +357,19 @@ export default function App() {
           ) : screen === "journallive" ? (
             // The journal hands a cid to the replay route, which is the review loop the phases
             // were building toward: dashboard -> trade -> the tape it happened on.
-            <Suspense fallback={<p>loading the journal…</p>}>
+            <Suspense fallback={<p style={{ fontFamily: "var(--font-terminal)", color: "var(--phos-400)" }}>&gt; loading the journal…</p>}>
               <Journal
-                onReplay={(cid) => { setReplayCid(cid); setScreen("replaylive"); }}
+                onReplay={(cid) => dispatch({ type: "replay", cid })}
               />
             </Suspense>
           ) : screen === "replaylive" ? (
             // Mounting replay unmounts the live HUD, taking its agent, poller and socket with it —
-            // which is why no order can be placed from this route. B goes back to the deck.
-            <Suspense fallback={<p>loading the tape…</p>}>
-              <Replay cid={replayCid ?? undefined} onExit={() => setScreen("journallive")} />
+            // which is why no order can be placed from this route. B goes back to the journal.
+            <Suspense fallback={<p style={{ fontFamily: "var(--font-terminal)", color: "var(--phos-400)" }}>&gt; loading the tape…</p>}>
+              <Replay
+                cid={journey.replayCid ?? undefined}
+                onExit={() => dispatch({ type: "input", action: "back" })}
+              />
             </Suspense>
           ) : (
             (() => {
@@ -395,6 +379,7 @@ export default function App() {
           )}
         </main>
       </div>
-    </BgmProvider>
+      </BgmProvider>
+    </CabinetProvider>
   );
 }

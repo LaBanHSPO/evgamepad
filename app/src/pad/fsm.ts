@@ -150,7 +150,8 @@ export function step(state: FsmState, input: PadInput, options: FsmOptions = {})
   }
 
   // Non-order controls work in every phase that is not mid-fire. They never touch the broker.
-  if (next.phase !== "FIRE") {
+  // While the overlay is open the D-pad belongs to destination selection, not lot/symbol.
+  if (next.phase !== "FIRE" && !next.overlayOpen) {
     if (input.lotUp) effects.push({ kind: "lot", step: 1 });
     if (input.lotDown) effects.push({ kind: "lot", step: -1 });
     if (input.symbolLeft) effects.push({ kind: "symbol", step: -1 });

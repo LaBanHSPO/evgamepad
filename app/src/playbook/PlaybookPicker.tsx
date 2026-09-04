@@ -7,8 +7,8 @@ import type { Playbook } from "./types";
  * socket rather than being remembered only in the browser. Retired playbooks never appear here —
  * the API filters them — but their old grades still resolve on the deck.
  *
- * Phase 3 reserved pad-driven navigation for the GameOverlay; that surface does not exist yet, so
- * this is click-driven for now and the overlay will host it when it lands.
+ * Phase 3 reserved pad-driven navigation for the GameOverlay; that surface now owns Menu, and
+ * this picker stays clickable so a mouse can still choose a setup without opening the overlay.
  */
 export function PlaybookPicker({ playbooks, activeId, onSelect }: {
   playbooks: Playbook[];

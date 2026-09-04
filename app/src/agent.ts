@@ -31,6 +31,7 @@ export interface AgentView {
   padConnected: boolean;
   stoodDown: number;
   pendingIntents: number;
+  overlayOpen: boolean;
 }
 
 export interface AgentOptions {
@@ -72,6 +73,7 @@ export class GameAgent {
       padConnected: this.padConnected,
       stoodDown: this.stoodDown,
       pendingIntents: this.options.client.pending,
+      overlayOpen: this.fsm.overlayOpen,
     };
   }
 
@@ -91,6 +93,21 @@ export class GameAgent {
    */
   setConfirmHoldMs(ms: number): void {
     this.options.confirmHoldMs = ms;
+  }
+
+  /**
+   * The GameOverlay is a safe surface. Opening it from a click must cancel an arm the same way
+   * the Menu rising edge does inside the FSM, or the two sources of truth would drift.
+   */
+  setOverlayOpen(open: boolean): void {
+    if (this.fsm.overlayOpen === open) return;
+    let next = { ...this.fsm, overlayOpen: open };
+    if (open) {
+      next = { ...next, side: null, armedAt: null };
+      if (next.phase === "ARMED" || next.phase === "CLUTCH") next = { ...next, phase: "IDLE" };
+    }
+    this.fsm = next;
+    this.options.onView?.(this.view);
   }
 
   /** One pad frame. Called from the rAF poller; it never renders anything itself. */
