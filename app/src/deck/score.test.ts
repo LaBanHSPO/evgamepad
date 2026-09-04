@@ -94,7 +94,7 @@ describe("what the process side refuses to show", () => {
                                      source.indexOf("return ("));
     expect(openOutcome).toContain("/api/deck/playbooks/outcome");
     // The process-side effect must not reach for it.
-    const processEffect = source.slice(source.indexOf('void fetch("/api/deck/playbooks")'),
+    const processEffect = source.slice(source.indexOf('void fetch(apiUrl("/api/deck/playbooks"))'),
                                        source.indexOf("const openOutcome"));
     expect(processEffect).not.toContain("playbooks/outcome");
   });

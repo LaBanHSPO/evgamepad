@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import "./report-print.css";
 import type { ReportView } from "../settings/types";
+import { apiUrl } from "../net/gateway";
 
 /**
  * The report builder, and the report itself.
@@ -26,7 +27,7 @@ export function ReportBuilder(): JSX.Element {
   const load = useCallback(() => {
     const params = new URLSearchParams({ period, include_outcome: String(includeOutcome) });
     if (period === "session" && sessionId) params.set("session_id", sessionId);
-    void fetch(`/api/reports?${params}`)
+    void fetch(apiUrl(`/api/reports?${params}`))
       .then((response) => (response.ok ? response.json() : Promise.reject(new Error("refused"))))
       .then((body: ReportView) => { setReport(body); setError(null); })
       .catch(() => setError("could not build that report"));

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import type { SystemView } from "./types";
+import { apiUrl } from "../net/gateway";
 
 /**
  * How you trade, in your own words.
@@ -20,7 +21,7 @@ export function SystemPrinciples(): JSX.Element {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    void fetch("/api/journal/system")
+    void fetch(apiUrl("/api/journal/system"))
       .then((response) => response.json())
       .then((body: SystemView) => {
         setView(body);
@@ -36,7 +37,7 @@ export function SystemPrinciples(): JSX.Element {
       principles: principles.split("\n").map((line) => line.trim()).filter(Boolean),
       focusCode: view?.focusCode ?? null,
     };
-    const response = await fetch("/api/journal/system", {
+    const response = await fetch(apiUrl("/api/journal/system"), {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),

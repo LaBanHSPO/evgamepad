@@ -12,6 +12,7 @@ import type { TiltState } from "../hud/TiltPip";
 import { newCid } from "../net/cid";
 import { GameClient } from "../net/ws";
 import type { SocketStatus } from "../net/ws";
+import { apiUrl, wsUrl } from "../net/gateway";
 import type { Envelope } from "../protocol/types";
 
 /**
@@ -64,7 +65,7 @@ export function LiveHudScreen(): JSX.Element {
 
   // The book loads once; retired playbooks never appear, but their old grades still resolve.
   useEffect(() => {
-    void fetch("/api/playbooks")
+    void fetch(apiUrl("/api/playbooks"))
       .then((r) => r.json())
       .then((body) => setPlaybooks(body.playbooks as Playbook[]))
       .catch(() => undefined);
@@ -122,7 +123,7 @@ export function LiveHudScreen(): JSX.Element {
 
   const connect = useCallback(() => {
     if (!token) return;
-    const client = new GameClient(`${location.origin.replace(/^http/, "ws")}/ws`, token, {
+    const client = new GameClient(wsUrl(), token, {
       onMessage,
       onStatus: (next) => {
         setStatus(next);
@@ -137,7 +138,7 @@ export function LiveHudScreen(): JSX.Element {
       onView: setView,
       onStandDown: (conditions) => {
         note(`stood down (${conditions.join(", ")})`);
-        void fetch("/api/journal/stand-down", {
+        void fetch(apiUrl("/api/journal/stand-down"), {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ conditions }),
@@ -178,7 +179,7 @@ export function LiveHudScreen(): JSX.Element {
     const current = agentRef.current?.view;
     if (!current) return;
     try {
-      const response = await fetch("/api/playbooks/grade-preview", {
+      const response = await fetch(apiUrl("/api/playbooks/grade-preview"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -196,7 +197,7 @@ export function LiveHudScreen(): JSX.Element {
     const cid = grade?.cid;
     setGrade(null);
     if (!cid || Object.keys(answers).length === 0) return;
-    void fetch("/api/playbooks/checklist", {
+    void fetch(apiUrl("/api/playbooks/checklist"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ cid, answers }),
@@ -204,7 +205,7 @@ export function LiveHudScreen(): JSX.Element {
   }, [grade, note]);
 
   const checkIn = useCallback((phase: "pre" | "post", rating: number | null) => {
-    void fetch("/api/journal/checkin", {
+    void fetch(apiUrl("/api/journal/checkin"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ phase, rating }),

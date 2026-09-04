@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import type { ArchiveSummary, BackupRow } from "./types";
 import { bytes } from "./types";
+import { apiUrl } from "../net/gateway";
 
 /**
  * Backup, restore, export, and the one that cannot be undone.
@@ -30,7 +31,7 @@ export function DataManagement(): JSX.Element {
   const [held, setHeld] = useState(0);
 
   const load = useCallback(() => {
-    void fetch("/api/data/backups")
+    void fetch(apiUrl("/api/data/backups"))
       .then((response) => response.json())
       .then((body) => setBackups(body.backups as BackupRow[]))
       .catch(() => undefined);
@@ -49,7 +50,7 @@ export function DataManagement(): JSX.Element {
     setBusy(true);
     setStatus(null);
     try {
-      const response = await fetch(path, init);
+      const response = await fetch(apiUrl(path), init);
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
         setStatus(body.detail ?? `that was refused (${response.status})`);
@@ -109,8 +110,8 @@ export function DataManagement(): JSX.Element {
       <section style={panel}>
         <h2 style={heading}>Export</h2>
         <div style={{ display: "flex", gap: 10 }}>
-          <a href="/api/export/trades.csv" download style={link}>trades.csv</a>
-          <a href="/api/export/journal.json" download style={link}>journal.json</a>
+          <a href={apiUrl("/api/export/trades.csv")} download style={link}>trades.csv</a>
+          <a href={apiUrl("/api/export/journal.json")} download style={link}>journal.json</a>
         </div>
         <p style={note}>
           Your trades and your own words. No credentials, no server paths, and no import path back
@@ -137,7 +138,7 @@ export function DataManagement(): JSX.Element {
                                              padding: "3px 0" }}>
                 <span style={{ flex: 1 }}>{backup.name}</span>
                 <span style={{ opacity: 0.7 }}>{bytes(backup.bytes)}</span>
-                <a href={`/api/data/backups/${encodeURIComponent(backup.name)}`} download
+                <a href={apiUrl(`/api/data/backups/${encodeURIComponent(backup.name)}`)} download
                    style={link}>download</a>
                 <button type="button" onClick={() => void inspect(backup.name)}>inspect</button>
               </li>

@@ -370,7 +370,7 @@ describe("no order can be placed from a replay", () => {
     // credits. It goes to the score surface, so `/api/replay/*` itself stays read-only — the
     // gateway-side guard on that is `test_every_statement_replay_runs_is_a_select`.
     const source = readFileSync(resolve(here, "Replay.tsx"), "utf8");
-    const targets = [...source.matchAll(/fetch\(\s*(`[^`]*`|"[^"]*")/g)].map((m) => m[1]);
+    const targets = [...source.matchAll(/fetch\(\s*(?:apiUrl\()?\s*(`[^`]*`|"[^"]*")/g)].map((m) => m[1]);
     expect(targets.length).toBeGreaterThan(0);
     for (const target of targets) {
       expect(target).toMatch(/\/api\/(replay|score\/evidence)\//);

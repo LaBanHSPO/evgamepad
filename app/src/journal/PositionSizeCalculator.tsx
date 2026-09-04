@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import type { CSSProperties } from "react";
 import type { SizeAnswer } from "./types";
 import { show } from "./types";
+import { apiUrl } from "../net/gateway";
 
 /**
  * Lots for a risk — computed on the gateway, through the same conversion and volume rounding the
@@ -31,7 +32,7 @@ export function PositionSizeCalculator({ symbols, onApply }: {
   const calculate = useCallback(async () => {
     setError(null);
     try {
-      const response = await fetch("/api/journal/size", {
+      const response = await fetch(apiUrl("/api/journal/size"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

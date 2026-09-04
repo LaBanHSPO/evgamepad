@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { DataManagement } from "./DataManagement";
 import type { SettingsView } from "./types";
+import { apiUrl } from "../net/gateway";
 
 /**
  * `/settings` — preferences, and nothing that could become a safety decision.
@@ -35,7 +36,7 @@ export function Settings(): JSX.Element {
   const [saved, setSaved] = useState(false);
 
   const load = useCallback(() => {
-    void fetch("/api/settings")
+    void fetch(apiUrl("/api/settings"))
       .then((response) => response.json())
       .then((body: SettingsView) => {
         setView(body);
@@ -48,7 +49,7 @@ export function Settings(): JSX.Element {
 
   const save = useCallback(async () => {
     setError(null);
-    const response = await fetch("/api/settings", {
+    const response = await fetch(apiUrl("/api/settings"), {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(draft),

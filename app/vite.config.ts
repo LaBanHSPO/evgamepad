@@ -4,8 +4,8 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   server: {
-    // Dev only. Production is same-origin: the Python gateway serves the built bundle at `/`
-    // and the socket at `/ws`, so the memory-only token holds with no CORS carve-out.
+    // Dev: Vite proxies /ws and /api to the local gateway. Production HUD builds set
+    // VITE_GATEWAY_ORIGIN (see app/.env.production) and talk to the gateway host directly.
     proxy: {
       "/ws": { target: "ws://127.0.0.1:8444", ws: true },
       "/api": { target: "http://127.0.0.1:8444" },

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import type { TradeRow } from "./types";
 import { r } from "./types";
+import { apiUrl } from "../net/gateway";
 
 /**
  * `/journal/history` — every trade, filtered along every dimension the journal records.
@@ -36,7 +37,7 @@ export function History({ onOpen }: { onOpen?: (cid: string) => void }): JSX.Ele
     for (const [key, value] of Object.entries(filters)) {
       if (value) params.set(key, value);
     }
-    void fetch(`/api/journal/history?${params}`)
+    void fetch(apiUrl(`/api/journal/history?${params}`))
       .then((response) => response.json())
       .then((body) => {
         setRows(body.trades as TradeRow[]);

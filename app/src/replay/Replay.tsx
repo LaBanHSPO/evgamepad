@@ -17,6 +17,7 @@ import {
 } from "./transport";
 import type { TransportState, Window } from "./transport";
 import type { IndexRow, ReplayBody } from "./types";
+import { apiUrl } from "../net/gateway";
 
 /**
  * Trade replay: a closed position, scrubbed back through the tape it actually traded on.
@@ -58,7 +59,7 @@ export function Replay({ cid, onExit }: { cid?: string; onExit?: () => void }): 
 
   // The trade list drives LB/RB stepping. It is fetched once; a replay is not realtime.
   useEffect(() => {
-    void fetch("/api/replay/index")
+    void fetch(apiUrl("/api/replay/index"))
       .then((r) => r.json())
       .then((payload) => {
         const trades = payload.trades as IndexRow[];
@@ -71,7 +72,7 @@ export function Replay({ cid, onExit }: { cid?: string; onExit?: () => void }): 
   useEffect(() => {
     if (current === null) return;
     setError(null);
-    void fetch(`/api/replay/${encodeURIComponent(current)}`)
+    void fetch(apiUrl(`/api/replay/${encodeURIComponent(current)}`))
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((payload: ReplayBody) => {
         setBody(payload);
@@ -81,7 +82,7 @@ export function Replay({ cid, onExit }: { cid?: string; onExit?: () => void }): 
         // Reviewing is part of the process being scored, so opening a trade is evidence for
         // phase 11's Review axis. It rides the score surface, not `/api/replay/*` — replay itself
         // stays a read, and the write that says "you reviewed this" belongs to the scorer.
-        void fetch("/api/score/evidence/replay", {
+        void fetch(apiUrl("/api/score/evidence/replay"), {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ cid: payload.trade.cid, sessionId: payload.trade.sessionId }),
@@ -220,7 +221,7 @@ export function Replay({ cid, onExit }: { cid?: string; onExit?: () => void }): 
 
           {/* Without phase 8 there are no memos, and no audio element to show. */}
           {cue.memoId === null ? null : (
-            <audio ref={audioRef} src={`/api/voice/${cue.memoId}/audio`} preload="auto" />
+            <audio ref={audioRef} src={apiUrl(`/api/voice/${cue.memoId}/audio`)} preload="auto" />
           )}
         </div>
 
