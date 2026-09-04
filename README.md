@@ -511,6 +511,7 @@ The system derives emotional state directly from measured physical controller in
 
 ## Documentation
 
+- [User Guide](./docs/userguide/README.md) — play an evening, controller map, every screen
 - [Master Implementation Plan](./plans/260824-1506-evening-forex-gold-gamepad/plan.md) — Architectural decisions, phase milestones, validation logs
 - [Research Compendium](./plans/260824-1506-evening-forex-gold-gamepad/research/) — Gamepad APIs, cTrader Protobuf protocols, AI integration
 - [Session Development Journals](./plans/journals/) — Chronological development logs
