@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="#test-suite"><img src="https://img.shields.io/badge/tests-709%20passed-22c55e?style=flat-square&logo=pytest&logoColor=white" alt="Tests"></a>
+  <a href="#test-suite"><img src="https://img.shields.io/badge/tests-756%20passed-22c55e?style=flat-square&logo=pytest&logoColor=white" alt="Tests"></a>
   <a href="#architecture"><img src="https://img.shields.io/badge/architecture-single--process%20gateway-3b82f6?style=flat-square" alt="Architecture"></a>
   <a href="#locked-decisions"><img src="https://img.shields.io/badge/backend-Python%203.11+%20%7C%20FastAPI-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"></a>
   <a href="#locked-decisions"><img src="https://img.shields.io/badge/frontend-React%2018%20%7C%20Vite%20PWA-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React"></a>
@@ -18,7 +18,7 @@
 
 ## Overview
 
-A desktop Chrome **web game** — an installable, client-side **React PWA** — where an **8BitDo Ultimate 2 Wireless** controller trades forex and gold on a **cTrader demo account**. The pad communicates over WebSocket to a single **Python gateway** on an Ubuntu VPS (Docker) that speaks the **cTrader Open API** in-process through `ctrader-open-api` Protobuf TCP/SSL. There is no execution sidecar and no secondary microservice. A near-realtime **AI desk** coaches from the sidelines without touching the order path.
+A desktop Chrome **web game** — an installable, client-side **React PWA** — where an **8BitDo Ultimate 2 Wireless** controller trades forex and gold on a **cTrader demo account**. The pad communicates over WebSocket to a **Python gateway** on an Ubuntu VPS (Docker Compose behind nginx). Production splits the origins: the HUD is a static site, the gateway is `https://gw.bobvolman.com`. There is no execution sidecar and no secondary microservice. A near-realtime **AI desk** coaches from the sidelines without touching the order path.
 
 On top of the game sits a **trading journal** that takes the best of Edgewonk and TradeZella and rebuilds them for gamepad interaction:
 - **Playbook:** grades every fire against its own rules *before* you commit.
@@ -36,7 +36,7 @@ On top of the game sits a **trading journal** that takes the best of Edgewonk an
 
 ## Project Status
 
-**Current State:** Phases **1–4, 6, 7, 9, 10, 11, 12, and 13** are **built and fully covered by 709 tests** (527 Python pytest + 182 TypeScript vitest).
+**Current State:** Phases **1–4, 6, 7, 9, 10, 11, 12, and 13** are **built and fully covered by 756 tests** (542 Python pytest + 214 TypeScript vitest).
 
 - **Backend Gateway:** Single-process FastAPI + WebSocket gateway with frozen v1 envelope, SQLite migrations `001`–`010`, risk engine with atomic CID reservations, position limits, dead-man switch, and native `ctrader-open-api` integration with request timeout resilience and fire-and-forget execution.
 - **Web Arcade Frontend:** React 18 PWA (`evgamepad-arcade`) with 20+ responsive screens, collapsible navigation rail, lightweight-charts candlestick integration, interactive HUD, GameOverlay modal, and full offline service worker caching.
@@ -44,7 +44,7 @@ On top of the game sits a **trading journal** that takes the best of Edgewonk an
 - **Discipline & Journaling:** Complete implementation of pre-commit playbook grading, 5-axis Process Score radar (where standing down in a dead tape scores 100), measured behavioral tilt telemetry with open-friction gates, 1 Hz dual-book tape replay, printable browser PDF reports, streamed CSV/JSON exports, and encrypted SQLite snapshot backup/restore lifecycle.
 
 **Remaining Roadmap:**
-- **Phase 5 (Ubuntu Docker Deploy):** Finalizing production reverse-proxy configurations (Caddy/nginx) and VPS deployment packaging.
+- **Phase 5 (Ubuntu Docker Deploy):** Documented below — nginx + Docker Compose on an Ubuntu VPS, gateway at `gw.bobvolman.com`.
 - **Phase 8 (Voice Memo Local STT):** Local `whisper.cpp` container speech-to-text pipeline (deferred).
 - **Phase 14 (Release Gate):** End-to-end integration and smoke verification on physical 8BitDo hardware and live IC Markets demo accounts.
 
@@ -66,7 +66,8 @@ Detailed authority: [`plans/260824-1506-evening-forex-gold-gamepad/plan.md`](./p
   - [cTrader Credentials](#ctrader-credentials-one-time-manual-setup)
   - [Local Development](#local-development)
   - [Testing & Quality Assurance](#test-suite)
-  - [Docker Production Run](#docker-production-run)
+  - [Docker (local smoke)](#docker-local-smoke)
+  - [Production deploy (Ubuntu VPS)](#production-deploy-ubuntu-vps)
   - [Protocol & Type Synchronization](#protocol-types-are-generated-never-hand-written)
 - [Playbooks: Enforced vs Graded](#playbooks-enforced-vs-graded)
 - [The Performance Deck](#the-deck-and-what-it-refuses-to-show)
@@ -121,7 +122,7 @@ The **gateway is the sole component authorized to approve and route demo orders*
 
 ```
 Order Hot Path:
-  [8BitDo Controller] ──> [Focused Chrome PWA] ──(WSS)──> [Gateway Risk Gates] ──(Protobuf)──> [cTrader Demo API]
+  [8BitDo Controller] ──> [Focused Chrome PWA] ──(WSS to gw.bobvolman.com)──> [Gateway Risk Gates] ──(Protobuf)──> [cTrader Demo API]
 
 Broker Return Path:
   [cTrader Demo API] ──(Execution Events / Quotes)──> [Python Gateway] ──(WSS)──> [React HUD & Controller Rumble]
@@ -182,11 +183,11 @@ Enforced through **hard boot-fails in configuration**, not conventions. The gate
 |---|---|---|
 | **Execution** | cTrader Open API | In-process Protobuf via `ctrader-open-api`, `demo.ctraderapi.com:5035` |
 | **Broker** | IC Markets cTrader Demo | Standard symbols (`XAUUSD`, `EURUSD`, `GBPUSD`, `USDJPY`), max 0.10 lot gold |
-| **Host** | Ubuntu VPS (Docker Compose) | Single container service (`ev-gateway`), no cross-process hops |
+| **Host** | Ubuntu VPS (Docker Compose + nginx) | One container (`ev-gateway`) on loopback `:8444`; nginx terminates TLS at `gw.bobvolman.com` |
 | **Account Mode** | Demo Only | Hard boot-fail on live endpoints or production accounts |
 | **Session Window** | `Asia/Ho_Chi_Minh` | 18:00–23:30 evening trading session |
-| **Transport** | WebSocket (`/ws`) | Envelope: `{v, t, seq, ts, ch, cid, p}`, same origin as web HUD |
-| **Frontend Stack** | React 18 PWA | TypeScript, Vite, TanStack Router/Query, Lightweight Charts, dark arcade theme |
+| **Transport** | WebSocket (`/ws`) + REST (`/api/*`) | Envelope: `{v, t, seq, ts, ch, cid, p}`. HUD may be a separate origin; gateway CORS + Origin allowlist |
+| **Frontend Stack** | React 18 PWA | TypeScript, Vite, Lightweight Charts, dark arcade theme. Production build sets `VITE_GATEWAY_ORIGIN=https://gw.bobvolman.com` |
 | **Backend Stack** | Python 3.11+ | FastAPI, Uvicorn, Pydantic v2, Twisted/OpenApiPy, SQLite |
 | **Database** | SQLite + Migrations | Phase migrations `001`–`010` stored in `/data/journal.db` |
 
@@ -204,7 +205,7 @@ Enforced through **hard boot-fails in configuration**, not conventions. The gate
 | 2 | [cTrader exec and socket gateway](./plans/260824-1506-evening-forex-gold-gamepad/phase-02-ctrader-exec-and-socket-gateway.md) | cTrader client, risk gates, cid ledger, tape pipeline | **Built & Verified** |
 | 3 | [Web game and 8BitDo client agent](./plans/260824-1506-evening-forex-gold-gamepad/phase-03-web-game-and-8bitdo-client-agent.md) | Gamepad FSM agent, chord detection, PWA shell | **Built & Verified** |
 | 4 | [AI desk: sentinel, news, Volman](./plans/260824-1506-evening-forex-gold-gamepad/phase-04-ai-desk-sentinel-news-volman.md) | Opportunity quality, Volman detectors, advisory tools | **Built & Verified** |
-| 5 | [Ubuntu Docker deploy](./plans/260824-1506-evening-forex-gold-gamepad/phase-05-ubuntu-docker-deploy.md) | Single-service compose, Caddy/nginx TLS reverse-proxy | *Pending (VPS setup)* |
+| 5 | [Ubuntu Docker deploy](./plans/260824-1506-evening-forex-gold-gamepad/phase-05-ubuntu-docker-deploy.md) | Single-service compose, nginx TLS reverse-proxy to `gw.bobvolman.com` | **Documented** (see [Production deploy](#production-deploy-ubuntu-vps)) |
 | 6 | [Performance and psychology deck](./plans/260824-1506-evening-forex-gold-gamepad/phase-06-performance-and-psychology-deck.md) | Process deck, adherence, month-over-month trends | **Built & Verified** |
 | 7 | [Playbook and trade grading](./plans/260824-1506-evening-forex-gold-gamepad/phase-07-playbook-and-trade-grading.md) | Rule registry, setups, pre-commit rule grading | **Built & Verified** |
 | 8 | [Voice: capture, whisper.cpp, coach](./plans/260824-1506-evening-forex-gold-gamepad/phase-08-voice-capture-whisper-and-coach.md) | Audio upload, local whisper.cpp STT, coach TTS | *Deferred* |
@@ -257,7 +258,7 @@ evgamepad/
 │
 ├── config/
 │   └── default.yaml            # Single configuration source of truth
-├── deploy/                     # VPS deployment runbooks & model fetch scripts
+├── deploy/                     # nginx vhosts for gw.bobvolman.com, VPS runbook, model fetch
 ├── docs/                       # Architecture diagrams, specifications, BA artifacts
 └── plans/                      # Phase implementation specifications, journals, research
 ```
@@ -325,11 +326,11 @@ Open `http://localhost:5173` in Google Chrome, connect your 8BitDo controller, a
 The project enforces high test reliability across both backend and frontend layers:
 
 ```bash
-# Run backend tests (527 tests covering risk, broker, protocol, journal, replay, score)
+# Run backend tests (542 tests covering risk, broker, protocol, journal, replay, score)
 cd apps/gateway
 uv run python -m pytest
 
-# Run frontend tests (182 tests covering gamepad FSM, chords, WebSocket, HUD, replay)
+# Run frontend tests (214 tests covering gamepad FSM, chords, WebSocket, HUD, replay, gateway URL)
 cd ../../app
 npm test
 
@@ -339,19 +340,250 @@ npm run build
 
 ---
 
-### Docker Production Run
+### Docker (local smoke)
 
-The entire production stack operates as a **single container** with zero external dependencies:
+The production stack is still **one container**. This is a loopback smoke test, not the public hostname:
 
 ```bash
-# Build and run the single-service gateway
 docker compose build
 docker compose up -d
-
-# Verify container health
 docker compose ps
 curl -s http://127.0.0.1:8444/healthz
 ```
+
+Compose publishes `127.0.0.1:8444` only. Put nginx in front of that port for TLS — see the next section.
+
+---
+
+### Production deploy (Ubuntu VPS)
+
+This is the path for a new operator. The Python gateway listens on the VPS loopback. nginx on the host terminates HTTPS for **`gw.bobvolman.com`**. The React HUD is a separate static site whose production build points at that gateway.
+
+```text
+Chrome (HUD, e.g. https://bobvolman.com)
+        │  fetch /api/*  and  wss://gw.bobvolman.com/ws
+        ▼
+Internet ──TLS:443──► nginx (host) ──► 127.0.0.1:8444  ev-gateway (Docker)
+                                              │
+                                              ▼
+                                   demo.ctraderapi.com:5035
+```
+
+Two origins, one process that talks to the broker:
+
+| Piece | Public hostname | What it serves |
+|---|---|---|
+| **HUD** | your site (example: `bobvolman.com`) | Vite `app/dist` (nginx, Pages, or any static host) |
+| **Gateway** | `gw.bobvolman.com` | FastAPI `/healthz`, `/api/*`, `/ws`, `/hooks/tv` |
+
+The session token is still pasted into the HUD at connect time. It is never written into the frontend bundle.
+
+#### 0. What you need
+
+- An Ubuntu 22.04 or 24.04 VPS with a public IPv4 address and SSH.
+- DNS you can edit.
+- A domain whose **A record** for `gw.bobvolman.com` points at the VPS. The HUD hostname is separate; it only has to be a real `https://` origin you control.
+- A cTrader demo application and the values in `.env.example`.
+- Ports **22**, **80**, and **443** open. Port **8444** must not be reachable from the WAN.
+
+#### 1. DNS
+
+Create an A (and AAAA if you have IPv6) record:
+
+```text
+gw.bobvolman.com    A    YOUR_VPS_IPV4
+```
+
+Wait until `dig +short gw.bobvolman.com` returns the VPS address from your laptop.
+
+If the HUD is also on this VPS, add its hostname the same way (see step 8).
+
+#### 2. Ubuntu packages
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl git ufw nginx
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+. /etc/os-release
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $VERSION_CODENAME stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+sudo usermod -aG docker "$USER"
+# log out and back in so `docker` works without sudo
+```
+
+Firewall — SSH + HTTP/HTTPS only. Compose already binds 8444 to loopback; the firewall is the second belt:
+
+```bash
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow OpenSSH
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw --force enable
+sudo ufw status
+```
+
+#### 3. Clone and secrets
+
+```bash
+sudo mkdir -p /opt/evgamepad /var/www/certbot
+sudo chown "$USER":"$USER" /opt/evgamepad
+cd /opt/evgamepad
+git clone https://github.com/YOUR_ORG/YOUR_REPO.git .
+cp .env.example .env
+chmod 600 .env
+```
+
+Edit `.env`. Required:
+
+```dotenv
+CT_CLIENT_ID=...
+CT_CLIENT_SECRET=...
+CT_ACCESS_TOKEN=...
+CT_REFRESH_TOKEN=...
+CT_ACCOUNT_ID=...
+EV_WS_TOKEN=generate_a_long_random_string
+
+# Browser Origin of the HUD — the page Chrome loads, not the gateway host.
+EV_PUBLIC_ORIGIN=https://YOUR_HUD_ORIGIN
+# Optional extras (www, a staging HUD):
+# EV_CORS_ORIGINS=https://www.YOUR_HUD_ORIGIN
+```
+
+Generate the socket token with `openssl rand -hex 32`. Never commit `.env`.
+
+`EV_PUBLIC_ORIGIN` must match the HUD origin **exactly** (scheme + host, no trailing slash). If Chrome loads `https://bobvolman.com`, that is the value — not `https://gw.bobvolman.com`. A mismatch closes the WebSocket with code `4403`.
+
+#### 4. Docker Compose on the VPS
+
+From `/opt/evgamepad`:
+
+```bash
+docker compose build
+docker compose up -d
+docker compose ps
+curl -sS http://127.0.0.1:8444/healthz
+ss -lntp | grep 8444
+```
+
+`healthz` must return `"ok": true`. `ss` must show `127.0.0.1:8444`, not `0.0.0.0:8444` on the host.
+
+Useful commands:
+
+```bash
+docker compose logs -f --tail=200 ev-gateway
+docker compose restart ev-gateway
+# after pulling a new git revision:
+git pull
+docker compose build
+docker compose up -d
+```
+
+The journal, voice files, and models live in the named volume `ev-journal` (`/data` in the container). Back that volume up; do not delete it casually.
+
+Optional, once, for the later whisper.cpp path:
+
+```bash
+./deploy/fetch-models.sh
+```
+
+#### 5. nginx → `gw.bobvolman.com`
+
+The repo ships the vhost at [`deploy/nginx/gw.bobvolman.com.conf`](./deploy/nginx/gw.bobvolman.com.conf). It proxies everything — including WebSocket `/ws` — to `127.0.0.1:8444`.
+
+```bash
+sudo mkdir -p /var/www/certbot
+sudo cp /opt/evgamepad/deploy/nginx/gw.bobvolman.com.conf /etc/nginx/sites-available/gw.bobvolman.com
+sudo ln -sf /etc/nginx/sites-available/gw.bobvolman.com /etc/nginx/sites-enabled/gw.bobvolman.com
+# disable the default site if it is still grabbing :80
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Issue the certificate (installs and rewrites the vhost for 443):
+
+```bash
+sudo apt-get install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d gw.bobvolman.com --agree-tos -m YOU@YOUR_DOMAIN --redirect
+```
+
+After certbot, open `/etc/nginx/sites-available/gw.bobvolman.com` and confirm the **443** `location /` block still has:
+
+- `proxy_http_version 1.1;`
+- `proxy_set_header Upgrade $http_upgrade;`
+- `proxy_set_header Connection $connection_upgrade;` (or `"upgrade"`)
+- `proxy_read_timeout 86400s;`
+- `proxy_set_header Origin $http_origin;`
+
+`sudo nginx -t && sudo systemctl reload nginx`.
+
+Check from your laptop:
+
+```bash
+curl -sS https://gw.bobvolman.com/healthz
+```
+
+You want JSON with `"ok": true` and a valid certificate, not a browser warning.
+
+#### 6. Frontend production build
+
+The HUD is **not** the gateway hostname. Production builds bake the gateway URL:
+
+```bash
+cd app
+cp .env.example .env.local   # optional; production defaults live in .env.production
+npm ci
+npm run build
+```
+
+`app/.env.production` is:
+
+```dotenv
+VITE_GATEWAY_ORIGIN=https://gw.bobvolman.com
+```
+
+That is a hostname, not a secret. The session token is still pasted in the HUD and kept in memory.
+
+`dist/` is static files. Publish them however you already host the site:
+
+- **Same VPS, second nginx vhost** — copy [`deploy/nginx/hud.example.conf`](./deploy/nginx/hud.example.conf), set `server_name` to the HUD host, `sudo certbot --nginx -d YOUR_HUD_ORIGIN`, then:
+
+  ```bash
+  sudo mkdir -p /var/www/evgamepad-arcade
+  sudo rsync -a --delete /opt/evgamepad/app/dist/ /var/www/evgamepad-arcade/
+  ```
+
+- **Cloudflare Pages / any static host** — upload `app/dist`. Set the HUD URL as `EV_PUBLIC_ORIGIN` on the VPS and recreate the container (`docker compose up -d`) so CORS and the WebSocket allowlist match.
+
+Local development is unchanged: `npm run dev` leaves `VITE_GATEWAY_ORIGIN` empty and Vite proxies `/api` and `/ws` to `127.0.0.1:8444`.
+
+#### 7. First-evening checklist
+
+1. Chrome, desktop, tab focused. Open the HUD origin (not necessarily `gw.bobvolman.com`).
+2. Paste `EV_WS_TOKEN`. Connect. The socket URL should be `wss://gw.bobvolman.com/ws`.
+3. DevTools → Network: `/api/arcade/hud` is `200` from `gw.bobvolman.com`, CORS origin is your HUD, no mixed-content errors.
+4. Pair the 8BitDo (XInput, 2.4G dongle). Press a button. The HUD should leave `pad: absent`.
+5. `docker compose logs ev-gateway` should show the broker link coming up against **demo** (`demo.ctraderapi.com:5035`), never live.
+
+If the socket closes immediately: `EV_PUBLIC_ORIGIN` does not match the HUD origin (including `https` vs `http`, or a missing `www`). If REST works and WS does not: nginx is not forwarding `Upgrade` / `Connection`. If the HUD still calls `localhost` or its own origin for `/api`: you served a build without `VITE_GATEWAY_ORIGIN` — rebuild step 6.
+
+#### 8. Operations
+
+| Task | Command / note |
+|---|---|
+| Status | `docker compose ps` and `curl -sS https://gw.bobvolman.com/healthz` |
+| Logs | `docker compose logs -f --tail=200 ev-gateway` |
+| Restart after reboot | `restart: unless-stopped` brings the container back; nginx is a systemd service |
+| Renew TLS | `certbot.timer` renews; `sudo certbot renew --dry-run` once to verify |
+| Rotate the HUD token | new `EV_WS_TOKEN` in `.env`, then `docker compose up -d` |
+| Data | Docker volume `ev-journal` — include it in VPS backups |
+
+Do not put a CDN in front of `/ws`. Do not publish `8444` on `0.0.0.0`. Live cTrader hosts still fail boot.
 
 ---
 
