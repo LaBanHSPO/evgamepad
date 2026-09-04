@@ -14,6 +14,7 @@ import type { SocketStatus } from "../net/ws";
 import { PadPoller } from "../pad/poll";
 import type { Envelope } from "../protocol/types";
 import { fetchHud, fetchSkins, pickSkin } from "./fetch";
+import { apiUrl, wsUrl } from "../net/gateway";
 import {
   DASH,
   eventClock,
@@ -136,7 +137,7 @@ export function useArcadeRuntime(skinId: "matrix" | "city"): ArcadeRuntime {
     clientRef.current?.disconnect();
 
     const symbols = hud?.symbols.map((row) => row.name) ?? DEFAULT_SYMBOLS;
-    const client = new GameClient(`${location.origin.replace(/^http/, "ws")}/ws`, token, {
+    const client = new GameClient(wsUrl(), token, {
       onMessage,
       onStatus: (next) => {
         setStatus(next);
@@ -154,7 +155,7 @@ export function useArcadeRuntime(skinId: "matrix" | "city"): ArcadeRuntime {
       onView: setView,
       onStandDown: (conditions) => {
         note(`stood down (${conditions.join(", ")})`);
-        void fetch("/api/journal/stand-down", {
+        void fetch(apiUrl("/api/journal/stand-down"), {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ conditions }),

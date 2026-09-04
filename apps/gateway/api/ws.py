@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -540,8 +540,14 @@ class GameSocket:
         await self.emit("maint", "session", {"active": True, "until": until, "note": note})
 
 
-def origin_allowed(origin: str | None, public_origin: str) -> bool:
-    """One origin: the HUD and the socket are served from the same place."""
+def origin_allowed(origin: str | None, allowed: str | Sequence[str]) -> bool:
+    """The HUD origin that opened the socket must be on the allowlist.
+
+    Same-origin deploys pass one value (`gateway.public_origin`). Split deploys
+    pass that origin plus any extra HUD hosts in `gateway.cors_origins`.
+    """
     if origin is None:
         return False
-    return origin.rstrip("/") == public_origin.rstrip("/")
+    got = origin.rstrip("/")
+    origins = (allowed,) if isinstance(allowed, str) else tuple(allowed)
+    return any(got == item.rstrip("/") for item in origins if item)

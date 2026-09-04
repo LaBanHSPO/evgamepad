@@ -26,6 +26,7 @@ asyncio.set_event_loop(_LOOP)
 _REACTOR = reactor_setup.install(_LOOP)
 
 from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel, ConfigDict, Field  # noqa: E402
@@ -37,7 +38,7 @@ from arcade.hud import snapshot as arcade_hud_snapshot  # noqa: E402
 from broker import Broker, StubBroker  # noqa: E402
 from broker.ctrader import CTraderBroker  # noqa: E402
 from broker.events import normalise_execution  # noqa: E402
-from config import AppConfig, ConfigError, load_config  # noqa: E402
+from config import AppConfig, ConfigError, hud_origins, load_config  # noqa: E402
 from copilot.client import SpaceXaiClient  # noqa: E402
 from copilot.loops import DeskLoops  # noqa: E402
 from copilot.tools import build_registry  # noqa: E402
@@ -537,6 +538,18 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
     app.state.reports = reports
     app.state.tv_guard = WebhookGuard(secret=os.environ.get(config.tradingview.webhook_secret_env, ""))
     app.state.last_tv_signal = None
+    allowed = hud_origins(config)
+    app.state.allowed_origins = allowed
+    # Split HUD (e.g. bobvolman.com) → gateway (gw.bobvolman.com). Same-origin still works:
+    # the HUD origin is simply `public_origin`. Browsers enforce CORS; curl is unchanged.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+        expose_headers=["Content-Disposition"],
+    )
 
     @app.get("/healthz")
     def healthz() -> dict[str, object]:
@@ -1122,9 +1135,9 @@ def create_app(cfg: AppConfig | None = None, *, loop: asyncio.AbstractEventLoop 
 
     @app.websocket(config.gateway.ws_path)
     async def game_socket(websocket: WebSocket) -> None:
-        """One socket per token, same origin as the HUD."""
+        """One socket per token. Origin must be a configured HUD origin."""
         origin = websocket.headers.get("origin")
-        if not origin_allowed(origin, config.gateway.public_origin):
+        if not origin_allowed(origin, allowed):
             await websocket.close(code=4403)
             return
         expected = os.environ.get(config.gateway.token_env)

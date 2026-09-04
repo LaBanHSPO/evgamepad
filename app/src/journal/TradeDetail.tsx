@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { ActualVsPlanPanel, ExecutionScores } from "./TradeQuality";
 import type { MistakeDefinition, TradeDetailView } from "./types";
 import { r, show } from "./types";
+import { apiUrl } from "../net/gateway";
 
 /**
  * `/journal/trade/:cid` — everything known about one trade.
@@ -24,7 +25,7 @@ export function TradeDetail({ cid, onReplay }: {
   const [note, setNote] = useState("");
 
   const load = useCallback(() => {
-    void fetch(`/api/journal/trade/${encodeURIComponent(cid)}`)
+    void fetch(apiUrl(`/api/journal/trade/${encodeURIComponent(cid)}`))
       .then((response) => (response.ok ? response.json() : null))
       .then((body: TradeDetailView | null) => {
         setView(body);
@@ -35,14 +36,14 @@ export function TradeDetail({ cid, onReplay }: {
 
   useEffect(load, [load]);
   useEffect(() => {
-    void fetch("/api/journal/mistakes")
+    void fetch(apiUrl("/api/journal/mistakes"))
       .then((response) => response.json())
       .then((body) => setDefinitions(body.mistakes as MistakeDefinition[]))
       .catch(() => undefined);
   }, []);
 
   const review = useCallback(async (body: Record<string, unknown>) => {
-    const response = await fetch(`/api/journal/trade/${encodeURIComponent(cid)}`, {
+    const response = await fetch(apiUrl(`/api/journal/trade/${encodeURIComponent(cid)}`), {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
@@ -51,7 +52,7 @@ export function TradeDetail({ cid, onReplay }: {
   }, [cid]);
 
   const toggleMistake = useCallback(async (code: string, on: boolean) => {
-    const url = `/api/journal/trade/${encodeURIComponent(cid)}/mistakes`;
+    const url = apiUrl(`/api/journal/trade/${encodeURIComponent(cid)}/mistakes`);
     await (on
       ? fetch(url, { method: "POST", headers: { "content-type": "application/json" },
                      body: JSON.stringify({ code }) })
@@ -171,7 +172,7 @@ export function TradeDetail({ cid, onReplay }: {
         <Panel title="Charts">
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {view.attachments.map((attachment) => (
-              <img key={attachment.id} src={`/api/journal/attachments/${attachment.id}`}
+              <img key={attachment.id} src={apiUrl(`/api/journal/attachments/${attachment.id}`)}
                    alt={attachment.label ?? "chart"} style={thumb} />
             ))}
           </div>

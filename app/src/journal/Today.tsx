@@ -4,6 +4,7 @@ import { PositionSizeCalculator } from "./PositionSizeCalculator";
 import { ReadinessChecklist, answered } from "./ReadinessChecklist";
 import { WorldSessions } from "./WorldSessions";
 import type { ReadinessItem, TodayView } from "./types";
+import { apiUrl } from "../net/gateway";
 
 /**
  * `/journal/today` — the page you open before a session and land on after one.
@@ -24,7 +25,7 @@ export function Today({ onApplyLots }: { onApplyLots?: (lots: number) => void })
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(() => {
-    void fetch("/api/journal/today")
+    void fetch(apiUrl("/api/journal/today"))
       .then((response) => response.json())
       .then((body: TodayView) => {
         setView(body);
@@ -45,7 +46,7 @@ export function Today({ onApplyLots }: { onApplyLots?: (lots: number) => void })
   useEffect(load, [load]);
 
   const put = useCallback(async (body: Record<string, unknown>) => {
-    const response = await fetch("/api/journal/today", {
+    const response = await fetch(apiUrl("/api/journal/today"), {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
@@ -81,7 +82,7 @@ export function Today({ onApplyLots }: { onApplyLots?: (lots: number) => void })
   const attach = useCallback(async (file: File) => {
     setStatus(null);
     const response = await fetch(
-      `/api/journal/attachments?label=${encodeURIComponent(file.name)}`,
+      apiUrl(`/api/journal/attachments?label=${encodeURIComponent(file.name)}`),
       { method: "POST", headers: { "content-type": file.type }, body: file },
     );
     if (!response.ok) {
@@ -155,7 +156,7 @@ export function Today({ onApplyLots }: { onApplyLots?: (lots: number) => void })
                }} />
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
           {view.attachments.map((attachment) => (
-            <img key={attachment.id} src={`/api/journal/attachments/${attachment.id}`}
+            <img key={attachment.id} src={apiUrl(`/api/journal/attachments/${attachment.id}`)}
                  alt={attachment.label ?? "chart"} style={thumb} />
           ))}
         </div>

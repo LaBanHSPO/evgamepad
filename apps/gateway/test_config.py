@@ -132,6 +132,36 @@ def test_default_stop_must_cover_every_symbol(tmp_path: Path) -> None:
         load_config(path, env=dict(VALID_ENV))
 
 
+def test_public_origin_is_overridable_without_editing_yaml(tmp_path: Path) -> None:
+    path = write_config(tmp_path)
+    cfg = load_config(path, env={**VALID_ENV, "EV_PUBLIC_ORIGIN": "https://bobvolman.com"})
+    assert cfg.gateway.public_origin == "https://bobvolman.com"
+    assert "https://bobvolman.com" in cfg.gateway.allowed_origins
+
+
+def test_cors_origins_env_adds_extra_hud_hosts(tmp_path: Path) -> None:
+    path = write_config(tmp_path)
+    cfg = load_config(
+        path,
+        env={**VALID_ENV, "EV_CORS_ORIGINS": "https://bobvolman.com, https://www.bobvolman.com"},
+    )
+    assert "https://bobvolman.com" in cfg.gateway.allowed_origins
+    assert "https://www.bobvolman.com" in cfg.gateway.allowed_origins
+    assert cfg.gateway.public_origin in cfg.gateway.allowed_origins
+
+
+def test_hud_origins_adds_the_vite_dev_server_only_in_dev(tmp_path: Path) -> None:
+    from config import hud_origins
+
+    path = write_config(tmp_path)
+    cfg = load_config(path, env=dict(VALID_ENV))
+    production = hud_origins(cfg, env=dict(VALID_ENV))
+    assert "http://localhost:5173" not in production
+    development = hud_origins(cfg, env={**VALID_ENV, "EV_DEV": "1"})
+    assert "http://localhost:5173" in development
+    assert "http://127.0.0.1:5173" in development
+
+
 def test_missing_config_file_is_a_boot_fail(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match="config not found"):
         load_config(tmp_path / "nope.yaml", env=dict(VALID_ENV))

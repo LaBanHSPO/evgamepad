@@ -7,6 +7,7 @@ import type { PlaybookRow } from "./PlaybookStats";
 import type { ScoreView } from "./ScoreRadar";
 import type { TiltRetroView } from "./TiltRetro";
 import type { OutcomeView, ProcessView } from "./types";
+import { apiUrl } from "../net/gateway";
 
 /**
  * The deck.
@@ -35,7 +36,7 @@ export function Deck(): JSX.Element {
 
   const load = useCallback(async (path: string, apply: (data: never) => void) => {
     try {
-      const response = await fetch(path);
+      const response = await fetch(apiUrl(path));
       if (!response.ok) throw new Error(`${response.status}`);
       apply((await response.json()) as never);
       setError(null);
@@ -51,11 +52,11 @@ export function Deck(): JSX.Element {
   // The process-side panels. Playbook figures here are n and adherence only; the expectancy and
   // excursion columns arrive with the outcome tab, on the same deliberate click as the money.
   useEffect(() => {
-    void fetch("/api/deck/playbooks")
+    void fetch(apiUrl("/api/deck/playbooks"))
       .then((r) => r.json())
       .then((body) => setPlaybooks(body.playbooks as PlaybookRow[]))
       .catch(() => undefined);
-    void fetch("/api/score/month")
+    void fetch(apiUrl("/api/score/month"))
       .then((r) => r.json())
       .then((body) => setDistribution(body.months as MonthScores[]))
       .catch(() => undefined);
@@ -66,11 +67,11 @@ export function Deck(): JSX.Element {
   useEffect(() => {
     const sessionId = process?.latestSession?.sessionId;
     if (!sessionId) return;
-    void fetch(`/api/score/session/${encodeURIComponent(sessionId)}`)
+    void fetch(apiUrl(`/api/score/session/${encodeURIComponent(sessionId)}`))
       .then((r) => r.json())
       .then((body) => setScore(body as ScoreView))
       .catch(() => undefined);
-    void fetch(`/api/deck/tilt/${encodeURIComponent(sessionId)}`)
+    void fetch(apiUrl(`/api/deck/tilt/${encodeURIComponent(sessionId)}`))
       .then((r) => r.json())
       .then((body) => setTilt(body as TiltRetroView))
       .catch(() => undefined);
@@ -82,7 +83,7 @@ export function Deck(): JSX.Element {
     if (outcome === null) {
       void load("/api/deck/outcome", setOutcome as (data: never) => void);
       // Only now are the playbook table's outcome columns fetched.
-      void fetch("/api/deck/playbooks/outcome")
+      void fetch(apiUrl("/api/deck/playbooks/outcome"))
         .then((r) => r.json())
         .then((body) => setPlaybooksOutcome(body.playbooks as PlaybookRow[]))
         .catch(() => undefined);

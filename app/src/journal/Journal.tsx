@@ -8,6 +8,7 @@ import { TradeDetail } from "./TradeDetail";
 import { GroupChart } from "./TradeQuality";
 import type { DayRow, MistakeDefinition, Overview, TradeRow } from "./types";
 import { r, show } from "./types";
+import { apiUrl } from "../net/gateway";
 
 /**
  * The journal shell: today, the dashboard, history, and one trade.
@@ -42,11 +43,11 @@ export function Journal({ onReplay, onApplyLots }: {
 
   const load = useCallback(() => {
     const query = fromMs === null ? "" : `?from_ms=${Math.round(fromMs)}`;
-    void fetch(`/api/journal/overview${query}`)
+    void fetch(apiUrl(`/api/journal/overview${query}`))
       .then((response) => response.json())
       .then((body: Overview) => setOverview(body))
       .catch(() => undefined);
-    void fetch(`/api/journal/days${query}`)
+    void fetch(apiUrl(`/api/journal/days${query}`))
       .then((response) => response.json())
       .then((body) => setDays(body.days as DayRow[]))
       .catch(() => undefined);
@@ -54,14 +55,14 @@ export function Journal({ onReplay, onApplyLots }: {
 
   useEffect(load, [load]);
   useEffect(() => {
-    void fetch("/api/journal/mistakes")
+    void fetch(apiUrl("/api/journal/mistakes"))
       .then((response) => response.json())
       .then((body) => setDefinitions(body.mistakes as MistakeDefinition[]))
       .catch(() => undefined);
   }, []);
 
   const openDay = useCallback((sessionId: string) => {
-    void fetch(`/api/journal/day/${encodeURIComponent(sessionId)}`)
+    void fetch(apiUrl(`/api/journal/day/${encodeURIComponent(sessionId)}`))
       .then((response) => response.json())
       .then((body) => setDay(body as Record<string, unknown>))
       .catch(() => undefined);
@@ -73,8 +74,8 @@ export function Journal({ onReplay, onApplyLots }: {
   }, []);
 
   const setFocus = useCallback(async (code: string | null) => {
-    const current = await fetch("/api/journal/system").then((response) => response.json());
-    await fetch("/api/journal/system", {
+    const current = await fetch(apiUrl("/api/journal/system")).then((response) => response.json());
+    await fetch(apiUrl("/api/journal/system"), {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ ...current, focusCode: code }),

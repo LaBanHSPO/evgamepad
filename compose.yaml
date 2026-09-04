@@ -17,6 +17,10 @@ services:
       # from the WAN is the loopback publish below plus the host firewall (443 + SSH only).
       EV_LISTEN: 0.0.0.0:8444
       EV_CONTAINER_BIND: "1"
+      # HUD Origin allowlist (CORS + /ws). Set in `.env` so you do not edit default.yaml
+      # on the VPS. EV_PUBLIC_ORIGIN is the React page origin, not gw.bobvolman.com.
+      EV_PUBLIC_ORIGIN: ${EV_PUBLIC_ORIGIN:-}
+      EV_CORS_ORIGINS: ${EV_CORS_ORIGINS:-}
     ports:
       - "127.0.0.1:8444:8444"
     volumes:
