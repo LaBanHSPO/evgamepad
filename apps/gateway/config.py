@@ -404,7 +404,7 @@ def _check_secrets(cfg: AppConfig, env: dict[str, str]) -> None:
     if missing:
         raise ConfigError(
             f"missing required env: {', '.join(missing)} — "
-            "see README 'cTrader credentials (one-time, manual)'"
+            "see README 'cTrader Open API registration'"
         )
     if cfg.tradingview.enabled and not env.get(cfg.tradingview.webhook_secret_env):
         raise ConfigError(f"tradingview.enabled but {cfg.tradingview.webhook_secret_env} is unset")
