@@ -34,8 +34,8 @@ import { GameOverlay } from "./overlay/GameOverlay";
 
 /**
  * Playable cabinet. START walks the evening; Menu lists every screen; the rail still warps
- * for design review. Prototype artboards keep fixed data. Live HUD / journal / replay / deck
- * talk to the gateway when it is up.
+ * for design review. Matrix / city artboards poll `/api/arcade`. Live HUD / journal / replay /
+ * deck talk to the gateway when it is up.
  */
 
 const GROUPS: {
@@ -100,7 +100,7 @@ const GROUPS: {
 // the others need a way to hand a cid onward, and none of them fits a zero-argument component.
 const SCREENS: Record<Exclude<ScreenId, "session" | "replaylive" | "journallive">,
                       () => JSX.Element> = {
-  // The three surfaces wired to the real gateway; the rest are the design prototype.
+  // Live HUD / deck / journal keep the socket. Matrix and city poll `/api/arcade`.
   live: LiveHudScreen,
   deck: Deck,
   systemlive: SystemPrinciples,
