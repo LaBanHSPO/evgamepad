@@ -95,7 +95,7 @@ Open **Menu** from attract (or anywhere). Groups:
 
 **Cabinet** — Attract, Boot, Pre-session
 
-**Art / Gallery** — matrix and city skins, plus the fixed-data prototype of journal / replay / report / settings
+**Art / Gallery** — matrix and city skins poll `/api/arcade` (quotes stay blank until the broker book has them); other gallery artboards still use fixed prototype data
 
 The left rail still warps to any artboard, including the six session HUD states (safe, armed, unknown, stale, close-only, locked). That is design review, not the evening path.
 

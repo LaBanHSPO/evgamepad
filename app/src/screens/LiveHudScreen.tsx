@@ -15,17 +15,11 @@ import type { SocketStatus } from "../net/ws";
 import type { Envelope } from "../protocol/types";
 
 /**
- * The live HUD — the one screen wired to the real gateway.
+ * The live HUD — socket, pad, and FSM on a plain board.
  *
- * The other screens in this app are the design prototype with fixed data. This one holds a real
- * socket, a real pad, and the real FSM, so two rules from the plan apply here and nowhere else:
- *
- * - **Prices are written imperatively.** React owns layout; it does not re-render on quotes. The
- *   price nodes are refs written at the conflated rate, so a 20 Hz tape costs no reconciliation.
- * - **P/L reads in R by default.** Watching the money mid-trade is what pulls attention off the
- *   process, so dollars are one deliberate toggle away.
- *
- * The token is pasted once and lives in component state for the session — never storage.
+ * Matrix and city artboards poll `/api/arcade` for the same figures without a token. This screen
+ * still holds the socket: prices are written imperatively, P/L reads in R by default, and the
+ * token is pasted once into component state — never storage.
  */
 
 const SYMBOLS = ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY"];

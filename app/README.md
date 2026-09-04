@@ -1,8 +1,8 @@
 # EVGamePad
 
 React implementation of the Claude Design handoff in `../project`. Built from
-`Prototype.dc.html` and `HudA.dc.html`; the prototype's own rule holds here —
-**screens are real, data is fixed**.
+`Prototype.dc.html` and `HudA.dc.html`. Most prototype screens still use fixed
+data; **HUD on matrix art** and **Fire on city art** poll `/api/arcade`.
 
 ```bash
 npm install
@@ -27,6 +27,8 @@ design chat settled on.
 
 Each screen is a fixed artboard at the prototype's own size: 1440×810 for the
 artwork screens, 1440×860 for the app screens, 1280×860 for Process score.
+Matrix and city fill from the gateway when it is up; a missing quote is an em
+dash, never a made-up gold print.
 
 Nothing from the prototype is left out. The one gap is the prototype's own:
 mistake-type filtering and the report's mistake-types section are drawn as

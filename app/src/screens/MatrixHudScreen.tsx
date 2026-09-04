@@ -1,12 +1,21 @@
 import type { ReactNode } from "react";
+import { ConnectStrip } from "../arcade/ConnectStrip";
+import {
+  DASH,
+  dash,
+  formatPrice,
+  padScore,
+  progressToTarget,
+  shortSymbol,
+} from "../arcade/format";
+import { useArcadeRuntime } from "../arcade/useArcadeRuntime";
 import { CodeRain } from "../components/CodeRain";
 import { Artboard, Caps, DemoNotice, PadHint, Term } from "../components/primitives";
-import { Button, Icon, MeterBar, PnLValue, Switch, type IconName } from "../ds";
+import { Icon, MeterBar, PnLValue, Switch, type IconName } from "../ds";
 import { MATRIX_ART } from "./art";
 
-/** HUD on matrix art — the prototype's `is_artmatrix` artboard. */
+/** HUD on matrix art — live `/api/arcade` figures on the prototype artboard. */
 
-/** A section head in a HUD rail: lucide glyph + tracked caps, both phosphor. */
 function SectionLabel({
   icon,
   children,
@@ -33,6 +42,22 @@ function SectionLabel({
 }
 
 export function MatrixHudScreen() {
+  const rt = useArcadeRuntime("matrix");
+  const selected = rt.selected;
+  const positions = rt.hud?.positions ?? [];
+  const first = positions[0];
+  const rUsd = rt.hud?.risk.rUsd ?? 20;
+  const dayPnl = rt.hud?.pnl.dayPnl;
+  const dayR = dayPnl == null ? null : dayPnl / rUsd;
+  const sizeUsed = positions.reduce((sum, row) => sum + (row.lots ?? 0), 0);
+  const sizeMax = selected?.maxLots ?? 1;
+  const lossMax = rt.hud?.risk.maxDayLossUsd ?? 0;
+  const lossUsed = dayPnl == null || dayPnl >= 0 ? 0 : Math.min(lossMax, -dayPnl);
+  const others = (rt.hud?.symbols ?? []).filter((row) => row.name !== selected?.name);
+  const readyLabel = rt.view?.phase ?? (rt.online ? "SAFE" : "OFFLINE");
+  const setup = rt.hud?.sentinel?.setup ?? "waiting on tape";
+  const incoming = rt.hud?.sentinel?.nextEvent;
+
   return (
     <Artboard
       label="HUD on matrix art"
@@ -41,13 +66,12 @@ export function MatrixHudScreen() {
         height: 810,
         display: "grid",
         gridTemplateRows: "56px 1fr 64px",
-        background: `#040604 url('${MATRIX_ART}') center/cover no-repeat`,
+        background: `#040604 url('${rt.artUrl || MATRIX_ART}') center/cover no-repeat`,
         border: "1px solid var(--line-strong)",
         boxShadow: "var(--glow-md)",
         position: "relative",
       }}
     >
-      {/* ── arcade score header ───────────────────────────────── */}
       <header
         style={{
           display: "flex",
@@ -70,21 +94,21 @@ export function MatrixHudScreen() {
               textShadow: "var(--glow-text)",
             }}
           >
-            07
+            {padScore(rt.standDowns)}
           </span>
         </div>
         <div style={{ display: "grid", gap: 3 }}>
           <Caps color="var(--text-muted)">HI</Caps>
-          <span
-            style={{ fontFamily: "var(--font-display)", fontSize: 16, color: "var(--grey-300)" }}
-          >
-            12
+          <span style={{ fontFamily: "var(--font-display)", fontSize: 16, color: "var(--grey-300)" }}>
+            {padScore(rt.hiScore)}
           </span>
         </div>
         <div style={{ display: "grid", gap: 5 }}>
-          <Caps color="var(--text-muted)">Arms left · positions 2 of 2</Caps>
+          <Caps color="var(--text-muted)">
+            Arms left · positions {rt.positionsOpen} of {rt.maxPositions}
+          </Caps>
           <div style={{ display: "flex", gap: 5 }}>
-            {[true, true, true, false, false].map((lit, i) => (
+            {rt.slots.map((lit, i) => (
               <i
                 key={i}
                 style={{
@@ -108,27 +132,14 @@ export function MatrixHudScreen() {
               color: "var(--arcade-yellow)",
             }}
           >
-            1:12:04
+            {rt.clock}
           </span>
         </div>
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 18 }}>
-          <span
-            style={{
-              fontFamily: "var(--font-display)",
-              fontSize: 12,
-              color: "var(--arcade-red)",
-              animation: "ev-blink 1s steps(1,end) infinite",
-            }}
-          >
-            PRESS START
-          </span>
-          <Button variant="danger" size="sm">
-            Flatten all
-          </Button>
+        <div style={{ marginLeft: "auto" }}>
+          <ConnectStrip runtime={rt} />
         </div>
       </header>
 
-      {/* ── body: limits rail · tape · positions rail ─────────── */}
       <div
         style={{
           display: "grid",
@@ -161,9 +172,27 @@ export function MatrixHudScreen() {
             }}
           >
             <SectionLabel icon="shield">Player limits · gateway enforced</SectionLabel>
-            <MeterBar label="Loss meter" value={11} max={30} segments={10} tone="warn" showValue />
-            <MeterBar label="Size used" value={20} max={50} segments={10} />
-            <MeterBar label="Window burned" value={62} max={100} segments={10} tone="info" />
+            <MeterBar
+              label={dayPnl == null ? "Loss meter · waiting on broker" : "Loss meter"}
+              value={lossUsed}
+              max={lossMax || 1}
+              segments={10}
+              tone="warn"
+              showValue={dayPnl != null}
+            />
+            <MeterBar
+              label="Size used"
+              value={sizeUsed}
+              max={sizeMax || 1}
+              segments={10}
+            />
+            <MeterBar
+              label="Window burned"
+              value={rt.hud?.session.windowBurnedPct ?? 0}
+              max={100}
+              segments={10}
+              tone="info"
+            />
           </div>
 
           <div
@@ -194,34 +223,37 @@ export function MatrixHudScreen() {
                   color: "var(--phos-400)",
                 }}
               >
-                XAUUSD
+                {selected?.name ?? "XAUUSD"}
               </span>
-              <span
-                style={{ fontFamily: "var(--font-data)", fontSize: 12, color: "var(--phos-200)" }}
-              >
-                0.20
+              <span style={{ fontFamily: "var(--font-data)", fontSize: 12, color: "var(--phos-200)" }}>
+                {rt.view ? rt.view.lots.toFixed(2) : rt.lotsText}
               </span>
             </div>
-            {[
-              { pair: "EURUSD", size: "0.10 open", color: "var(--text-muted)" },
-              { pair: "GBPUSD", size: "—", color: "var(--text-disabled)" },
-              { pair: "USDJPY", size: "—", color: "var(--text-disabled)" },
-            ].map((row) => (
-              <div
-                key={row.pair}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontFamily: "var(--font-data)",
-                  fontSize: 11,
-                  color: row.color,
-                  padding: "0 2px",
-                }}
-              >
-                <span>{row.pair}</span>
-                <span>{row.size}</span>
-              </div>
-            ))}
+            {others.map((row) => {
+              const open = positions.filter((pos) => pos.symbol === row.name);
+              const size =
+                open.length === 0
+                  ? DASH
+                  : open.some((pos) => pos.lots != null)
+                    ? `${open.reduce((sum, pos) => sum + (pos.lots ?? 0), 0).toFixed(2)} open`
+                    : "open";
+              return (
+                <div
+                  key={row.name}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontFamily: "var(--font-data)",
+                    fontSize: 11,
+                    color: open.length ? "var(--text-muted)" : "var(--text-disabled)",
+                    padding: "0 2px",
+                  }}
+                >
+                  <span>{row.name}</span>
+                  <span>{size}</span>
+                </div>
+              );
+            })}
           </div>
 
           <div
@@ -235,14 +267,30 @@ export function MatrixHudScreen() {
             }}
           >
             <SectionLabel icon="terminal">Session log</SectionLabel>
-            <Term color="var(--phos-400)">21:04 stand down +1 · score 07</Term>
-            <Term color="var(--phos-500)">20:57 fill buy 0.20 @ 2458.10</Term>
-            <Term color="var(--status-agent)">20:56 risk-warden: inside rule 4.</Term>
-            <Term color="var(--grey-500)">20:41 limits locked · -3.00R cap</Term>
+            {rt.log.length === 0 ? (
+              <>
+                <Term color="var(--phos-400)">
+                  {rt.online ? "arcade hud live · quotes from the book" : "gateway unreachable · art fallback"}
+                </Term>
+                <Term color="var(--phos-500)">
+                  broker {rt.hud?.broker.connected ? "up" : dash(rt.hud?.broker.reason ?? "waiting")}
+                </Term>
+                <Term color="var(--status-agent)">
+                  {rt.hud?.sentinel
+                    ? `sentinel ${rt.hud.sentinel.qualityBand ?? rt.hud.sentinel.state}`
+                    : "sentinel waiting on a quote"}
+                </Term>
+              </>
+            ) : (
+              rt.log.slice(0, 4).map((line) => (
+                <Term key={line} color="var(--phos-400)">
+                  {line}
+                </Term>
+              ))
+            )}
           </div>
         </aside>
 
-        {/* price header + chart placeholder */}
         <section
           style={{
             position: "relative",
@@ -273,11 +321,11 @@ export function MatrixHudScreen() {
                 fontVariantNumeric: "tabular-nums",
               }}
             >
-              2461.38
+              {formatPrice(rt.price)}
             </span>
             <div style={{ display: "grid", gap: 5, paddingBottom: 6 }}>
               <Caps size={10} color="var(--phos-500)">
-                XAUUSD · M5
+                {selected?.name ?? "XAUUSD"} · {rt.view?.timeframe ?? "M5"}
               </Caps>
               <span
                 style={{
@@ -286,14 +334,21 @@ export function MatrixHudScreen() {
                   color: "var(--text-secondary)",
                 }}
               >
-                2458.10 → 2461.38 · spread 0.24
+                {formatPrice(first?.entry ?? selected?.bid)} → {formatPrice(rt.price)} · spread{" "}
+                {formatPrice(rt.spread, 2)}
               </span>
             </div>
             <div style={{ marginLeft: "auto", display: "grid", gap: 5, justifyItems: "end" }}>
               <Caps size={10} color="var(--phos-500)">
                 Session
               </Caps>
-              <PnLValue value={1.6} size="lg" />
+              {dayR == null ? (
+                <span style={{ fontFamily: "var(--font-data)", fontSize: 18, color: "var(--text-muted)" }}>
+                  {DASH}
+                </span>
+              ) : (
+                <PnLValue value={rt.showDollars ? dayPnl ?? 0 : dayR} unit={rt.showDollars ? "USD" : "R"} size="lg" />
+              )}
             </div>
           </div>
 
@@ -305,74 +360,80 @@ export function MatrixHudScreen() {
               overflow: "hidden",
             }}
           >
-            {/* target / entry / stop lines */}
-            <div
-              style={{
-                position: "absolute",
-                left: 0,
-                right: 0,
-                top: "26%",
-                borderTop: "1px dashed rgba(0,255,65,.42)",
-              }}
-            >
-              <span
+            {first?.tp != null ? (
+              <div
                 style={{
                   position: "absolute",
-                  right: 10,
-                  top: -17,
-                  fontFamily: "var(--font-data)",
-                  fontSize: 11,
-                  color: "var(--phos-400)",
+                  left: 0,
+                  right: 0,
+                  top: "26%",
+                  borderTop: "1px dashed rgba(0,255,65,.42)",
                 }}
               >
-                TP 2473.00 · +2.00R
-              </span>
-            </div>
-            <div
-              style={{
-                position: "absolute",
-                left: 0,
-                right: 0,
-                top: "52%",
-                borderTop: "2px solid var(--phos-400)",
-                boxShadow: "var(--glow-sm)",
-              }}
-            >
-              <span
+                <span
+                  style={{
+                    position: "absolute",
+                    right: 10,
+                    top: -17,
+                    fontFamily: "var(--font-data)",
+                    fontSize: 11,
+                    color: "var(--phos-400)",
+                  }}
+                >
+                  TP {formatPrice(first.tp)}
+                </span>
+              </div>
+            ) : null}
+            {first?.entry != null ? (
+              <div
                 style={{
                   position: "absolute",
-                  right: 10,
-                  top: -18,
-                  fontFamily: "var(--font-data)",
-                  fontSize: 11,
-                  color: "var(--phos-200)",
+                  left: 0,
+                  right: 0,
+                  top: "52%",
+                  borderTop: "2px solid var(--phos-400)",
+                  boxShadow: "var(--glow-sm)",
                 }}
               >
-                ENTRY 2458.10
-              </span>
-            </div>
-            <div
-              style={{
-                position: "absolute",
-                left: 0,
-                right: 0,
-                top: "78%",
-                borderTop: "1px dashed var(--arcade-red-dim)",
-              }}
-            >
-              <span
+                <span
+                  style={{
+                    position: "absolute",
+                    right: 10,
+                    top: -18,
+                    fontFamily: "var(--font-data)",
+                    fontSize: 11,
+                    color: "var(--phos-200)",
+                  }}
+                >
+                  ENTRY {formatPrice(first.entry)}
+                </span>
+              </div>
+            ) : null}
+            {(first?.sl ?? rt.planSl) != null ? (
+              <div
                 style={{
                   position: "absolute",
-                  right: 10,
-                  top: -17,
-                  fontFamily: "var(--font-data)",
-                  fontSize: 11,
-                  color: "var(--arcade-red)",
+                  left: 0,
+                  right: 0,
+                  top: "78%",
+                  borderTop: "1px dashed var(--arcade-red-dim)",
                 }}
               >
-                SL 2455.60 · -1.00R
-              </span>
-            </div>
+                <span
+                  style={{
+                    position: "absolute",
+                    right: 10,
+                    top: -17,
+                    fontFamily: "var(--font-data)",
+                    fontSize: 11,
+                    color: "var(--arcade-red)",
+                  }}
+                >
+                  SL {formatPrice(first?.sl ?? rt.planSl)}
+                  {first?.sl == null ? " · plan" : ""}
+                </span>
+              </div>
+            ) : null}
 
             <div
               style={{
@@ -395,7 +456,8 @@ export function MatrixHudScreen() {
                   color: "var(--text-secondary)",
                 }}
               >
-                range · london low intact
+                {setup}
+                {rt.hud?.sentinel?.setupSide ? ` · ${rt.hud.sentinel.setupSide}` : ""}
               </span>
             </div>
 
@@ -418,7 +480,7 @@ export function MatrixHudScreen() {
               }}
             >
               <Caps size={10} color="var(--arcade-yellow)">
-                Incoming · dxy
+                Incoming · {incoming ?? "none"}
               </Caps>
               <span
                 style={{
@@ -428,7 +490,7 @@ export function MatrixHudScreen() {
                   color: "var(--arcade-yellow)",
                 }}
               >
-                18:04
+                {incoming ? rt.eventEta : DASH}
               </span>
             </div>
           </div>
@@ -467,9 +529,11 @@ export function MatrixHudScreen() {
                 textShadow: "var(--glow-text)",
               }}
             >
-              07
+              {padScore(rt.standDowns)}
             </span>
-            <Term color="var(--phos-500)">7 of 12 arms refused</Term>
+            <Term color="var(--phos-500)">
+              {rt.standDowns} stood down · hi {padScore(rt.hiScore)}
+            </Term>
           </div>
 
           <div
@@ -480,75 +544,68 @@ export function MatrixHudScreen() {
               gap: 10,
             }}
           >
-            <SectionLabel icon="chart-candlestick">Positions · 2 of 2</SectionLabel>
+            <SectionLabel icon="chart-candlestick">
+              Positions · {rt.positionsOpen} of {rt.maxPositions}
+            </SectionLabel>
 
-            <div
-              style={{
-                border: "1px solid var(--line-strong)",
-                background: "var(--phos-a08)",
-                boxShadow: "var(--glow-xs)",
-                padding: 10,
-                display: "grid",
-                gap: 6,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                <span
-                  style={{
-                    fontFamily: "var(--font-display)",
-                    fontSize: 12,
-                    color: "var(--phos-300)",
-                  }}
-                >
-                  XAU
-                </span>
-                <Caps size={10} weight={700} color="var(--side-buy)">
-                  buy
-                </Caps>
-                <span style={{ marginLeft: "auto" }}>
-                  <PnLValue value={1.4} size="sm" />
-                </span>
-              </div>
-              <MeterBar value={58} max={100} segments={12} />
-              <span
-                style={{ fontFamily: "var(--font-data)", fontSize: 10, color: "var(--text-muted)" }}
-              >
-                58% of the way to target
-              </span>
-            </div>
-
-            <div
-              style={{
-                border: "1px solid var(--line-hairline)",
-                padding: 10,
-                display: "grid",
-                gap: 6,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                <span
-                  style={{
-                    fontFamily: "var(--font-display)",
-                    fontSize: 12,
-                    color: "var(--grey-300)",
-                  }}
-                >
-                  EUR
-                </span>
-                <Caps size={10} weight={700} color="var(--side-sell)">
-                  sell
-                </Caps>
-                <span style={{ marginLeft: "auto" }}>
-                  <PnLValue value={-0.6} size="sm" />
-                </span>
-              </div>
-              <MeterBar value={22} max={100} segments={12} tone="danger" />
-              <span
-                style={{ fontFamily: "var(--font-data)", fontSize: 10, color: "var(--text-muted)" }}
-              >
-                stop 1.09340 · no target set
-              </span>
-            </div>
+            {positions.length === 0 ? (
+              <Term color="var(--text-muted)">no open arms</Term>
+            ) : (
+              positions.map((row) => {
+                const pct = progressToTarget(row, rt.price);
+                return (
+                  <div
+                    key={String(row.positionId ?? row.symbol)}
+                    style={{
+                      border: "1px solid var(--line-strong)",
+                      background: "var(--phos-a08)",
+                      boxShadow: "var(--glow-xs)",
+                      padding: 10,
+                      display: "grid",
+                      gap: 6,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                      <span
+                        style={{
+                          fontFamily: "var(--font-display)",
+                          fontSize: 12,
+                          color: "var(--phos-300)",
+                        }}
+                      >
+                        {shortSymbol(row.symbol)}
+                      </span>
+                      <Caps
+                        size={10}
+                        weight={700}
+                        color={row.side === "sell" ? "var(--side-sell)" : "var(--side-buy)"}
+                      >
+                        {row.side ?? DASH}
+                      </Caps>
+                      <span style={{ marginLeft: "auto", fontFamily: "var(--font-data)", fontSize: 11 }}>
+                        {row.lots != null ? `${row.lots.toFixed(2)} lots` : DASH}
+                      </span>
+                    </div>
+                    {pct != null ? (
+                      <>
+                        <MeterBar value={pct} max={100} segments={12} />
+                        <span
+                          style={{ fontFamily: "var(--font-data)", fontSize: 10, color: "var(--text-muted)" }}
+                        >
+                          {Math.round(pct)}% of the way to target
+                        </span>
+                      </>
+                    ) : (
+                      <span
+                        style={{ fontFamily: "var(--font-data)", fontSize: 10, color: "var(--text-muted)" }}
+                      >
+                        stop {formatPrice(row.sl)} · {row.tp == null ? "no target set" : `tp ${formatPrice(row.tp)}`}
+                      </span>
+                    )}
+                  </div>
+                );
+              })
+            )}
           </div>
 
           <div style={{ padding: "16px 18px", display: "grid", gap: 10, alignContent: "start" }}>
@@ -572,7 +629,7 @@ export function MatrixHudScreen() {
                   textShadow: "var(--glow-text)",
                 }}
               >
-                SAFE
+                {readyLabel}
               </span>
               <Term style={{ textAlign: "center" }}>hold LT to arm. sticks never fire.</Term>
             </div>
@@ -597,14 +654,16 @@ export function MatrixHudScreen() {
                 color: "var(--text-muted)",
               }}
             >
-              <Switch checked={false} />
-              <span>off — R only</span>
+              <Switch
+                checked={rt.showDollars}
+                onChange={(event) => rt.setShowDollars(event.target.checked)}
+              />
+              <span>{rt.showDollars ? "on — dollars" : "off — R only"}</span>
             </div>
           </div>
         </aside>
       </div>
 
-      {/* ── pad legend ───────────────────────────────────────── */}
       <footer
         style={{
           position: "relative",

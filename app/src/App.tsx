@@ -34,8 +34,8 @@ import { GameOverlay } from "./overlay/GameOverlay";
 
 /**
  * Playable cabinet. START walks the evening; Menu lists every screen; the rail still warps
- * for design review. Prototype artboards keep fixed data. Live HUD / journal / replay / deck
- * talk to the gateway when it is up.
+ * for design review. Matrix / city artboards poll `/api/arcade`. Live HUD / journal / replay /
+ * deck talk to the gateway when it is up.
  */
 
 const GROUPS: {
