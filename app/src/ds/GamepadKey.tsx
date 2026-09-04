@@ -1,4 +1,5 @@
 import type { CSSProperties, HTMLAttributes } from "react";
+import { useGlyphAction } from "../journey/Cabinet";
 import { Icon } from "./Icon";
 
 /** Port of components/gamepad/GamepadKey.jsx. */
@@ -22,6 +23,8 @@ export interface GamepadKeyProps extends HTMLAttributes<HTMLSpanElement> {
   label?: string;
   size?: "sm" | "md" | "lg";
   pressed?: boolean;
+  /** Painted inside a PadHint that already handles the click. */
+  passive?: boolean;
   style?: CSSProperties;
 }
 
@@ -30,9 +33,13 @@ export function GamepadKey({
   label,
   size = "md",
   pressed,
+  passive,
   style,
+  onClick,
   ...rest
 }: GamepadKeyProps) {
+  const { action, fire } = useGlyphAction(button);
+  const clickable = !passive && Boolean(action) && !onClick;
   const key = String(button).toLowerCase();
   const px = size === "sm" ? 18 : size === "lg" ? 28 : 22;
   const face = FACE[key];
@@ -40,14 +47,28 @@ export function GamepadKey({
   const color = face || "var(--pad-shoulder)";
   return (
     <span
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      {...rest}
+      onClick={onClick ?? (clickable ? fire : undefined)}
+      onKeyDown={
+        clickable
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                fire();
+              }
+            }
+          : rest.onKeyDown
+      }
       style={{
         display: "inline-flex",
         alignItems: "center",
         gap: "var(--space-6)",
         fontFamily: "var(--font-core)",
+        cursor: clickable ? "pointer" : undefined,
         ...style,
       }}
-      {...rest}
     >
       <span
         style={{

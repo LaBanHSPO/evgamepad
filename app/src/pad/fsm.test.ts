@@ -172,6 +172,15 @@ describe("the overlay is a safe surface", () => {
     expect(tryArm.state.phase).not.toBe("ARMED");
     expect(intents(tryArm.effects)).toHaveLength(0);
   });
+
+  it("does not step lot or symbol while the overlay is open", () => {
+    const opened = step(armed(), input({ clutch: 0.9, menu: true }));
+    const lot = step(opened.state, input({ clutch: 0.9, lotUp: true }));
+    expect(lot.effects).not.toContainEqual({ kind: "lot", step: 1 });
+    const symbol = step(opened.state, input({ symbolRight: true }));
+    expect(symbol.effects).not.toContainEqual({ kind: "symbol", step: 1 });
+    expect(intents(lot.effects)).toHaveLength(0);
+  });
 });
 
 describe("an outstanding fire", () => {

@@ -2,10 +2,15 @@ import { CodeRain } from "../components/CodeRain";
 import { Artboard, Caps, PadHint, Term } from "../components/primitives";
 import { bootChecks, bootLines } from "../data/arcade";
 import { GamepadKey, MeterBar } from "../ds";
+import { useCabinet } from "../journey/Cabinet";
+import { BOOT_KEYS } from "../journey/graph";
 import { MATRIX_ART } from "./art";
 
 /** Boot sequence · connecting the pad — the prototype's `is_boot` artboard. */
 export function BootScreen() {
+  const cabinet = useCabinet();
+  const handshake = cabinet?.state.handshake ?? [];
+  const handshakeCount = handshake.length;
   return (
     <Artboard
       label="Boot sequence · connecting the pad"
@@ -186,16 +191,25 @@ export function BootScreen() {
           <div style={{ padding: "16px 18px", display: "grid", gap: 12, alignContent: "start" }}>
             <Caps color="var(--phos-500)">Pad handshake</Caps>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              <GamepadKey button="LT" size="md" />
-              <GamepadKey button="RT" size="md" pressed />
-              <GamepadKey button="a" size="md" />
-              <GamepadKey button="b" size="md" />
-              <GamepadKey button="x" size="md" />
-              <GamepadKey button="y" size="md" />
-              <GamepadKey button="START" size="md" />
+              {(["LT", "RT", "a", "b", "x", "y", "START"] as const).map((key) => (
+                <GamepadKey
+                  key={key}
+                  button={key}
+                  size="md"
+                  pressed={handshake.includes(key.toLowerCase())}
+                />
+              ))}
             </div>
-            <Term color="var(--phos-500)">press each key once. RT reads clean.</Term>
-            <MeterBar label="Handshake" value={6} max={7} segments={7} showValue />
+            <Term color="var(--phos-500)">
+              press each key once. {handshakeCount}/{BOOT_KEYS.length} read.
+            </Term>
+            <MeterBar
+              label="Handshake"
+              value={Math.min(handshakeCount, BOOT_KEYS.length)}
+              max={BOOT_KEYS.length}
+              segments={BOOT_KEYS.length}
+              showValue
+            />
           </div>
 
           <div
@@ -208,17 +222,23 @@ export function BootScreen() {
               background: "var(--phos-a08)",
             }}
           >
-            <span
+            <button
+              type="button"
+              onClick={() => cabinet?.emit("start")}
               style={{
                 fontFamily: "var(--font-display)",
                 fontSize: 16,
                 color: "var(--phos-400)",
                 textShadow: "var(--glow-text)",
                 animation: "ev-blink 1s steps(1,end) infinite",
+                background: "transparent",
+                border: 0,
+                cursor: "pointer",
+                padding: 0,
               }}
             >
               READY PLAYER ONE
-            </span>
+            </button>
             <Term style={{ textAlign: "center" }}>
               limits load next. you write them before the first chart.
             </Term>

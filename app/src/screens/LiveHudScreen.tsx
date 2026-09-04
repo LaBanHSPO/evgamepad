@@ -5,6 +5,7 @@ import { PostTradeChecklist } from "../playbook/PostTradeChecklist";
 import type { Grade, GradePreview, Playbook } from "../playbook/types";
 import { GameAgent } from "../agent";
 import type { AgentView } from "../agent";
+import { useCabinet } from "../journey/Cabinet";
 import { PadPoller } from "../pad/poll";
 import { HOT_HOLD_MS, TiltPip, confirmHoldMsFor } from "../hud/TiltPip";
 import type { TiltState } from "../hud/TiltPip";
@@ -39,6 +40,7 @@ const PHASE_COPY: Record<string, string> = {
 };
 
 export function LiveHudScreen(): JSX.Element {
+  const cabinet = useCabinet();
   const [token, setToken] = useState("");
   const [status, setStatus] = useState<SocketStatus | "idle">("idle");
   const [view, setView] = useState<AgentView | null>(null);
@@ -167,6 +169,10 @@ export function LiveHudScreen(): JSX.Element {
     pollerRef.current?.stop();
   }, []);
 
+  useEffect(() => {
+    agentRef.current?.setOverlayOpen(Boolean(cabinet?.state.overlayOpen));
+  }, [cabinet?.state.overlayOpen]);
+
   const selectPlaybook = useCallback((id: string | null) => {
     setActivePlaybook(id);
     // The active playbook is session state, so the gateway is told rather than only the browser.
@@ -228,6 +234,12 @@ export function LiveHudScreen(): JSX.Element {
       <header style={row}>
         <strong>LIVE HUD</strong>
         <span style={{ opacity: 0.7 }}>cTrader demo · not advice</span>
+        <button type="button" onClick={() => cabinet?.emit("menu")}>
+          Menu
+        </button>
+        <button type="button" onClick={() => cabinet?.emit("end")}>
+          End session
+        </button>
         <span style={{ marginLeft: "auto" }}>socket: {status}</span>
       </header>
 

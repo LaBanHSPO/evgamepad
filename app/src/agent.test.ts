@@ -89,6 +89,21 @@ it("flattens without a pad, because a dead pad must never trap a position", () =
   expect(panics[0].payload).toMatchObject({ clutch: true });
 });
 
+it("opens the overlay from a click without emitting an order, and close still works", () => {
+  const { agent, sent } = agentAt();
+  agent.onFrame(frame({ view: true }));
+  agent.onFrame(frame({ clutch: 0.9 }));
+  agent.onFrame(frame({ clutch: 0.9, a: true }));
+  expect(agent.view.phase).toBe("ARMED");
+  agent.setOverlayOpen(true);
+  expect(agent.view.overlayOpen).toBe(true);
+  expect(agent.view.phase).toBe("IDLE");
+  expect(agent.view.side).toBeNull();
+  agent.flatten();
+  expect(sent.filter((f) => f.t === "intent.panic")).toHaveLength(1);
+  expect(sent.filter((f) => f.t === "intent.open")).toHaveLength(0);
+});
+
 it("cycles symbol and lot without sending anything to the broker", () => {
   const { agent, sent } = agentAt();
   agent.onFrame(frame({ view: true }));

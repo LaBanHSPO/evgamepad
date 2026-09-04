@@ -2,10 +2,12 @@ import { BgmControl } from "../components/bgm";
 import { CodeRain } from "../components/CodeRain";
 import { Artboard, Caps, DemoNotice, PadHint, Term } from "../components/primitives";
 import { hiScores, rColor } from "../data/arcade";
+import { useCabinet } from "../journey/Cabinet";
 import { MATRIX_ART } from "./art";
 
 /** Attract screen · cabinet idle — the prototype's `is_title` artboard. */
 export function AttractScreen() {
+  const cabinet = useCabinet();
   return (
     <Artboard
       label="Attract screen · cabinet idle"
@@ -110,17 +112,23 @@ export function AttractScreen() {
               boxShadow: "var(--glow-xs)",
             }}
           />
-          <span
+          <button
+            type="button"
+            onClick={() => cabinet?.emit("start")}
             style={{
               fontFamily: "var(--font-display)",
               fontSize: 18,
               color: "var(--arcade-yellow)",
               textShadow: "2px 2px 0 #000",
               animation: "ev-blink 1s steps(1,end) infinite",
+              background: "transparent",
+              border: 0,
+              cursor: "pointer",
+              padding: 0,
             }}
           >
             INSERT COIN
-          </span>
+          </button>
           <div
             style={{
               display: "grid",

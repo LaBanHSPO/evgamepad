@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { GamepadKey } from "../ds";
+import { useGlyphAction } from "../journey/Cabinet";
 
 /**
  * Small repeated shapes lifted out of the prototype markup. Each one reproduces
@@ -43,7 +44,7 @@ export function Artboard({
   );
 }
 
-/** A boxed pad hint in a screen footer: key glyph + what it does. */
+/** A boxed pad hint in a screen footer: key glyph + what it does. Clickable when the cabinet binds it. */
 export function PadHint({
   button,
   label,
@@ -58,18 +59,34 @@ export function PadHint({
   /** "Fire · disabled" on the session-over footer. */
   dim?: boolean;
 }) {
+  const { action, fire } = useGlyphAction(button);
+  const clickable = Boolean(action) && !dim;
   return (
     <div
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={clickable ? fire : undefined}
+      onKeyDown={
+        clickable
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                fire();
+              }
+            }
+          : undefined
+      }
       style={{
         display: "flex",
         alignItems: "center",
         gap: 10,
         padding: "6px 10px",
         border: "1px solid var(--line-hairline)",
+        cursor: clickable ? "pointer" : undefined,
         ...(dim ? { opacity: 0.4 } : null),
       }}
     >
-      <GamepadKey button={button} size={size} pressed={pressed} />
+      <GamepadKey button={button} size={size} pressed={pressed} passive />
       <span
         style={{
           fontSize: 10,
