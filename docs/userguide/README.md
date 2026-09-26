@@ -6,8 +6,8 @@ Demo only. Not financial advice.
 
 | Guide | What it covers |
 |---|---|
-| [How to play an evening](./how-to-play.md) | Attract → boot → limits → session → tally → journal |
+| [How to play an evening](./how-to-play.md) | Controls practice, demo connection, exits and review |
 | [Controller map](./how-to-play.md#controller) | Every binding, including the safe menu |
 | [Every screen](./how-to-play.md#screens) | How to reach each room from the cabinet |
 
-Keyboard works if the pad is not plugged in: `Enter` is Start, `Esc` is B, `M` opens the menu, arrows move the menu cursor.
+Start with **Controls practice**. Mouse and keyboard work without a pad or account. Demo-account entries require the controller. Press **M** for the menu.

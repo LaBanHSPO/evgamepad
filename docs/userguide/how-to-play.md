@@ -1,108 +1,90 @@
-# How to play an evening
+# Practise, connect, review
 
-The cabinet is a **session**, not a gallery. Start on the attract screen. `START` (or click **INSERT COIN**) walks the evening in order. `Menu` (`M` on the keyboard) lists every screen so you can jump without breaking the order.
+Open the game in desktop Chrome. The start screen offers two paths:
 
-```mermaid
-flowchart TD
-  title[Attract] -->|START / INSERT COIN| boot[Boot handshake]
-  title -->|Y last review| journal[Journal]
-  title -->|VIEW rebind| pad[Gamepad]
-  title -->|Menu| overlay[Safe menu]
-  boot -->|START write limits| pre[Pre-session]
-  boot -->|VIEW| title
-  pre -->|START lock limits| session[Session HUD]
-  pre -->|B| boot
-  session -->|Menu| overlay
-  session -->|VIEW lock| session
-  session -->|Y ask desk| desk[Agent desk]
-  overlay -->|End session| clear[Session clear]
-  overlay -->|Loss cap| over[Session over]
-  overlay -->|any destination| anywhere[Every other screen]
-  clear -->|A commit| journal
-  clear -->|VIEW| title
-  over -->|A write note| journalProto[Journal prototype]
-  over -->|VIEW| title
-  journal -->|START| session
-```
+- **Start practice:** a guided controls lesson. No gateway, token, controller, or account is required.
+- **Open demo desk:** connect the configured cTrader demo account. This needs the gateway, its session token, and a controller for entries.
 
-Nothing in the menu can fire an order. Opening it cancels an arm and locks new opens. Close (`X`) and panic flatten (`Y` on the live HUD) still work underneath.
+## First session: learn the controls
 
-## First run
+Choose **Start practice**, press Enter, or press Start on the controller.
 
-1. Open the app in desktop Chrome.
-2. Pair the 8BitDo in **X** (XInput) with the 2.4G dongle, or use USB-C.
-3. Focus the tab and **press any button** — the Gamepad API stays silent until that gesture.
-4. On attract: `START` or click **INSERT COIN**.
-5. On boot: tap `LT`, `RT`, `A`, `B`, `X`, `Y` once each (optional). `START` writes limits even if the handshake is short.
-6. On pre-session: read the limits, tick readiness if you want (it never blocks), write tonight's plan. `START` locks limits and opens the session HUD.
+1. **Unlock:** tap View. This does not submit anything.
+2. **Cancel:** hold LT, tap A to prepare BUY, then release LT. Nothing opens.
+3. **Confirm:** hold LT, tap A for BUY or B for SELL, read the armed side, then press RT.
+4. **Close:** hold LT, tap X, then press RT. The simulated position closes.
+5. **Sit out:** click **Sit out this setup**, or release LT and tap A. Choosing to wait is part of the lesson.
 
-To talk to a real demo account, open **Live HUD** from the menu, paste the memory-only WebSocket token, and connect. Prices and fills need the Python gateway. The designed session HUD is playable without it.
+The lesson uses the same control rules as the demo desk, but all results stay in the browser. It does not send orders, generate prices, calculate profit, or write to your journal.
 
-## In session
+In **Mouse / keyboard** mode, click the buttons. LT is a toggle for this lesson only. On a physical controller, hold LT down.
 
-Two hands, every fire:
-
-| Input | Action |
+| Keyboard key in practice | Action |
 |---|---|
-| `LT` (hold) | Clutch — nothing opens without it |
-| `A` | Arm **BUY** |
-| `B` | Arm **SELL** / cancel an arm (counts as a stand-down when a condition is live) |
-| `RT` | Confirm to fire |
-| D-pad | Symbol / lot size |
-| `LB` / `RB` | Timeframe |
-| `X` | Close the active position |
-| `Y` | Flatten (panic) on the **live** HUD; ask the desk on the designed HUD |
-| `VIEW` | Lock / unlock the session |
-| `Menu` / `START` | Open the safe menu |
+| V | Unlock / lock |
+| Hold Shift | Hold LT |
+| A / B | Prepare BUY / SELL |
+| X / Y | Prepare close / close all |
+| Enter | Confirm when focus is outside a button |
+| M / Escape | Open the menu and pause |
 
-The tab must stay focused. Hiding it or unplugging the pad cancels an arm and locks new opens. Flatten and Close still work.
+When a button has keyboard focus, Enter and Space activate that button normally. Shortcuts are ignored while writing a note.
 
-## Close and review
+Choose **Controller** to use the pad in practice. Set it to XInput, connect the dongle or USB cable, then press a button. If the controller is not detected, return to mouse controls.
 
-1. Open the menu and choose **End session** (tally) or **Loss cap** (the cap did its job).
-2. On session clear, `A` commits the evening into the journal. The tally cannot be edited after that.
-3. From the journal, open a trade's tape (**Replay**). The left stick scrubs; `B` returns. Replay cannot send an order: mounting it unmounts the live HUD's agent and socket.
-4. **Deck** is process-first. Outcome (money) is behind an explicit click.
-5. **Process score** is five axes. Standing down on a dead tape scores 100. A skipped checklist item shrinks the denominator; it does not score zero.
+There is no time limit. Pausing locks the controls and keeps the current lesson step. Leaving the lesson resets it. The optional reflection note clears when you leave.
+
+## Connect your demo account
+
+1. Configure and run the Python gateway using the [project setup instructions](../../README.md#local-development).
+2. Open **Demo desk** and paste the gateway's `EV_WS_TOKEN`. This is not your cTrader password. The token stays in memory and clears when you leave the desk.
+3. Choose **Connect demo account**. Check the separate connection, broker, price and session-window indicators. A gateway connection alone does not prove the broker is ready.
+4. Connect the controller, press a button, then tap View to unlock.
+5. Check the selected symbol, lot size and gateway limits. **Check BUY rules** and **Check SELL rules** show previews. Those buttons do not place orders.
+
+If connection fails, check the gateway and token. The retry control remains available. Requests already sent keep their original IDs during automatic reconnection. Do not repeat an entry whose result is unresolved; check the positions in cTrader.
 
 ## Controller {#controller}
 
-Physical **Start** and **Menu** are the same Xbox button (index 9). The screen decides what it does: Start on attract/boot/pre, Menu everywhere else.
-
-Keyboard fallback (ignored while a text field is focused):
-
-| Key | Same as |
+| Input on the demo desk | Action |
 |---|---|
-| `Enter` / `Space` | Start |
-| `Esc` / `Backspace` | B (back / close menu) |
-| `M` | Menu |
-| `V` | View |
-| `Y` | Y |
-| `A` | A |
-| Arrows | D-pad (menu cursor) |
+| View | Unlock / lock |
+| Hold LT, then A | Prepare BUY |
+| Hold LT, then B | Prepare SELL |
+| RT after arming, with LT held | Submit the prepared action |
+| Release LT before confirming | Cancel the prepared action |
+| Hold LT, then X, then RT | Close the active position |
+| Hold LT, then Y, then RT | Request closure of all positions |
+| D-pad left / right | Select symbol |
+| D-pad up / down | Change lot size |
+| LB / RB | Change timeframe |
+| Menu / Start | Open the navigation menu |
+
+RT must be released and pressed again if it was already held when you armed. Holding it early cannot skip the preview.
+
+The on-screen close buttons submit exit requests directly when connected. They do not require a controller. Check the broker response before treating a position as closed. If the connection is unavailable, manage positions in cTrader.
+
+The navigation keyboard shortcuts do not place demo-account orders. Entries on the demo desk require the physical controller.
+
+## Build confidence through a small routine
+
+Before a session, choose one thing to practise: cancelling calmly, checking size, or following your written plan. You do not need a profit target or a minimum trade count.
+
+Afterwards, note one action you handled well and one to practise next. Use **My journal** and **My process review** for gateway-backed records. A successful controls lesson does not predict trading results.
+
+**Leave desk & review** disconnects the controls and opens the journal. It does not close positions or claim to finalize a session. Close positions and verify the result first if that is your intention.
 
 ## Every screen {#screens}
 
-Open **Menu** from attract (or anywhere). Groups:
+Use **Menu** or the left navigation rail:
 
-**Play** — Session HUD, Live HUD (gateway), Agent desk, Deck, Size calculator, Trade detail
+- **Play:** start screen, controls practice, demo desk, and the existing matrix/city demo desks.
+- **Review:** your journal, process review, reports and recorded trade replay. These require gateway data.
+- **Settings:** preferences, data management and your principles.
+- **Sample screens:** the original artwork and prototype walkthrough. A yellow notice labels their sample account status, plans, limits, trades and scores. These examples are not your results.
 
-**Review** — Journal, Replay, History, Process score, Reports
+The sample boot and pre-session screens do not verify a broker connection or save limits. The sample session-clear screen does not end a connected account session.
 
-**Close** — End session, Loss cap
+## Verification limits
 
-**Setup** — Gamepad, Settings, System, Data, Philosophy
-
-**Cabinet** — Attract, Boot, Pre-session
-
-**Art / Gallery** — matrix and city skins poll `/api/arcade` (quotes stay blank until the broker book has them); other gallery artboards still use fixed prototype data
-
-The left rail still warps to any artboard, including the six session HUD states (safe, armed, unknown, stale, close-only, locked). That is design review, not the evening path.
-
-## Safety you cannot turn off
-
-- Demo only. A live host or live account refuses to boot.
-- The gateway is the only component allowed to approve an order.
-- The AI desk is read-only. It cannot fire.
-- Tilt may slow a new open. It never blocks close or panic.
-- Overlay navigation cannot emit `intent.open` or `intent.modify`.
+The browser lesson works without an account. Actual controller detection, demo fills, broker rejections, reconnect recovery and exits must also be checked with your physical controller and configured cTrader demo gateway.
