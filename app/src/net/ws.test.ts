@@ -163,3 +163,39 @@ it("stops pinging once we close the socket ourselves", () => {
   expect(after).toBe(before);
   vi.useRealTimers();
 });
+
+it("does not send on a connecting socket or queue offline orders", () => {
+  const { game, sockets } = harness();
+  game.connect();
+  game.send("pad.telemetry", "session", {});
+  game.sendIntent({ cid: "offline", t: "intent.open", ch: "orders", payload: {} });
+  expect(sockets[0].sent).toHaveLength(0);
+  expect(game.pending).toBe(0);
+  sockets[0].onopen?.(null);
+  expect(sockets[0].frames().filter((frame) => frame.t === "intent.open")).toHaveLength(0);
+  game.disconnect();
+});
+
+it("cancels a scheduled reconnect when leaving the desk", () => {
+  vi.useFakeTimers();
+  const { game, sockets } = harness();
+  game.connect();
+  sockets[0].onopen?.(null);
+  sockets[0].onclose?.(null);
+  game.disconnect();
+  vi.advanceTimersByTime(20000);
+  expect(sockets).toHaveLength(1);
+  vi.useRealTimers();
+});
+
+it("allows subscriptions from the open hook only after hello", () => {
+  const socket = new FakeSocket();
+  const game = new GameClient("/ws", "tok", {
+    onMessage: () => undefined,
+    onStatus: (status) => { if (status === "open") game.send("sub", "session", { ch: "quotes", syms: ["XAUUSD"] }); },
+  }, () => socket);
+  game.connect();
+  socket.onopen?.(null);
+  expect(socket.frames().map((frame) => frame.t)).toEqual(["hello", "sub"]);
+  game.disconnect();
+});

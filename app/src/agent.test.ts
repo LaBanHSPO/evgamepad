@@ -219,3 +219,32 @@ it("never requests a microphone in phase 3", async () => {
     /getUserMedia|MediaRecorder/,
   );
 });
+
+it("sends the player's explicit lock and unlock to the gateway", () => {
+  const { agent, sent } = agentAt();
+  agent.onFrame(frame({ view: true }));
+  agent.onFrame(frame({ view: true }));
+  expect(sent.filter((event) => event.t.startsWith("session.")).map((event) => event.t))
+    .toEqual(["session.unlock", "session.lock"]);
+});
+
+it("does not send another entry while an earlier request is unresolved, even after unlocking", () => {
+  const { agent, client, sent } = agentAt();
+  Object.defineProperty(client, "pending", { value: 1 });
+  agent.onFrame(frame({ view: true }));
+  agent.onFrame(frame({ clutch: 1, a: true }));
+  agent.onFrame(frame({ clutch: 1, confirm: true }));
+  expect(sent.filter((event) => event.t === "intent.open")).toHaveLength(0);
+  expect(agent.view.phase).toBe("UNKNOWN");
+  agent.flatten();
+  expect(sent.filter((event) => event.t === "intent.panic")).toHaveLength(1);
+});
+
+it("returns to idle instead of waiting for a broker result when there is nothing to close", () => {
+  const { agent, sent } = agentAt();
+  agent.onFrame(frame({ view: true }));
+  agent.onFrame(frame({ clutch: 1, x: true }));
+  agent.onFrame(frame({ clutch: 1, confirm: true }));
+  expect(agent.view.phase).toBe("IDLE");
+  expect(sent.filter((event) => event.t === "intent.close")).toHaveLength(0);
+});

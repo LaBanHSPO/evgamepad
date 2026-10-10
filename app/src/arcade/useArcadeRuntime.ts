@@ -141,7 +141,15 @@ export function useArcadeRuntime(skinId: "matrix" | "city"): ArcadeRuntime {
       onMessage,
       onStatus: (next) => {
         setStatus(next);
-        if (next === "closed") agentRef.current?.onSocketClosed();
+        if (next === "open") {
+          clientRef.current?.send("sub", "session", { ch: "quotes", syms: symbols });
+          clientRef.current?.send("snap", "session", {});
+          pollerRef.current?.start();
+        } else {
+          pollerRef.current?.stop();
+          agentRef.current?.onSocketClosed();
+          setLiveQuote(null);
+        }
       },
     });
     const first = hud?.symbols[0];
@@ -171,8 +179,6 @@ export function useArcadeRuntime(skinId: "matrix" | "city"): ArcadeRuntime {
     agentRef.current = agent;
     pollerRef.current = poller;
     client.connect();
-    poller.start();
-    client.send("sub", "session", { ch: "quotes", syms: symbols });
     note("socket connecting");
   }, [hud, note, onMessage, token]);
 

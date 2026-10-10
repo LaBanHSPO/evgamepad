@@ -134,7 +134,16 @@ export function useCabinetInput(): void {
     const onKey = (event: KeyboardEvent) => {
       const current = cabinetRef.current;
       if (!current) return;
+      if (event.repeat) return;
       if (isTypingTarget(event.target)) return;
+      if ((event.code === "Enter" || event.code === "Space") && (event.target as HTMLElement)?.closest("button, a")) return;
+      if (current.state.screen === "practice" && !current.state.overlayOpen) {
+        if (event.code === "KeyM" || event.code === "Escape") {
+          event.preventDefault();
+          current.emit("menu");
+        }
+        return;
+      }
       const button = keyToButton(event);
       if (!button) return;
       const resolved = actionForButton(button, current.state.screen, current.state.overlayOpen);

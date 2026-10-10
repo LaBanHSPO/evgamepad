@@ -92,9 +92,16 @@ function applyInput(state: JourneyState, action: CabinetAction): JourneyState {
 
   switch (state.screen) {
     case "title":
-      if (action === "start") return go(state, "boot");
+      if (action === "start") return go(state, "practice");
       if (action === "alt") return go(state, "journallive");
       if (action === "view") return go(state, "pad");
+      return state;
+    case "practice":
+      if (action === "back") return go(state, "title");
+      return state;
+    case "attract":
+      if (action === "start") return go(state, "boot");
+      if (action === "back") return go(state, "title");
       return state;
     case "boot":
       if (action === "start") return go(state, "pre");
@@ -124,7 +131,7 @@ function applyInput(state: JourneyState, action: CabinetAction): JourneyState {
         const locked = !state.locked;
         return { ...state, locked, hud: locked ? "locked" : "live" };
       }
-      if (action === "back") return go(state, "session");
+      if (action === "back") return go(state, "title");
       return state;
     case "clear":
       if (action === "confirm") return go(state, "journallive", { hub: "journallive" });

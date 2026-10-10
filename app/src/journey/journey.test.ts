@@ -8,8 +8,16 @@ function play(events: Parameters<typeof reduceJourney>[1][], from: JourneyState 
 }
 
 describe("the evening path", () => {
-  it("walks attract → boot → pre → session → clear → journal", () => {
+  it("starts with isolated practice instead of sample account data", () => {
+    const state = play([{ type: "input", action: "start" }]);
+    expect(state.screen).toBe("practice");
+    expect(state.sessionStarted).toBe(false);
+    expect(reduceJourney(state, { type: "input", action: "start" }).screen).toBe("practice");
+  });
+
+  it("keeps the original sample walkthrough reachable in the gallery", () => {
     const evening = play([
+      { type: "warp", screen: "attract" },
       { type: "input", action: "start" },
       { type: "input", action: "start" },
       { type: "input", action: "start" },
@@ -33,7 +41,7 @@ describe("the evening path", () => {
 
   it("returns from boot VIEW to the cabinet", () => {
     const state = play([
-      { type: "input", action: "start" },
+      { type: "warp", screen: "boot" },
       { type: "input", action: "view" },
     ]);
     expect(state.screen).toBe("title");
@@ -42,8 +50,7 @@ describe("the evening path", () => {
 
   it("returns from pre B to boot", () => {
     const state = play([
-      { type: "input", action: "start" },
-      { type: "input", action: "start" },
+      { type: "warp", screen: "pre" },
       { type: "input", action: "back" },
     ]);
     expect(state.screen).toBe("boot");
@@ -53,8 +60,7 @@ describe("the evening path", () => {
 describe("session lock and close", () => {
   it("VIEW toggles the designed HUD into locked, then live", () => {
     const session = play([
-      { type: "input", action: "start" },
-      { type: "input", action: "start" },
+      { type: "warp", screen: "pre" },
       { type: "input", action: "start" },
     ]);
     expect(session.screen).toBe("session");
@@ -69,9 +75,7 @@ describe("session lock and close", () => {
 
   it("loss-cap close lands on session over, then the journal note", () => {
     const session = play([
-      { type: "input", action: "start" },
-      { type: "input", action: "start" },
-      { type: "input", action: "start" },
+      { type: "warp", screen: "session" },
       { type: "input", action: "menu" },
     ]);
     const overIndex = OVERLAY_DESTINATIONS.findIndex((d) => d.id === "over");
@@ -91,6 +95,7 @@ describe("the overlay is a complete map", () => {
     const ids = OVERLAY_DESTINATIONS.map((d) => d.id);
     expect(new Set(ids).size).toBe(ids.length);
     const expected: ScreenId[] = [
+      "practice", "attract",
       "settingslive", "reportlive", "journallive", "systemlive", "replaylive",
       "title", "boot", "pre", "session", "live", "deck", "artmatrix", "artcontra",
       "desk", "detail", "calc", "clear", "over", "report", "journal", "replay",
@@ -140,7 +145,7 @@ describe("the overlay is a complete map", () => {
 
 describe("boot handshake", () => {
   it("records each key once and ignores keys off the boot screen", () => {
-    const boot = play([{ type: "input", action: "start" }]);
+    const boot = play([{ type: "warp", screen: "boot" }]);
     const first = reduceJourney(boot, { type: "boot-key", key: "LT" });
     const again = reduceJourney(first, { type: "boot-key", key: "lt" });
     expect(again.handshake).toEqual(["lt"]);
@@ -149,7 +154,7 @@ describe("boot handshake", () => {
   });
 
   it("START still writes limits even if the handshake is short", () => {
-    const boot = play([{ type: "input", action: "start" }]);
+    const boot = play([{ type: "warp", screen: "boot" }]);
     const next = reduceJourney(boot, { type: "input", action: "start" });
     expect(next.screen).toBe("pre");
   });

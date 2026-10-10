@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { OVERLAY_DESTINATIONS } from "../journey/graph";
 import { useCabinetOrThrow } from "../journey/Cabinet";
 import type { OverlayGroup } from "../journey/types";
@@ -24,7 +24,7 @@ const shell: CSSProperties = {
 };
 
 const panel: CSSProperties = {
-  width: 720,
+  width: "min(720px, calc(100vw - 24px))",
   maxHeight: "86vh",
   display: "grid",
   gridTemplateRows: "auto 1fr auto",
@@ -35,6 +35,18 @@ const panel: CSSProperties = {
 
 export function GameOverlay(): JSX.Element | null {
   const { state, emit, dispatch } = useCabinetOrThrow();
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!state.overlayOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    return () => previous?.focus();
+  }, [state.overlayOpen]);
+  useEffect(() => {
+    if (!state.overlayOpen) return;
+    const selected = panelRef.current?.querySelector<HTMLButtonElement>(`[data-index="${state.overlayIndex}"]`);
+    selected?.focus({ preventScroll: true });
+    selected?.scrollIntoView({ block: "nearest" });
+  }, [state.overlayOpen, state.overlayIndex]);
   if (!state.overlayOpen) return null;
 
   return (
@@ -45,10 +57,20 @@ export function GameOverlay(): JSX.Element | null {
       aria-label="Safe menu"
       onClick={() => emit("back")}
     >
-      <div style={panel} onClick={(event) => event.stopPropagation()}>
+      <div ref={panelRef} style={panel} onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key !== "Tab") return;
+          const buttons = panelRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)");
+          if (!buttons?.length) return;
+          const first = buttons[0];
+          const last = buttons[buttons.length - 1];
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        }}>
         <header
           style={{
             display: "flex",
+            flexWrap: "wrap",
             alignItems: "center",
             gap: 16,
             padding: "14px 18px",
@@ -59,6 +81,7 @@ export function GameOverlay(): JSX.Element | null {
             Safe menu
           </Caps>
           <Term>opens cancel the arm. nothing here can fire.</Term>
+          <button type="button" onClick={() => emit("back")} style={{ marginLeft: "auto", minHeight: 44, color: "var(--text-body)", background: "var(--black-3)", border: "1px solid var(--line-strong)", padding: "8px 12px" }}>Close menu</button>
         </header>
 
         <div style={{ overflow: "auto", padding: "10px 0 18px" }}>
@@ -77,12 +100,13 @@ export function GameOverlay(): JSX.Element | null {
                   return (
                     <button
                       key={item.id}
+                      data-index={index}
                       type="button"
                       onClick={() => dispatch({ type: "choose", index })}
-                      onMouseEnter={() => dispatch({ type: "hover", index })}
+                      onFocus={() => dispatch({ type: "hover", index })}
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "10px 1fr auto",
+                        gridTemplateColumns: "10px minmax(0, 1fr)",
                         alignItems: "center",
                         gap: 12,
                         width: "100%",
@@ -116,6 +140,7 @@ export function GameOverlay(): JSX.Element | null {
                       </span>
                       <span
                         style={{
+                          gridColumn: 2,
                           fontFamily: "var(--font-terminal)",
                           fontSize: 15,
                           color: "var(--phos-600)",
@@ -134,6 +159,7 @@ export function GameOverlay(): JSX.Element | null {
         <footer
           style={{
             display: "flex",
+            flexWrap: "wrap",
             alignItems: "center",
             gap: 16,
             padding: "12px 18px",

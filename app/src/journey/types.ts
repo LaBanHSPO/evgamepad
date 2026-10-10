@@ -10,6 +10,8 @@ import type { HudState } from "../screens/SessionHudScreen";
 export type { HudState };
 
 export type ScreenId =
+  | "practice"
+  | "attract"
   | "settingslive"
   | "reportlive"
   | "journallive"

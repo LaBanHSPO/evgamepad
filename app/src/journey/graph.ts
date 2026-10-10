@@ -5,28 +5,30 @@ import type { CabinetAction, OverlayDestination, ScreenId } from "./types";
  * first-run player can reach a destination without knowing the evening order — and the sequential
  * START path still teaches that order.
  */
-export const OVERLAY_DESTINATIONS: readonly OverlayDestination[] = [
-  { id: "session", label: "Session HUD", group: "Play", hint: "the designed evening desk" },
-  { id: "live", label: "Live HUD", group: "Play", hint: "real gateway · paste the token" },
-  { id: "desk", label: "Agent desk", group: "Play", hint: "reads, never fires" },
+const DESTINATIONS: readonly OverlayDestination[] = [
+  { id: "practice", label: "Controls practice", group: "Play", hint: "guided lesson · no account needed" },
+  { id: "live", label: "Demo desk", group: "Play", hint: "connect your cTrader demo account" },
+  { id: "session", label: "Session HUD sample", group: "Gallery", hint: "sample data · no orders" },
+  { id: "desk", label: "Agent desk sample", group: "Gallery", hint: "sample coaching messages" },
   { id: "deck", label: "Deck", group: "Play", hint: "process first, money behind a click" },
-  { id: "calc", label: "Size calculator", group: "Play", hint: "lots from the plan, not the mood" },
-  { id: "detail", label: "Trade detail", group: "Play", hint: "one fill, the rules it met" },
+  { id: "calc", label: "Size calculator sample", group: "Gallery", hint: "example values" },
+  { id: "detail", label: "Trade detail sample", group: "Gallery", hint: "example fill" },
   { id: "journallive", label: "Journal", group: "Review", hint: "today, heatmap, history" },
   { id: "replaylive", label: "Replay", group: "Review", hint: "scrub the frozen tape" },
-  { id: "history", label: "History", group: "Review", hint: "sessions, not dollars" },
-  { id: "score", label: "Process score", group: "Review", hint: "five axes, stand-down is 100" },
+  { id: "history", label: "History sample", group: "Gallery", hint: "example sessions" },
+  { id: "score", label: "Process score sample", group: "Gallery", hint: "example scores" },
   { id: "reportlive", label: "Reports", group: "Review", hint: "print from the browser" },
-  { id: "clear", label: "End session", group: "Close", hint: "tally and freeze the evening" },
-  { id: "over", label: "Loss cap", group: "Close", hint: "the cap did its job" },
-  { id: "pad", label: "Gamepad", group: "Setup", hint: "bindings and handshake" },
+  { id: "clear", label: "Session clear sample", group: "Gallery", hint: "example summary · does not end a session" },
+  { id: "over", label: "Loss cap sample", group: "Gallery", hint: "example summary" },
+  { id: "pad", label: "Gamepad sample", group: "Gallery", hint: "example controller settings" },
   { id: "settingslive", label: "Settings", group: "Setup", hint: "safe preferences only" },
   { id: "systemlive", label: "System", group: "Setup", hint: "principles you wrote down" },
-  { id: "data", label: "Data", group: "Setup", hint: "export, backup, wipe" },
+  { id: "data", label: "Data sample", group: "Gallery", hint: "example data controls" },
   { id: "philosophy", label: "Philosophy", group: "Setup", hint: "why the money stays quiet" },
-  { id: "title", label: "Attract", group: "Cabinet", hint: "insert coin" },
-  { id: "boot", label: "Boot", group: "Cabinet", hint: "pad handshake" },
-  { id: "pre", label: "Pre-session", group: "Cabinet", hint: "write limits while calm" },
+  { id: "title", label: "Start here", group: "Play", hint: "practice, connect, review" },
+  { id: "attract", label: "Attract sample", group: "Gallery", hint: "original artwork · sample data" },
+  { id: "boot", label: "Boot sample", group: "Gallery", hint: "example connection checks" },
+  { id: "pre", label: "Pre-session sample", group: "Gallery", hint: "example limits and plan" },
   { id: "artmatrix", label: "HUD on matrix art", group: "Art", hint: "attract-era skin" },
   { id: "artcontra", label: "Fire on city art", group: "Art", hint: "contra-era skin" },
   { id: "journal", label: "Journal (prototype)", group: "Gallery", hint: "fixed data walkthrough" },
@@ -34,6 +36,11 @@ export const OVERLAY_DESTINATIONS: readonly OverlayDestination[] = [
   { id: "report", label: "Report (prototype)", group: "Gallery", hint: "fixed print" },
   { id: "settings", label: "Settings (prototype)", group: "Gallery", hint: "fixed prefs" },
 ] as const;
+
+export const OVERLAY_DESTINATIONS: readonly OverlayDestination[] = [...DESTINATIONS].sort((a, b) => {
+  const groups = ["Play", "Review", "Close", "Setup", "Cabinet", "Art", "Gallery"];
+  return groups.indexOf(a.group) - groups.indexOf(b.group);
+});
 
 export const BOOT_KEYS = ["lt", "rt", "a", "b", "x", "y", "start"] as const;
 
@@ -75,6 +82,11 @@ export function bindingsFor(screen: ScreenId): Readonly<Record<string, CabinetAc
   switch (screen) {
     case "title":
       return { ...menu, start: "start", y: "alt", view: "view" };
+    case "attract":
+      return { ...menu, start: "start", b: "back" };
+    case "practice":
+      // Face buttons, View and confirm belong to the isolated practice lesson.
+      return { ...menu, start: "menu" };
     case "boot":
       return { ...menu, start: "start", view: "view" };
     case "pre":

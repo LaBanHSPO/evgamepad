@@ -1,0 +1,42 @@
+.play-shell { box-sizing: border-box; width: 100%; max-width: 1180px; color: var(--text-body); font-size: 14px; line-height: 1.65; }
+.play-shell *, .demo-desk * { box-sizing: border-box; }
+.play-topline { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 12px 0 20px; border-bottom: 1px solid var(--line-strong); color: var(--phos-300); font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+.play-red { color: var(--arcade-red); }
+.play-intro { padding: 32px 0 24px; max-width: 760px; }
+.play-eyebrow { color: var(--phos-300); font-size: 11px; font-weight: 700; letter-spacing: .12em; }
+.play-shell h1 { font-size: clamp(25px, 3.4vw, 42px); line-height: 1.3; letter-spacing: -.04em; margin: 12px 0 20px; }
+.play-shell h2 { font-size: 21px; line-height: 1.4; margin: 10px 0; }
+.play-shell p { margin: 10px 0 18px; }
+.play-options, .practice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.play-panel { padding: clamp(18px, 2.5vw, 30px); background: var(--black-2); border: 1px solid var(--line-neutral); min-width: 0; }
+.play-feature { border-top: 3px solid var(--phos-400); }
+.play-muted, .play-shell small { color: var(--text-secondary); }
+.play-shell small { display: block; font-size: 11px; margin-top: 8px; }
+.play-shell button, .demo-desk button { display: inline-flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 15px; min-height: 44px; background: var(--black-3); border: 1px solid var(--line-strong); color: var(--text-body); font-size: 13px; cursor: pointer; }
+.play-shell button:hover, .demo-desk button:hover { background: var(--surface-hover); border-color: var(--phos-400); }
+.play-shell button:focus-visible, .demo-desk :is(button,input):focus-visible { outline: 2px solid var(--arcade-yellow); outline-offset: 4px; }
+.play-shell .play-primary { background: var(--phos-400); color: var(--black-1); font-weight: 700; }
+.play-shell .play-primary:hover { background: var(--phos-300); }
+.play-shell button:disabled, .demo-desk button:disabled { opacity: .5; cursor: default; }
+.play-shell button[aria-pressed="true"] { border-color: var(--phos-400); background: var(--surface-selected); color: var(--phos-300); }
+.play-options button { margin-top: 12px; width: 100%; }
+.play-principle { border-left: 2px solid var(--phos-400); padding: 8px 22px; margin: 26px 0; max-width: 850px; }
+.play-principle p { margin-bottom: 0; color: var(--text-secondary); }
+.play-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 18px 0; }
+.practice-steps { padding: 0; list-style: none; display: grid; grid-template-columns: repeat(5, 1fr); margin: 24px 0; border-bottom: 1px solid var(--line-neutral); }
+.practice-steps li { padding: 12px; border-bottom: 3px solid transparent; color: var(--text-secondary); font-size: 11px; }
+.practice-steps span { display: block; font-size: 16px; margin-bottom: 8px; }
+.practice-steps [aria-current], .practice-steps [data-complete="true"] { color: var(--phos-300); }
+.practice-steps [aria-current] { border-color: var(--phos-400); background: var(--surface-selected); }
+.practice-feedback { padding: 16px; background: var(--black-3); border-left: 2px solid var(--phos-400); margin: 24px 0; min-height: 104px; }
+.practice-status { border-block: 1px solid var(--line-neutral); padding: 12px 0; margin: 20px 0; }
+.practice-status div { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.practice-status dt { color: var(--text-secondary); }.practice-status dd { margin: 0; color: var(--phos-300); }
+.practice-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.practice-controls button { display: block; text-align: left; }
+.practice-controls .practice-confirm { grid-column: 1 / -1; }
+.practice-reflection { display: grid; gap: 10px; }.practice-reflection textarea { width: 100%; min-height: 110px; padding: 12px; background: var(--black-1); color: var(--text-body); border: 1px solid var(--line-strong); font: inherit; resize: vertical; }
+.sample-notice { width: 100%; padding: 12px 16px; border: 1px solid var(--arcade-yellow); color: var(--arcade-yellow); background: var(--black-2); box-sizing: border-box; font-size: 13px; }
+.demo-desk { width: 100%; max-width: 1180px; box-sizing: border-box; font-size: 14px; line-height: 1.6; }
+@media (max-width: 820px) { .play-options, .practice-grid { grid-template-columns: 1fr; } .practice-steps { grid-template-columns: 1fr; } .practice-steps li { display: flex; gap: 12px; padding: 8px 12px; } .practice-steps span { margin: 0; font-size: 12px; } .play-topline { font-size: 10px; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

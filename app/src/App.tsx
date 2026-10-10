@@ -4,6 +4,8 @@ import { Analytics } from "@vercel/analytics/react";
 import { BgmProvider } from "./components/bgm";
 import { AgentDeskScreen } from "./screens/AgentDeskScreen";
 import { AttractScreen } from "./screens/AttractScreen";
+import { StartScreen } from "./screens/StartScreen";
+import { PracticeScreen } from "./screens/PracticeScreen";
 import { BootScreen } from "./screens/BootScreen";
 import { CityFireScreen } from "./screens/CityFireScreen";
 import { DataScreen } from "./screens/DataScreen";
@@ -45,53 +47,55 @@ const GROUPS: {
   items: { id: ScreenId; label: string }[];
 }[] = [
   {
-    heading: "1 · Before the session",
+    heading: "1 · Play",
     short: "1",
     items: [
-      { id: "title", label: "Attract screen" },
-      { id: "boot", label: "Boot sequence" },
-      { id: "pre", label: "Pre-session" },
+      { id: "title", label: "Start here" },
+      { id: "practice", label: "Controls practice" },
+      { id: "live", label: "Demo desk" },
+      { id: "artmatrix", label: "Matrix demo desk" },
+      { id: "artcontra", label: "City demo desk" },
     ],
   },
   {
-    heading: "2 · In session",
+    heading: "2 · Review",
     short: "2",
     items: [
-      { id: "live", label: "Live HUD (real gateway)" },
-      { id: "deck", label: "Deck (real gateway)" },
-      { id: "session", label: "Session HUD" },
-      { id: "artmatrix", label: "HUD on matrix art" },
-      { id: "artcontra", label: "Fire on city art" },
-      { id: "desk", label: "Agent desk" },
-      { id: "detail", label: "Trade detail" },
-      { id: "calc", label: "Size calculator" },
+      { id: "journallive", label: "My journal" },
+      { id: "deck", label: "My process review" },
+      { id: "reportlive", label: "My reports" },
+      { id: "replaylive", label: "Trade replay" },
     ],
   },
   {
-    heading: "3 · After the session",
+    heading: "3 · Settings",
     short: "3",
     items: [
-      { id: "clear", label: "Session clear" },
-      { id: "over", label: "Session over" },
-      { id: "reportlive", label: "Report (real gateway)" },
-      { id: "report", label: "Report" },
-      { id: "journallive", label: "Journal (real gateway)" },
-      { id: "journal", label: "Journal" },
-      { id: "replaylive", label: "Replay (real gateway)" },
-      { id: "replay", label: "Replay" },
-      { id: "history", label: "History" },
-      { id: "score", label: "Process score" },
+      { id: "settingslive", label: "Preferences & data" },
+      { id: "systemlive", label: "My principles" },
     ],
   },
   {
-    heading: "4 · Setup & reference",
+    heading: "4 · Sample screens",
     short: "4",
     items: [
+      { id: "attract", label: "Attract sample" },
+      { id: "boot", label: "Boot sample" },
+      { id: "pre", label: "Pre-session sample" },
+      { id: "session", label: "Session HUD sample" },
+      { id: "desk", label: "Agent desk sample" },
+      { id: "detail", label: "Trade detail sample" },
+      { id: "calc", label: "Size calculator sample" },
+      { id: "clear", label: "Session clear sample" },
+      { id: "over", label: "Session over sample" },
+      { id: "report", label: "Report sample" },
+      { id: "journal", label: "Journal sample" },
+      { id: "replay", label: "Replay sample" },
+      { id: "history", label: "History sample" },
+      { id: "score", label: "Process score sample" },
       { id: "pad", label: "Gamepad" },
       { id: "data", label: "Data" },
-      { id: "settingslive", label: "Settings (real gateway)" },
       { id: "settings", label: "Settings" },
-      { id: "systemlive", label: "System (real gateway)" },
       { id: "philosophy", label: "Philosophy" },
     ],
   },
@@ -107,7 +111,9 @@ const SCREENS: Record<Exclude<ScreenId, "session" | "replaylive" | "journallive"
   systemlive: SystemPrinciples,
   settingslive: LiveSettings,
   reportlive: ReportBuilder,
-  title: AttractScreen,
+  title: StartScreen,
+  attract: AttractScreen,
+  practice: PracticeScreen,
   boot: BootScreen,
   pre: PreSessionScreen,
   artmatrix: MatrixHudScreen,
@@ -140,6 +146,11 @@ const Journal = lazy(() => import("./journal/Journal").then((m) => ({ default: m
 
 const RAIL = 48;
 const OPEN = 216;
+
+const ACCOUNT_SCREENS = new Set<ScreenId>([
+  "title", "practice", "live", "deck", "journallive", "replaylive",
+  "reportlive", "settingslive", "systemlive", "artmatrix", "artcontra",
+]);
 
 const navStyle = (active: boolean): CSSProperties => ({
   display: "flex",
@@ -209,7 +220,7 @@ export default function App() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: `${RAIL}px 1fr`,
+            gridTemplateColumns: `${RAIL}px minmax(0, 1fr)`,
           minHeight: "100vh",
           background: "var(--surface-app)",
           fontFamily: "var(--font-core)",
@@ -287,7 +298,7 @@ export default function App() {
                 ))}
 
                 {/* the HUD's six states hang off the in-session group */}
-                {gi === 1 ? (
+                {gi === 3 ? (
                   <>
                     <div style={{ ...headingStyle, padding: "14px 12px 6px 18px" }}>
                       <span className="ev-nav-short" style={shortStyle}>
@@ -336,7 +347,7 @@ export default function App() {
                 color: "var(--phos-600)",
               }}
             >
-              &gt; START walks the evening. Menu lists every screen.
+              &gt; Start with controls practice. Demo desk connects your account.
             </span>
           </div>
         </nav>
@@ -345,7 +356,8 @@ export default function App() {
           style={{
             /* the rail is fixed, so main claims the second column explicitly */
             gridColumn: 2,
-            padding: 20,
+            padding: "clamp(12px, 2vw, 20px)",
+            minWidth: 0,
             overflow: "auto",
             display: "grid",
             justifyItems: "start",
@@ -353,6 +365,7 @@ export default function App() {
             gap: 12,
           }}
         >
+          {!ACCOUNT_SCREENS.has(screen) && <div className="sample-notice" role="note">SAMPLE SCREEN · Figures, account status, scores and plans shown below are examples. Actions here do not place orders or save account data. Use Controls practice or Demo desk to play.</div>}
           {screen === "session" ? (
             <SessionHudScreen state={hud} />
           ) : screen === "journallive" ? (

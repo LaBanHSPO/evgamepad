@@ -32,6 +32,7 @@ export interface AgentView {
   stoodDown: number;
   pendingIntents: number;
   overlayOpen: boolean;
+  activePositionId: number | null;
 }
 
 export interface AgentOptions {
@@ -74,6 +75,7 @@ export class GameAgent {
       stoodDown: this.stoodDown,
       pendingIntents: this.options.client.pending,
       overlayOpen: this.fsm.overlayOpen,
+      activePositionId: this.positionId,
     };
   }
 
@@ -168,6 +170,9 @@ export class GameAgent {
         case "symbol":
           this.symbolIndex = wrap(this.symbolIndex + effect.step, this.options.symbols.length);
           break;
+        case "lock":
+          this.options.client.send(effect.locked ? "session.lock" : "session.unlock", "session", {});
+          break;
         case "cancel":
           this.recordStandDown(input);
           break;
@@ -204,6 +209,10 @@ export class GameAgent {
   private emitIntent(side: Side, armedAt: number): void {
     const cid = newCid();
     if (side === "buy" || side === "sell") {
+      if (this.options.client.pending > 0) {
+        this.fsm = { ...this.fsm, phase: "UNKNOWN", side: null, armedAt: null };
+        return;
+      }
       this.options.client.sendIntent({
         cid,
         t: "intent.open",
@@ -220,6 +229,10 @@ export class GameAgent {
       return;
     }
     if (side === "close") {
+      if (this.positionId === null) {
+        this.fsm = resolve(this.fsm, true).state;
+        return;
+      }
       this.closePosition(cid);
       return;
     }

@@ -88,9 +88,28 @@ describe("firing takes two hands", () => {
     let state = step(initialState, input({ view: true })).state;
     state = step(state, input({ clutch: 0.9, confirm: true })).state;
     const armedWithConfirmHeld = step(state, input({ clutch: 0.9, confirm: true, a: true }));
-    // The edge belongs to an earlier frame, but the hold is satisfied and the clutch is held:
-    // this is the two-hand contract, not a stray repeat.
-    expect(intents(armedWithConfirmHeld.effects)).toHaveLength(1);
+    expect(intents(armedWithConfirmHeld.effects)).toHaveLength(0);
+    let held = armedWithConfirmHeld.state;
+    for (let i = 0; i < 60; i += 1) {
+      const next = step(held, input({ clutch: 0.9, confirm: true, nowMs: 1100 + i }));
+      expect(intents(next.effects)).toHaveLength(0);
+      held = next.state;
+    }
+    const released = step(held, input({ clutch: 0.9, confirm: false, nowMs: 2000 })).state;
+    expect(intents(step(released, input({ clutch: 0.9, confirm: true, nowMs: 2100 })).effects)).toHaveLength(1);
+  });
+
+  it("shows the armed state before accepting simultaneous arm and confirm", () => {
+    const unlocked = step(initialState, input({ view: true })).state;
+    const simultaneous = step(unlocked, input({ clutch: 1, a: true, confirm: true }));
+    expect(simultaneous.state.phase).toBe("ARMED");
+    expect(intents(simultaneous.effects)).toHaveLength(0);
+    expect(intents(step(simultaneous.state, input({ clutch: 1, confirm: true })).effects)).toHaveLength(0);
+  });
+
+  it("arms SELL when clutch and B arrive in the same frame", () => {
+    const unlocked = step(initialState, input({ view: true })).state;
+    expect(step(unlocked, input({ clutch: 1, b: true })).state).toMatchObject({ phase: "ARMED", side: "sell" });
   });
 });
 

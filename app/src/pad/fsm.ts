@@ -55,6 +55,7 @@ export interface FsmState {
   armedAt: number | null;
   clutchHeld: boolean;
   confirmDownAt: number | null;
+  confirmNeedsRelease: boolean;
   firedAt: number | null;
   pendingCid: string | null;
   overlayOpen: boolean;
@@ -80,6 +81,7 @@ export const initialState: FsmState = {
   armedAt: null,
   clutchHeld: false,
   confirmDownAt: null,
+  confirmNeedsRelease: false,
   firedAt: null,
   pendingCid: null,
   overlayOpen: false,
@@ -104,6 +106,7 @@ function armedFrom(input: PadInput): Side | null {
 export function canFire(state: FsmState, input: PadInput, confirmHoldMs: number): boolean {
   if (state.phase !== "ARMED" || state.side === null) return false;
   if (!state.clutchHeld || !input.confirm) return false;
+  if (state.confirmNeedsRelease) return false;
   if (state.confirmDownAt === null) return false;
   return input.nowMs - state.confirmDownAt >= confirmHoldMs;
 }
@@ -139,6 +142,7 @@ export function step(state: FsmState, input: PadInput, options: FsmOptions = {})
     next.confirmDownAt = input.nowMs;
   } else if (!input.confirm) {
     next.confirmDownAt = null;
+    next.confirmNeedsRelease = false;
   }
 
   // Losing focus or the pad cancels immediately — not on the next poll.
@@ -192,7 +196,7 @@ export function step(state: FsmState, input: PadInput, options: FsmOptions = {})
     case "IDLE":
     case "CLUTCH":
     case "ARMED": {
-      if (next.phase === "IDLE" && input.b) {
+      if (next.phase === "IDLE" && input.b && !next.clutchHeld) {
         cancel("b_while_idle");
         break;
       }
@@ -216,8 +220,13 @@ export function step(state: FsmState, input: PadInput, options: FsmOptions = {})
         if (next.overlayOpen) break;
         next.side = side;
         next.armedAt = input.nowMs;
+        // Confirmation must start after arming. A held RT (or a simultaneous A+RT)
+        // cannot skip the player's opportunity to inspect and cancel the preview.
+        next.confirmDownAt = null;
+        next.confirmNeedsRelease = input.confirm;
         effects.push({ kind: "rumble", pattern: "arm" });
         move("ARMED", `arm_${side}`);
+        return { state: next, effects };
       }
 
       if (canFire(next, input, confirmHoldMs)) {

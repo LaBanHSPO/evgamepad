@@ -58,6 +58,8 @@ export class GameClient {
   /** Intents sent but not yet answered, keyed by cid. Survives a reconnect intact. */
   private outstanding = new Map<string, PendingIntent>();
   private closedByUs = false;
+  private connected = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private url: string,
@@ -67,6 +69,17 @@ export class GameClient {
   ) {}
 
   connect(): void {
+    if (this.reconnectTimer !== null) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+    if (this.socket !== null) {
+      this.socket.onclose = null;
+      this.socket.onopen = null;
+      this.socket.onmessage = null;
+      this.socket.onerror = null;
+      this.socket.close();
+    }
+    this.connected = false;
+    this.stopPing();
     this.closedByUs = false;
     this.hooks.onStatus("connecting");
     // The token rides the query string of a same-origin socket; it is never persisted anywhere.
@@ -74,8 +87,9 @@ export class GameClient {
     this.socket = socket;
 
     socket.onopen = () => {
+      if (this.closedByUs || this.socket !== socket) return;
+      this.connected = true;
       this.attempts = 0;
-      this.hooks.onStatus("open");
       this.send("hello", "session", {
         token: this.token,
         lastSeq: this.lastServerSeq || undefined,
@@ -86,10 +100,13 @@ export class GameClient {
         this.send(pending.t, pending.ch, pending.payload, pending.cid);
       }
       this.startPing();
+      this.hooks.onStatus("open");
     };
 
     socket.onmessage = (event) => this.receive(event.data);
     socket.onclose = () => {
+      if (this.socket !== socket) return;
+      this.connected = false;
       this.stopPing();
       this.hooks.onStatus("closed");
       if (!this.closedByUs) this.scheduleReconnect();
@@ -99,9 +116,19 @@ export class GameClient {
 
   disconnect(): void {
     this.closedByUs = true;
+    this.connected = false;
+    if (this.reconnectTimer !== null) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
     this.stopPing();
-    this.socket?.close();
+    const socket = this.socket;
     this.socket = null;
+    if (socket) {
+      socket.onopen = null;
+      socket.onclose = null;
+      socket.onmessage = null;
+      socket.onerror = null;
+      socket.close();
+    }
   }
 
   setHeartbeat(heartbeat: Heartbeat): void {
@@ -123,7 +150,11 @@ export class GameClient {
   private scheduleReconnect(): void {
     const delay = RECONNECT_BACKOFF_MS[Math.min(this.attempts, RECONNECT_BACKOFF_MS.length - 1)];
     this.attempts += 1;
-    setTimeout(() => this.connect(), delay);
+    if (this.reconnectTimer !== null) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (!this.closedByUs) this.connect();
+    }, delay);
   }
 
   /** Send one frame. Returns the envelope actually written, for tests and for the journal. */
@@ -147,12 +178,15 @@ export class GameClient {
     if (raw.length > MAX_FRAME_BYTES) {
       throw new Error(`frame ${raw.length}B exceeds the ${MAX_FRAME_BYTES}B cap (t=${t})`);
     }
-    this.socket?.send(raw);
+    if (this.connected) this.socket?.send(raw);
     return envelope;
   }
 
   /** Send an intent and remember it until the gateway answers for that cid. */
   sendIntent(intent: PendingIntent): void {
+    // Offline clicks must not become surprise orders on the next connection.
+    // Already-sent intents stay in the ledger and retain their original cid.
+    if (!this.connected) return;
     this.outstanding.set(intent.cid, intent);
     this.send(intent.t, intent.ch, intent.payload, intent.cid);
   }

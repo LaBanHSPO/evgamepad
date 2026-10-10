@@ -1,5 +1,12 @@
 # EVGamePad
 
+The default start screen now leads to **Controls practice** or **Demo desk**.
+The practice lesson runs locally with mouse, keyboard or controller and never connects to a broker.
+The original fixed-data artboards remain under **Sample screens**, with a visible sample notice.
+See [How to play](../docs/userguide/how-to-play.md) for the current flow.
+
+The port notes below describe the original design reference screens.
+
 React implementation of the Claude Design handoff in `../project`. Built from
 `Prototype.dc.html` and `HudA.dc.html`. Most prototype screens still use fixed
 data; **HUD on matrix art** and **Fire on city art** poll `/api/arcade`.
